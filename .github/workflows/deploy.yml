@@ -8,20 +8,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      # Atualizado para a versão 22 para compatibilidade com Firebase Tools v15
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           
       - run: npm install
       
-      # Build do projeto usando a variável de ambiente do Firebase
-      - run: CI=false npm run build
+      # O SEGREDO: Precisamos definir a variável antes do comando de build
+      - name: Build Project
+        run: npm run build
         env:
           VITE_FIREBASE_CONFIG: ${{ secrets.FIREBASE_CONFIG }}
-          
-      # Deploy final para o Firebase
+          # Adicionamos essa linha abaixo para garantir que a chave individual também passe
+          VITE_FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }} 
+
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'

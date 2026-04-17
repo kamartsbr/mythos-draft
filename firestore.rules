@@ -1,0 +1,44 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Support for top-level collection queries
+    match /lobbies/{lobbyId} {
+      allow read, write: if true;
+      
+      // Subcollection for chat
+      match /messages/{messageId} {
+        allow read: if true;
+        allow create: if request.auth != null;
+      }
+    }
+    
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+    
+    match /bug_reports/{reportId} {
+      allow create: if true;
+      allow read: if request.auth != null && (request.auth.token.email == "goldpentakill@gmail.com" || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin");
+    }
+    
+    match /presets/{presetId} {
+      allow read: if true;
+      allow write: if request.auth != null && (request.auth.token.email == "goldpentakill@gmail.com" || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin");
+    }
+    
+    // Explicitly allow the connection test document
+    match /test/connection {
+      allow read: if true;
+    }
+    
+    // Fallback for any other doc in test
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    match /system/time_sync {
+      allow read, write: if true;
+    }
+  }
+}

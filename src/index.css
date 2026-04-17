@@ -26,19 +26,40 @@
 
 @layer base {
   body {
-    @apply bg-slate-950 text-slate-100 antialiased min-h-screen relative;
+    background-color: #020617; /* Slate-950 */
+    color: #f1f5f9;           /* Slate-100 */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    min-height: 100vh;
+    position: relative;
+    margin: 0;
+    overflow-x: hidden; /* Evita que o site "sambalelê" pro lado no celular */
   }
 
   body::before {
     content: '';
-    @apply fixed inset-0 -z-20 bg-cover bg-center bg-no-repeat opacity-50;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: -20;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    opacity: 0.5;
     background-image: url('https://static.wikia.nocookie.net/ageofempires/images/2/2f/AoMR_IP_HS_triptych.jpeg/revision/latest');
     filter: brightness(1.1) contrast(1.1) saturate(1.1);
   }
 
   body::after {
     content: '';
-    @apply fixed inset-0 -z-10;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: -10;
     background: radial-gradient(circle at center, transparent 20%, rgba(2, 6, 23, 0.7) 100%);
   }
 }
@@ -65,14 +86,16 @@
   }
 }
 
+/* Scrollbar Customizada */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
-  @apply bg-slate-950;
+  background: #020617;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  @apply bg-slate-800 rounded-full hover:bg-slate-700 transition-colors;
+  background: #1e293b;
+  border-radius: 9999px;
 }

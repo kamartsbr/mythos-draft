@@ -18,9 +18,8 @@ jobs:
       - name: Build Project
         run: npm run build
         env:
-          VITE_FIREBASE_CONFIG: ${{ secrets.FIREBASE_CONFIG }}
-          # Adicionamos essa linha abaixo para garantir que a chave individual também passe
-          VITE_FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }} 
+          VITE_FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+          VITE_FIREBASE_CONFIG: ${{ secrets.FIREBASE_CONFIG }} 
 
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:

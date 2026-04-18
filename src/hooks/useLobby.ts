@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { lobbyService } from '../services/lobbyService';
-import { Lobby, LobbyConfig } from '../types';
+import { Lobby } from '../types';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
@@ -78,7 +78,6 @@ export function useLobby(initialNickname: string) {
   useEffect(() => {
     if (!lobbyId || !guestId) return;
     
-    // Only call once on mount or when guestId/lobbyId changes
     updatePresence(true);
     
     const handleUnload = () => updatePresence(false);
@@ -90,26 +89,30 @@ export function useLobby(initialNickname: string) {
     };
   }, [lobbyId, guestId, updatePresence]);
 
-  // Subscriptions
+  // --- SEÇÃO OTIMIZADA PARA ECONOMIA DE LEITURAS ---
   useEffect(() => {
+    // Se não houver lobby selecionado, ouve a lista pública (limitada)
     if (!lobbyId) {
       const unsub = lobbyService.subscribeToPublicLobbies((lobbies) => {
-        setPublicLobbies(lobbies.slice(0, 500));
+        // Reduzido de 500 para 10 para evitar cobranças massivas
+        setPublicLobbies(lobbies.slice(0, 10));
       });
       return unsub;
     }
 
+    // Se estiver em um lobby, ouve APENAS esse lobby
     const unsub = lobbyService.subscribeToLobby(
       lobbyId, 
       (data) => {
+        if (!data) return; // Segurança caso o lobby seja deletado
         setLobby(data);
+        
         const isC1 = data.captain1 === guestId;
         const isC2 = data.captain2 === guestId;
-        const isFull = data.captain1 && data.captain2;
+        const isFull = !!(data.captain1 && data.captain2);
         const isFinished = data.status === 'finished';
         const isInProgress = data.status !== 'waiting' && data.status !== 'INCOMPLETE';
         
-        // Activity check (2 hours)
         const lastActivity = data.lastActivityAt?.toMillis?.() || data.createdAt?.toMillis?.() || Date.now();
         const isActive = (Date.now() - lastActivity) < 7200000;
 
@@ -123,7 +126,8 @@ export function useLobby(initialNickname: string) {
     );
 
     return unsub;
-  }, [lobbyId, guestId]);
+  }, [lobbyId, guestId]); 
+  // ------------------------------------------------
 
   const join = useCallback(async (id: string, role: 'A' | 'B' | 'SPECTATOR', preferredPosition: number, playerNames: Record<number, string>, newNickname?: string) => {
     const finalNickname = newNickname || nickname;
@@ -201,7 +205,7 @@ export function useLobby(initialNickname: string) {
     if (!lobbyId) return;
     const team = isCaptain1 ? 'A' : 'B';
     await lobbyService.leaveSlot(lobbyId, team);
-    leave(); // Also leave locally
+    leave();
   }, [lobbyId, isCaptain1, leave]);
 
   return {

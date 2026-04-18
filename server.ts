@@ -67,8 +67,8 @@ async function startServer() {
   }
 
   if (db) {
-    // Run cleanup every 15 minutes
-    setInterval(performCleanup, 15 * 60 * 1000);
+    // Run cleanup every 2 hours
+    setInterval(performCleanup, 2 * 60 * 60 * 1000);
     // Run once on start
     performCleanup();
   }

@@ -313,18 +313,24 @@ export const lobbyService = {
   },
 
   subscribeToPublicLobbies(onUpdate: (lobbies: Lobby[]) => void): Unsubscribe {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
     const q = query(
       collection(db, 'lobbies'), 
       where('config.isPrivate', '==', false),
       where('isHidden', '==', false),
+      where('createdAt', '>', Timestamp.fromDate(yesterday)), 
+      orderBy('status', 'asc'), // Prioriza drafts finalizados
       orderBy('createdAt', 'desc'),
-      limit(500)
+      limit(20) // Reduzido de 500 para 20 para economizar leituras
     );
 
     return onSnapshot(q, (snap) => {
       const lobbies = snap.docs.map(d => d.data() as Lobby);
       onUpdate(lobbies);
     }, (error) => {
+      // Use sua função de erro original que já está no código
       handleFirestoreError(error, OperationType.LIST, 'lobbies');
     });
   },

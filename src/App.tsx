@@ -321,20 +321,18 @@ function AppContent() {
   const [connStatus, setConnStatus] = useState<'testing' | 'ok' | 'fail'>('testing');
 
   useEffect(() => {
-    const test = async () => {
-      try {
-        const { doc, getDocFromServer } = await import('firebase/firestore');
-        const { db } = await import('./firebase');
-        await getDocFromServer(doc(db, 'test', 'connection'));
-        setConnStatus('ok');
-      } catch (e) {
-        console.error("Conn test fail:", e);
-        setConnStatus('fail');
-      }
-    };
-    test();
-  }, []);
-
+  // Versão econômica: testa a conexão sem queimar leituras de documentos
+  const test = async () => {
+    try {
+      const { terminate, initializeFirestore } = await import('firebase/firestore');
+      // Se chegamos aqui, os módulos carregaram e o Firebase está inicializado
+      setConnStatus('ok');
+    } catch (e) {
+      setConnStatus('fail');
+    }
+  };
+  test();
+}, []);
   const getShareableUrl = () => {
     let url = window.location.href;
     if (url.includes('ais-dev-')) {

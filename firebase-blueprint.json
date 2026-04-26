@@ -1,0 +1,91 @@
+{
+  "entities": {
+    "Lobby": {
+      "title": "Lobby",
+      "description": "A draft lobby for Age of Mythology: Retold",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "status": { "type": "string", "enum": ["waiting", "drafting", "finished"] },
+        "captain1": { "type": "string" },
+        "captain2": { "type": "string" },
+        "phase": { "type": "string" },
+        "turn": { "type": "number" },
+        "picks": { "type": "array" },
+        "resetRequest": {
+          "type": "object",
+          "properties": {
+            "requestedBy": { "type": "string", "enum": ["A", "B"] },
+            "status": { "type": "string", "enum": ["pending", "accepted", "declined"] },
+            "timestamp": { "type": "string", "format": "date-time" }
+          }
+        }
+      },
+      "required": ["id", "status"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" }
+      },
+      "required": ["uid"]
+    },
+    "BugReport": {
+      "title": "BugReport",
+      "description": "User reported bugs",
+      "type": "object",
+      "properties": {
+        "lobbyId": { "type": "string" },
+        "description": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "userAgent": { "type": "string" },
+        "status": { "type": "string", "enum": ["new", "investigating", "fixed", "closed"] }
+      },
+      "required": ["description", "timestamp"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Real-time lobby chat message",
+      "type": "object",
+      "properties": {
+        "lobbyId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderRole": { "type": "string", "enum": ["Host", "Guest", "ADMIN", "Spectator"] },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["lobbyId", "senderId", "senderName", "senderRole", "text"]
+    }
+  },
+  "firestore": {
+    "/lobbies/{lobbyId}": {
+      "schema": "Lobby",
+      "description": "Draft lobbies"
+    },
+    "/lobbies/{lobbyId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Lobby chat messages"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/presets/{presetId}": {
+      "schema": "object",
+      "description": "Draft presets"
+    },
+    "/bug_reports/{reportId}": {
+      "schema": "BugReport",
+      "description": "User bug reports"
+    },
+    "/system/time_sync": {
+      "schema": "object",
+      "description": "Used for server time synchronization"
+    }
+  }
+}

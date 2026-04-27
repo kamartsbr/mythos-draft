@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Scroll, Sparkles, Shield, Clock, Image as ImageIcon, Map as MapIcon, History } from 'lucide-react';
+import { X, Scroll, Sparkles, Shield, Clock, Image as ImageIcon, Map as MapIcon, History, RefreshCw } from 'lucide-react';
 
 interface PatchNotesModalProps {
   isOpen: boolean;
@@ -8,6 +8,57 @@ interface PatchNotesModalProps {
 }
 
 const getPatchNotes = (t: any) => [
+  {
+    version: 'v1.0.2v',
+    date: '2026-04-26',
+    title: t.patchNotes_v1_0_2_title || 'Divine Stewardship Update',
+    items: [
+      {
+        icon: <Shield className="w-4 h-4 text-cyan-400" />,
+        text: t.patch_v1_0_2_item1
+      },
+      {
+        icon: <Clock className="w-4 h-4 text-emerald-400" />,
+        text: t.patch_v1_0_2_item2
+      },
+      {
+        icon: <Sparkles className="w-4 h-4 text-purple-400" />,
+        text: t.patch_v1_0_2_item3
+      },
+      {
+        icon: <ImageIcon className="w-4 h-4 text-amber-400" />,
+        text: t.patch_v1_0_2_item4
+      },
+      {
+        icon: <Scroll className="w-4 h-4 text-blue-400" />,
+        text: t.patch_v1_0_2_item5
+      },
+      {
+        icon: <MapIcon className="w-4 h-4 text-rose-400" />,
+        text: t.patch_v1_0_2_item6
+      },
+      {
+        icon: <History className="w-4 h-4 text-indigo-400" />,
+        text: t.patch_v1_0_2_item7
+      },
+      {
+        icon: <Shield className="w-4 h-4 text-green-400" />,
+        text: t.patch_v1_0_2_item8
+      },
+      {
+        icon: <ImageIcon className="w-4 h-4 text-slate-400" />,
+        text: t.patch_v1_0_2_item9
+      },
+      {
+        icon: <RefreshCw className="w-4 h-4 text-orange-400" />,
+        text: t.patch_v1_0_2_item10
+      },
+      {
+        icon: <Scroll className="w-4 h-4 text-indigo-500" />,
+        text: t.patch_v1_0_2_item11
+      }
+    ]
+  },
   {
     version: 'v1.0.1',
     date: '2026-04-16',

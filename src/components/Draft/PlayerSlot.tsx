@@ -123,12 +123,14 @@ export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, ho
                 transition={{ type: "spring", damping: 12, stiffness: 200 }}
                 className="w-full h-full"
               >
-                <img 
-                  src={god.image} 
-                  alt={god.name}
-                  referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover"
-                />
+                {god.image && (
+                  <img 
+                    src={god.image} 
+                    alt={god.name}
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover"
+                  />
+                )}
                 <motion.div 
                   initial={{ opacity: 1 }}
                   animate={{ opacity: 0 }}

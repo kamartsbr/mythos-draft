@@ -119,6 +119,26 @@ export type ResetRequest = {
   timestamp: any;
 };
 
+export type LobbySummary = {
+  id: string;
+  name: string;
+  teamSize: number;
+  captain1Name: string;
+  captain2Name: string;
+  status: LobbyStatus;
+  phase: DraftPhase;
+  preset?: string;
+  mclRound?: number;
+  tournamentStage?: 'GROUP' | 'PLAYOFFS';
+  lastActivityAt: any;
+  createdAt: any;
+};
+
+export type LobbyIndex = {
+  activeLobbies: LobbySummary[];
+  lastUpdate: any;
+};
+
 export type Lobby = {
   id: string;
   status: LobbyStatus;
@@ -173,6 +193,9 @@ export type Lobby = {
   timerPausedAt?: any;
   captain1Active?: boolean;
   captain2Active?: boolean;
+  isPermanent?: boolean;
+  discordWebhookUrl?: string | null;
+  discordMessageId?: string | null;
   lastActivityAt?: any;
   pausedTimeLeft?: number;
   reportStartAt?: any;

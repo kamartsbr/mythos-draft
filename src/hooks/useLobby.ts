@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { lobbyService } from '../services/lobbyService';
-import { Lobby, LobbyConfig } from '../types';
+import { Lobby, LobbyConfig, LobbySummary } from '../types';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
@@ -40,19 +40,52 @@ export function useLobby(initialNickname: string) {
   const [isCaptain2, setIsCaptain2] = useState(false);
   const [isSpectator, setIsSpectator] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [publicLobbies, setPublicLobbies] = useState<Lobby[]>([]);
+  const [publicLobbies, setPublicLobbies] = useState<LobbySummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const lastStateRef = useRef<string>('');
+
+  // Discord Trigger
+  useEffect(() => {
+    if (!lobby || !lobby.discordWebhookUrl) return;
+
+    // Only allow Captain A or Admin to trigger webhook updates to prevent multiple calls
+    if (!isCaptain1 && !isAdmin) return;
+
+    // Generate a unique fingerprint of the state that matters for Discord
+    const fingerprint = `${lobby.phase}-${lobby.turn}-${lobby.status}-${lobby.scoreA}-${lobby.scoreB}-${lobby.selectedMap}-${lobby.currentGame}`;
+    
+    if (fingerprint !== lastStateRef.current) {
+      lastStateRef.current = fingerprint;
+      import('../services/discordService').then(({ discordService }) => {
+        discordService.updateLobbyWebhook(lobby);
+      });
+    }
+  }, [lobby, isCaptain1, isAdmin]);
 
   // Admin check
   useEffect(() => {
     if (!isAuthReady) return;
-    const params = new URLSearchParams(window.location.search);
-    const adminKey = params.get('admin');
+    
+    // Support standard ?admin=, hash #admin=, and even malformed &admin=
+    const getParam = (name: string) => {
+      const search = new URLSearchParams(window.location.search).get(name);
+      if (search) return search;
+      
+      const hash = new URLSearchParams(window.location.hash.substring(1)).get(name);
+      if (hash) return hash;
+
+      // Fallback for &admin= TYPO as seen in some screenshots
+      const fullUrl = window.location.href;
+      const match = fullUrl.match(new RegExp(`[?&#]${name}=([^&#]+)`));
+      return match ? decodeURIComponent(match[1]) : null;
+    };
+
+    const adminKey = getParam('admin');
     const isGlobalAdmin = adminKey === 'MYTHOS_ADMIN_2026' || 
                           auth.currentUser?.email === 'goldpentakill@gmail.com';
     setIsAdmin(isGlobalAdmin);
-  }, [isAuthReady, guestId]);
+  }, [isAuthReady, guestId, auth.currentUser?.email]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -94,7 +127,7 @@ export function useLobby(initialNickname: string) {
   useEffect(() => {
     if (!lobbyId) {
       const unsub = lobbyService.subscribeToPublicLobbies((lobbies) => {
-        setPublicLobbies(lobbies.slice(0, 20));
+        setPublicLobbies(Array.isArray(lobbies) ? lobbies.slice(0, 20) : []);
       });
       return unsub;
     }

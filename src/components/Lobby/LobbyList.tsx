@@ -1,10 +1,10 @@
 import { Eye, Users, ChevronRight, Info, Trash2, Search } from 'lucide-react';
 import { useState, useMemo } from 'react';
-import { Lobby } from '../../types';
+import { LobbySummary } from '../../types';
 import { cn } from '../../lib/utils';
 
 interface LobbyListProps {
-  lobbies: Lobby[];
+  lobbies: LobbySummary[];
   t: any;
   isAdmin?: boolean;
   onJoin: (id: string) => void;
@@ -16,38 +16,27 @@ export function LobbyList({ lobbies, t, isAdmin, onJoin, onClearAll }: LobbyList
 
   const filteredLobbies = useMemo(() => {
     const search = searchTerm.toLowerCase().trim();
-    const visibleLobbies = lobbies.filter(l => l.captain1 && l.captain2);
+    const visibleLobbies = lobbies;
     
     // If there's a search term, search through ALL lobbies provided by the service
     if (search) {
       return visibleLobbies.filter(lobby => {
         const matchesId = lobby.id.toLowerCase().includes(search);
-        const matchesName = (lobby.config.name || '').toLowerCase().includes(search);
+        const matchesName = (lobby.name || '').toLowerCase().includes(search);
         const matchesCaptain1 = (lobby.captain1Name || '').toLowerCase().includes(search);
         const matchesCaptain2 = (lobby.captain2Name || '').toLowerCase().includes(search);
-        const matchesSpectators = (lobby.spectators || []).some(s => s.name.toLowerCase().includes(search));
         
-        return matchesId || matchesName || matchesCaptain1 || matchesCaptain2 || matchesSpectators;
+        return matchesId || matchesName || matchesCaptain1 || matchesCaptain2;
       });
     }
 
-    // If no search term, filter out abandoned drafts and show the latest 20
-    return visibleLobbies.filter(lobby => {
-      if (lobby.status === 'finished') return true;
-      
-      const lastActivity = lobby.lastActivityAt?.toMillis?.() || lobby.createdAt?.toMillis?.() || Date.now();
-      const isAbandoned = (Date.now() - lastActivity) > 2 * 60 * 60 * 1000; // 2 hours
-      
-      return !isAbandoned;
-    }).slice(0, 20);
+    // Index is already sorted and limited by service
+    return visibleLobbies;
   }, [lobbies, searchTerm]);
 
-  const getLobbyStatus = (pub: Lobby) => {
+  const getLobbyStatus = (pub: LobbySummary) => {
     if (pub.status === 'finished') {
       return <span className="text-green-500 font-bold uppercase tracking-widest text-xs">{t.draftComplete}</span>;
-    }
-    if (pub.status === 'INCOMPLETE') {
-      return <span className="text-red-500 font-bold uppercase tracking-widest text-xs">{t.incomplete || "INCOMPLETE"}</span>;
     }
     
     const lastActivity = pub.lastActivityAt?.toMillis?.() || pub.createdAt?.toMillis?.() || Date.now();
@@ -62,7 +51,7 @@ export function LobbyList({ lobbies, t, isAdmin, onJoin, onClearAll }: LobbyList
 
   return (
     <div className="mythic-card overflow-hidden h-full flex flex-col">
-      {/* Hero Banner */}
+      {/* ... (keep rest of UI) */}
       <div className="h-24 md:h-32 relative shrink-0 overflow-hidden">
         <img 
           src="https://static.wikia.nocookie.net/ageofempires/images/d/d3/AoMR_OM_cover_portrait.jpg/revision/latest" 
@@ -119,7 +108,7 @@ export function LobbyList({ lobbies, t, isAdmin, onJoin, onClearAll }: LobbyList
               >
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-bold text-slate-200">{pub.config.name || `${pub.config.teamSize}v${pub.config.teamSize} Draft`}</span>
+                    <span className="font-bold text-slate-200">{pub.name || `${pub.teamSize}v${pub.teamSize} Draft`}</span>
                     <span className="text-xs bg-slate-800 px-2 py-0.5 rounded text-slate-400 font-mono">{pub.id}</span>
                   </div>
                   <p className="text-sm text-slate-500">

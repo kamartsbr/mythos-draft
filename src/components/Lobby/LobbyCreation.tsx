@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sword, Plus, ChevronRight, RefreshCw, Map as MapIcon, Trophy, Lock, Eye, Globe, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Sword, Plus, ChevronRight, RefreshCw, Map as MapIcon, Trophy, Lock, Eye, Globe, Trash2, ChevronDown, ChevronUp, Shield } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { LobbyConfig, SeriesType, TeamSize } from '../../types';
 import { MAPS, MAJOR_GODS, PANTHEONS, MCL_ROUND_MAPS, CASCA_GROSSA_GROUP_POOL, CASCA_GROSSA_PLAYOFF_POOL, getMCLMapPool } from '../../constants';
@@ -17,6 +17,11 @@ interface LobbyCreationProps {
   setConfig: (val: any) => void;
   isLocked: (field: string) => boolean;
   applyPreset: (preset: string) => void;
+  isAdmin: boolean;
+  isPermanent: boolean;
+  setIsPermanent: (val: boolean) => void;
+  discordWebhookUrl: string;
+  setDiscordWebhookUrl: (val: string) => void;
   createLobby: () => void;
   generateStandardTurnOrder: (cfg: LobbyConfig) => any;
 }
@@ -31,13 +36,18 @@ export function LobbyCreation({
   isLocked,
   applyPreset,
   createLobby,
-  generateStandardTurnOrder
+  generateStandardTurnOrder,
+  isAdmin,
+  isPermanent,
+  setIsPermanent,
+  discordWebhookUrl,
+  setDiscordWebhookUrl
 }: LobbyCreationProps) {
   const [showManualMaps, setShowManualMaps] = useState(false);
   const [showManualPantheons, setShowManualPantheons] = useState(false);
   const [showPresetBuilder, setShowPresetBuilder] = useState(false);
   const [communityPresets, setCommunityPresets] = useState<any[]>([]);
-
+  
   useEffect(() => {
     const unsub = lobbyService.subscribeToPresets(setCommunityPresets);
     return () => unsub();
@@ -202,14 +212,14 @@ export function LobbyCreation({
                     : "border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-slate-300"
                 )}
               >
-                {preset.icon && (
-                  <img 
-                    src={preset.icon} 
-                    alt="" 
-                    className="w-4 h-4 object-contain"
-                    referrerPolicy="no-referrer"
-                  />
-                )}
+                    {preset.icon ? (
+                      <img 
+                        src={preset.icon} 
+                        alt="" 
+                        className="w-4 h-4 object-contain"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : null}
                 {preset.label}
               </button>
             ))}
@@ -360,12 +370,14 @@ export function LobbyCreation({
                   
                   <div className="flex items-center gap-3 p-2 bg-slate-900/50 rounded-lg border border-slate-800/50">
                     <div className="w-10 h-10 rounded overflow-hidden bg-slate-800 flex-shrink-0">
-                      <img 
-                        src={MAPS.find(m => m.id === MCL_ROUND_MAPS[config.mclRound || 1])?.image} 
-                        alt="Round Map" 
-                        className="w-full h-full object-cover"
-                        referrerPolicy="no-referrer"
-                      />
+                      {MAPS.find(m => m.id === MCL_ROUND_MAPS[config.mclRound || 1])?.image && (
+                        <img 
+                          src={MAPS.find(m => m.id === MCL_ROUND_MAPS[config.mclRound || 1])?.image} 
+                          alt="Round Map" 
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      )}
                     </div>
                     <div>
                       <div className="text-xs text-slate-500 uppercase font-bold tracking-tighter">
@@ -979,6 +991,64 @@ export function LobbyCreation({
             )}
           </AnimatePresence>
         </div>
+
+        {/* Admin Tools Section */}
+        {isAdmin && (
+          <div className="p-6 bg-cyan-950/20 border border-cyan-500/20 rounded-2xl space-y-6">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-8 h-8 rounded-lg bg-cyan-500/10 flex items-center justify-center border border-cyan-500/20">
+                <Shield className="w-4 h-4 text-cyan-500" />
+              </div>
+              <h3 className="text-sm font-black text-cyan-400 uppercase tracking-widest">Admin Discord Hub</h3>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 bg-slate-950 border border-slate-800 rounded-xl">
+                <div>
+                  <div className="text-xs font-bold text-white mb-1 uppercase tracking-wider">Tournament Persistence</div>
+                  <div className="text-[10px] text-slate-500">Extends inactivity deletion to 14 days (default is 12h). Finished drafts are never deleted and stay in the database forever.</div>
+                </div>
+                <button
+                  onClick={() => setIsPermanent(!isPermanent)}
+                  className={cn(
+                    "w-12 h-6 rounded-full transition-all relative",
+                    isPermanent ? "bg-cyan-500" : "bg-slate-800"
+                  )}
+                >
+                  <div className={cn(
+                    "absolute top-1 w-4 h-4 rounded-full bg-white transition-all",
+                    isPermanent ? "left-7" : "left-1"
+                  )} />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Discord Webhook URL</label>
+                  <a 
+                    href="https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks" 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="text-[10px] text-cyan-500 hover:underline flex items-center gap-1"
+                  >
+                    <Globe className="w-2 h-2" />
+                    How to create a webhook?
+                  </a>
+                </div>
+                <input 
+                  type="text"
+                  placeholder="https://discord.com/api/webhooks/..."
+                  value={discordWebhookUrl}
+                  onChange={(e) => setDiscordWebhookUrl(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none focus:border-cyan-500 transition-all text-cyan-100"
+                />
+                <p className="text-[10px] text-slate-500 italic">
+                  Draft progress and final results will be posted and updated in the linked Discord channel.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
 
         <button

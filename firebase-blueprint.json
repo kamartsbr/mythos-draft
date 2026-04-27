@@ -1,5 +1,21 @@
 {
   "entities": {
+    "LobbyIndex": {
+      "title": "Lobby Index",
+      "description": "A summary of recent public lobbies to reduce read costs.",
+      "type": "object",
+      "properties": {
+        "activeLobbies": {
+          "type": "array",
+          "description": "List of lobby summaries."
+        },
+        "lastUpdate": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["activeLobbies", "lastUpdate"]
+    },
     "Lobby": {
       "title": "Lobby",
       "description": "A draft lobby for Age of Mythology: Retold",
@@ -63,6 +79,10 @@
     }
   },
   "firestore": {
+    "/metadata/{docId}": {
+      "schema": "LobbyIndex",
+      "description": "System metadata and indices."
+    },
     "/lobbies/{lobbyId}": {
       "schema": "Lobby",
       "description": "Draft lobbies"

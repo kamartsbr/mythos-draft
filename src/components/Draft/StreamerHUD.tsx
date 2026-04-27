@@ -30,7 +30,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
     bans: false
   });
   const [showSnakeWarning, setShowSnakeWarning] = useState(false);
-  const [hudScale, setHudScale] = useState(0.85);
+  const [hudScale, setHudScale] = useState(0.75);
   const [copiedObs, setCopiedObs] = useState(false);
   const [persistentSubs, setPersistentSubs] = useState<Substitution[]>([]);
 
@@ -334,7 +334,15 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
               <div className="space-y-2 pt-2 border-t border-slate-800">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">HUD Scaling</span>
-                  <span className="text-[10px] font-bold text-cyan-400">{Math.round(hudScale * 100)}%</span>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => setHudScale(0.75)}
+                      className="text-[8px] font-black text-cyan-500 hover:text-cyan-400 uppercase tracking-tighter"
+                    >
+                      Reset (75%)
+                    </button>
+                    <span className="text-[10px] font-bold text-cyan-400">{Math.round(hudScale * 100)}%</span>
+                  </div>
                 </div>
                 <input 
                   type="range" 

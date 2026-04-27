@@ -1,10 +1,10 @@
 {
-  "projectId": "mythosdraftmain",
-  "appId": "1:925895578190:web:0ccdc3138f630d2023e91f",
-  "apiKey": "AIzaSyCMkIxr-mw6Wxh6cc7l-MVA2TB0XoCiwk8",
-  "authDomain": "mythosdraftmain.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-fc8ee078-2790-4627-8666-b30d0c0f59d1",
-  "storageBucket": "mythosdraftmain.firebasestorage.app",
-  "messagingSenderId": "925895578190",
+  "projectId": "boxwood-plating-368522",
+  "appId": "1:275978163951:web:3a8370b4ddd6f47c292d1a",
+  "apiKey": "AIzaSyCKMvfWSFgQybAZhjEYvTRdi4JPyaFrhLI",
+  "authDomain": "boxwood-plating-368522.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-0195b9ca-2f50-4fe1-a432-8f33bb22a396",
+  "storageBucket": "boxwood-plating-368522.firebasestorage.app",
+  "messagingSenderId": "275978163951",
   "measurementId": ""
 }

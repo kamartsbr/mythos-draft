@@ -49,6 +49,8 @@ function AppContent() {
         onAuthStateChanged(auth, async (user) => {
           if (user) {
             syncServerTime();
+            // Trigger a one-time index refresh for the current database if user is premium/admin or just once per session
+            lobbyService.refreshLobbyIndex().catch(console.error);
           } else {
             // Only try anonymous if no user is present
             try {
@@ -150,6 +152,8 @@ function AppContent() {
   const [showPatchNotes, setShowPatchNotes] = useState(false);
   const [tempNickname, setTempNickname] = useState(nickname);
   const [isEditingNick, setIsEditingNick] = useState(false);
+  const [isPermanent, setIsPermanent] = useState(false);
+  const [discordWebhookUrl, setDiscordWebhookUrl] = useState('');
 
   useEffect(() => {
     setTempNickname(nickname);
@@ -317,6 +321,8 @@ function AppContent() {
       spectators: [],
       adminId: guestId,
       isHidden: false,
+      isPermanent: isAdmin ? isPermanent : false,
+      discordWebhookUrl: isAdmin ? discordWebhookUrl : null,
     };
 
     await create(id, newLobby);
@@ -484,10 +490,12 @@ function AppContent() {
                   "https://static.wikia.nocookie.net/ageofempires/images/3/3e/Amaterasu_artwork_new_AoMR.png/revision/latest/scale-to-width-down/1000?cb=20250730190329",
                   "https://static.wikia.nocookie.net/ageofempires/images/e/e7/AoMRT_Atlantean_Kronos.webp/revision/latest/scale-to-width-down/1000?cb=20250701110454"
                 ].map((url, i) => (
-                  <div key={i} className="relative h-[450px] w-full shrink-0">
-                    <img src={url} alt="" className="w-full h-full object-cover filter brightness-125 saturate-150 contrast-110" referrerPolicy="no-referrer" loading="lazy" />
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent to-slate-950" />
-                  </div>
+                        <div key={i} className="relative h-[450px] w-full shrink-0">
+                          {url && (
+                            <img src={url} alt="" className="w-full h-full object-cover filter brightness-125 saturate-150 contrast-110" referrerPolicy="no-referrer" loading="lazy" />
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent to-slate-950" />
+                        </div>
                 ))}
               </div>
 
@@ -501,10 +509,12 @@ function AppContent() {
                   "https://static.wikia.nocookie.net/ageofempires/images/5/56/Tsukuyomi_artwork_new_AoMR.png/revision/latest/scale-to-width-down/1000?cb=20250730190333",
                   "https://static.wikia.nocookie.net/ageofempires/images/4/45/Nuwa_artwork_AoMR.png/revision/latest/scale-to-width-down/1000?cb=20250204185423"
                 ].map((url, i) => (
-                  <div key={i} className="relative h-[450px] w-full shrink-0">
-                    <img src={url} alt="" className="w-full h-full object-cover filter brightness-125 saturate-150 contrast-110" referrerPolicy="no-referrer" loading="lazy" />
-                    <div className="absolute inset-0 bg-gradient-to-l from-transparent to-slate-950" />
-                  </div>
+                        <div key={i} className="relative h-[450px] w-full shrink-0">
+                          {url && (
+                            <img src={url} alt="" className="w-full h-full object-cover filter brightness-125 saturate-150 contrast-110" referrerPolicy="no-referrer" loading="lazy" />
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-l from-transparent to-slate-950" />
+                        </div>
                 ))}
               </div>
 
@@ -597,13 +607,15 @@ function AppContent() {
                           transition={{ delay: 0.7 + i * 0.1 }}
                           className="relative rounded-xl overflow-hidden border border-amber-500/20 group hover:border-amber-500/40 transition-all shadow-xl"
                         >
-                          <img 
-                            src={url} 
-                            alt="Mythic Pantheon" 
-                            className="w-full h-auto opacity-80 group-hover:opacity-100 transition-all duration-500"
-                            referrerPolicy="no-referrer"
-                            loading="lazy"
-                          />
+                          {url && (
+                            <img 
+                              src={url} 
+                              alt="Mythic Pantheon" 
+                              className="w-full h-auto opacity-80 group-hover:opacity-100 transition-all duration-500"
+                              referrerPolicy="no-referrer"
+                              loading="lazy"
+                            />
+                          )}
                           <div className="absolute inset-0 bg-gradient-to-t from-slate-950/30 via-transparent to-transparent pointer-events-none" />
                         </motion.div>
                       ))}
@@ -635,6 +647,11 @@ function AppContent() {
                       applyPreset={applyPreset}
                       createLobby={handleCreateLobby}
                       generateStandardTurnOrder={generateStandardTurnOrder}
+                      isAdmin={isAdmin}
+                      isPermanent={isPermanent}
+                      setIsPermanent={setIsPermanent}
+                      discordWebhookUrl={discordWebhookUrl}
+                      setDiscordWebhookUrl={setDiscordWebhookUrl}
                     />
                   </div>
 

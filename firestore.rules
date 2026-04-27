@@ -1,65 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Helper functions
-    function isSignedIn() { return request.auth != null; }
-    function isAdmin() { 
-      return isSignedIn() && (
-        request.auth.token.email == "goldpentakill@gmail.com" || 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin")
-      );
-    }
-
-    // Default deny
     match /{document=**} {
-      allow read, write: if false;
-    }
-
-    // Lobbies
-    match /lobbies/{lobbyId} {
-      allow read: if true;
-      allow create: if true;
-      allow update: if true;
-      allow delete: if isAdmin();
-      
-      match /messages/{messageId} {
-        allow read: if true;
-        allow create: if isSignedIn();
-      }
-    }
-    
-    // Users
-    match /users/{userId} {
-      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow create, update: if isSignedIn() && request.auth.uid == userId;
-    }
-    
-    // Presets
-    match /presets/{presetId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-    
-    // Bug Reports
-    match /bug_reports/{reportId} {
-      allow create: if true;
-      allow read: if isAdmin();
-    }
-    
-    // Test collection for connectivity check
-    match /test/{docId} {
-      allow read, write: if true;
-    }
-
-    // System collection for time sync
-    match /system/{docId} {
-      allow read, write: if true;
-    }
-
-    // Meta collection for cleanup and other background tasks
-    match /meta/{docId} {
       allow read, write: if true;
     }
   }

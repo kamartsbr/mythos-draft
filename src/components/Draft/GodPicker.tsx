@@ -118,12 +118,14 @@ export function GodPicker({ lobby, isCaptain1, isCaptain2, handlePickerAction, t
                     <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest">{lobby.captain1Name || (lobby.config.teamSize === 1 ? t.roleHost : t.teamA)}</span>
                   </div>
                   <div className="w-24 h-24 md:w-32 md:h-32 rounded-3xl overflow-hidden border-4 border-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.3)]">
-                    <img 
-                      src={MAJOR_GODS.find(g => g.id === lobby.pickerVoteA || (isCaptain1 && effectiveVote === g.id))?.image} 
-                      alt="God A" 
-                      className="w-full h-full object-cover" 
-                      referrerPolicy="no-referrer" 
-                    />
+                    {MAJOR_GODS.find(g => g.id === lobby.pickerVoteA || (isCaptain1 && effectiveVote === g.id))?.image && (
+                      <img 
+                        src={MAJOR_GODS.find(g => g.id === lobby.pickerVoteA || (isCaptain1 && effectiveVote === g.id))?.image} 
+                        alt="God A" 
+                        className="w-full h-full object-cover" 
+                        referrerPolicy="no-referrer" 
+                      />
+                    )}
                   </div>
                   <h3 className="text-sm font-black text-white uppercase tracking-tight">
                     {MAJOR_GODS.find(g => g.id === lobby.pickerVoteA || (isCaptain1 && effectiveVote === g.id))?.name}
@@ -141,12 +143,14 @@ export function GodPicker({ lobby, isCaptain1, isCaptain2, handlePickerAction, t
                     <span className="text-[8px] font-black text-red-500 uppercase tracking-widest">{lobby.captain2Name || (lobby.config.teamSize === 1 ? t.roleGuest : t.teamB)}</span>
                   </div>
                   <div className="w-24 h-24 md:w-32 md:h-32 rounded-3xl overflow-hidden border-4 border-red-500 shadow-[0_0_30px_rgba(239,68,68,0.3)]">
-                    <img 
-                      src={MAJOR_GODS.find(g => g.id === lobby.pickerVoteB || (isCaptain2 && effectiveVote === g.id))?.image} 
-                      alt="God B" 
-                      className="w-full h-full object-cover" 
-                      referrerPolicy="no-referrer" 
-                    />
+                    {MAJOR_GODS.find(g => g.id === lobby.pickerVoteB || (isCaptain2 && effectiveVote === g.id))?.image && (
+                      <img 
+                        src={MAJOR_GODS.find(g => g.id === lobby.pickerVoteB || (isCaptain2 && effectiveVote === g.id))?.image} 
+                        alt="God B" 
+                        className="w-full h-full object-cover" 
+                        referrerPolicy="no-referrer" 
+                      />
+                    )}
                   </div>
                   <h3 className="text-sm font-black text-white uppercase tracking-tight">
                     {MAJOR_GODS.find(g => g.id === lobby.pickerVoteB || (isCaptain2 && effectiveVote === g.id))?.name}
@@ -266,14 +270,16 @@ export function GodPicker({ lobby, isCaptain1, isCaptain2, handlePickerAction, t
                     <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">{t.yourSelection || 'YOUR SELECTION'}</span>
                     <div className="flex items-center gap-3">
                       {effectiveVote ? (
-                        <>
+                        <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-xl overflow-hidden border-2 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
-                            <img 
-                              src={MAJOR_GODS.find(g => g.id === effectiveVote)?.image} 
-                              alt="Selected" 
-                              className="w-full h-full object-cover"
-                              referrerPolicy="no-referrer"
-                            />
+                            {MAJOR_GODS.find(g => g.id === effectiveVote)?.image && (
+                              <img 
+                                src={MAJOR_GODS.find(g => g.id === effectiveVote)?.image} 
+                                alt="Selected" 
+                                className="w-full h-full object-cover"
+                                referrerPolicy="no-referrer"
+                              />
+                            )}
                           </div>
                           <div>
                             <h4 className="text-xs font-black text-white uppercase tracking-tight">
@@ -283,7 +289,7 @@ export function GodPicker({ lobby, isCaptain1, isCaptain2, handlePickerAction, t
                               {myVote ? (t.confirmed || 'CONFIRMED') : (t.sending || 'SENDING...')}
                             </p>
                           </div>
-                        </>
+                        </div>
                       ) : (
                         <div className="flex items-center gap-3 text-slate-700">
                           <div className="w-10 h-10 rounded-xl border-2 border-dashed border-slate-800 flex items-center justify-center">

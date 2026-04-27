@@ -19,15 +19,31 @@ import {
   addDoc
 } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
-import { Lobby, LobbyConfig, PickEntry, ChatMessage } from '../types';
+import { Lobby, LobbyConfig, PickEntry, ChatMessage, LobbySummary, LobbyIndex } from '../types';
 import { PLAYER_COLORS, MCL_ROUND_MAPS } from '../constants';
 
 export const generateId = () => Math.random().toString(36).substring(2, 9);
 
+// ADICIONE ISSO AQUI:
+const cleanData = (obj: any) => {
+  const newObj = { ...obj };
+  Object.keys(newObj).forEach(key => {
+    if (newObj[key] === undefined) {
+      delete newObj[key];
+    } else if (newObj[key] && typeof newObj[key] === 'object' && !newObj[key].toDate) {
+      newObj[key] = cleanData(newObj[key]);
+    }
+  });
+  return newObj;
+};
 export const lobbyService = {
   async createLobby(id: string, lobby: Lobby): Promise<void> {
     try {
-      await setDoc(doc(db, 'lobbies', id), lobby);
+      await setDoc(doc(db, 'lobbies', id), cleanData(lobby));
+      // Trigger index refresh on creation if public
+      if (!lobby.config.isPrivate) {
+        this.refreshLobbyIndex();
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `lobbies/${id}`);
     }
@@ -45,10 +61,14 @@ export const lobbyService = {
 
   async updateLobby(id: string, updates: Partial<Lobby>): Promise<void> {
     try {
-      await updateDoc(doc(db, 'lobbies', id), {
-        ...updates,
-        lastActivityAt: serverTimestamp()
-      });
+    await updateDoc(doc(db, 'lobbies', id), cleanData({
+      ...updates,
+    lastActivityAt: serverTimestamp()
+}));  
+      // If status or score changed, refresh index
+      if (updates.status || updates.scoreA !== undefined || updates.scoreB !== undefined) {
+        this.refreshLobbyIndex();
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
     }
@@ -56,10 +76,10 @@ export const lobbyService = {
 
   async setHoveredGod(id: string, team: 'A' | 'B', godId: string | null): Promise<void> {
     try {
-      await updateDoc(doc(db, 'lobbies', id), {
+      await updateDoc(doc(db, 'lobbies', id), cleanData({
         [`hoveredGodId${team}`]: godId,
         lastActivityAt: serverTimestamp()
-      });
+      }));
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
     }
@@ -154,7 +174,7 @@ export const lobbyService = {
 
   async forceReset(id: string): Promise<void> {
     try {
-      await updateDoc(doc(db, 'lobbies', id), {
+      await updateDoc(doc(db, 'lobbies', id), cleanData({
         status: 'waiting',
         phase: 'waiting',
         turn: 0,
@@ -187,7 +207,7 @@ export const lobbyService = {
         selectedMap: null,
         resetRequest: null,
         lastActivityAt: serverTimestamp()
-      });
+      }));
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
     }
@@ -342,11 +362,12 @@ export const lobbyService = {
 
   async forceFinish(id: string): Promise<void> {
     try {
-      await updateDoc(doc(db, 'lobbies', id), {
+      await updateDoc(doc(db, 'lobbies', id), cleanData({
         status: 'finished',
         phase: 'finished',
         lastActivityAt: serverTimestamp()
-      });
+      }));
+      this.refreshLobbyIndex();
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
     }
@@ -394,24 +415,78 @@ export const lobbyService = {
     });
   },
 
-  subscribeToPublicLobbies(onUpdate: (lobbies: Lobby[]) => void): Unsubscribe {
-    const q = query(
-      collection(db, 'lobbies'), 
-      where('config.isPrivate', '==', false),
-      where('isHidden', '==', false),
-      orderBy('createdAt', 'desc'),
-      limit(20)
-    );
-
+  subscribeToPublicLobbies(onUpdate: (lobbies: LobbySummary[]) => void): Unsubscribe {
+    const indexRef = doc(db, 'metadata', 'lobby_index');
+    
     // Auto-trigger cleanup check
     this.checkAndCleanup();
 
-    return onSnapshot(q, (snap) => {
-      const lobbies = snap.docs.map(d => d.data() as Lobby);
-      onUpdate(lobbies);
+    return onSnapshot(indexRef, (snap) => {
+      console.log(`[Lobby Index] Snap received, exists: ${snap.exists()}`);
+      if (snap.exists()) {
+        const data = snap.data() as LobbyIndex;
+        const lobbiesArray = Array.isArray(data.activeLobbies) ? data.activeLobbies : [];
+        onUpdate(lobbiesArray);
+      } else {
+        // Fallback to direct query if index doesn't exist yet
+        this.fallbackToDirectQuery(onUpdate);
+      }
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'lobbies');
+      console.warn("[Lobby Index] Subscription failed (likely permissions), falling back to query:", error.message);
+      this.fallbackToDirectQuery(onUpdate);
     });
+  },
+
+  async fallbackToDirectQuery(onUpdate: (lobbies: LobbySummary[]) => void): Promise<void> {
+    try {
+      console.log("[Lobby Index] Falling back to direct query on 'lobbies' collection...");
+      const q = query(
+        collection(db, 'lobbies'),
+        limit(50)
+      );
+      const s = await getDocs(q);
+      console.log(`[Lobby Index] Fallback found ${s.size} total lobbies`);
+      
+      const summaries = s.docs
+        .map(d => {
+          const data = d.data() as Lobby;
+          if (!data.config) {
+            console.warn(`Lobby ${d.id} is missing config`, data);
+            return null;
+          }
+          if (data.config.isPrivate) return null;
+
+          const summary = {
+            id: d.id,
+            name: data.config.name || `${data.config.teamSize || 2}v${data.config.teamSize || 2} Draft`,
+            teamSize: data.config.teamSize || 2,
+            captain1Name: data.captain1Name || 'Captain 1',
+            captain2Name: data.captain2Name || 'Captain 2',
+            status: data.status || 'waiting',
+            phase: data.phase || 'waiting',
+            preset: data.config.preset ?? null,
+            mclRound: data.config.mclRound ?? null,
+            tournamentStage: data.config.tournamentStage ?? null,
+            lastActivityAt: data.lastActivityAt ?? null,
+            createdAt: data.createdAt ?? null
+          } as LobbySummary;
+
+          // Remove strictly undefined fields
+          Object.keys(summary).forEach(key => {
+            if ((summary as any)[key] === undefined) {
+              delete (summary as any)[key];
+            }
+          });
+
+          return summary;
+        })
+        .filter((l): l is LobbySummary => l !== null);
+      
+      onUpdate(summaries);
+    } catch (err) {
+      console.error("[Lobby Index] Fallback query failed:", err);
+      onUpdate([]);
+    }
   },
 
   async checkAndCleanup(): Promise<void> {
@@ -427,26 +502,33 @@ export const lobbyService = {
       }
 
       // Update timestamp first to prevent concurrent cleanups from same user session
-      await setDoc(metaRef, { lastCleanupAt: serverTimestamp() }, { merge: true });
+      await setDoc(metaRef, cleanData({ lastCleanupAt: serverTimestamp() }), { merge: true });
 
       // Find lobbies older than 12 hours
       const oldDate = new Date(now - twelveHours);
       const q = query(
         collection(db, 'lobbies'),
-        where('isHidden', '==', false),
         where('createdAt', '<', Timestamp.fromDate(oldDate)),
-        limit(100) // Small batch to prevent too many reads/writes at once
+        limit(100)
       );
 
       const snap = await getDocs(q);
       if (snap.empty) return;
 
       const batch = writeBatch(db);
+      let count = 0;
       snap.docs.forEach(d => {
-        batch.update(d.ref, { isHidden: true });
+        const data = d.data() as Lobby;
+        const isFinished = data.status === 'finished' || data.phase === 'finished';
+        
+        // Never hide finished drafts or permanent ones, and ignore already hidden
+        if (!data.isPermanent && !isFinished && data.isHidden !== true) {
+          batch.update(d.ref, { isHidden: true });
+          count++;
+        }
       });
-      await batch.commit();
-      console.log(`Cleaned up ${snap.docs.length} old lobbies.`);
+      if (count > 0) await batch.commit();
+      console.log(`Cleaned up ${count} old lobbies.`);
     } catch (error) {
       console.error("Cleanup failed:", error);
     }
@@ -547,7 +629,8 @@ export const lobbyService = {
         updates.phase = 'ready';
       }
 
-      await updateDoc(docRef, updates);
+      await updateDoc(docRef, cleanData(updates));
+      if (!data.config.isPrivate) this.refreshLobbyIndex();
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -563,7 +646,7 @@ export const lobbyService = {
         config,
         createdAt: serverTimestamp()
       };
-      await setDoc(doc(db, 'presets', id), preset);
+      await setDoc(doc(db, 'presets', id), cleanData(preset));
       return id;
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'presets');
@@ -705,6 +788,15 @@ export const lobbyService = {
         
         transaction.update(docRef, { ...updates, lastActivityAt: serverTimestamp() });
       });
+
+      // Refresh index if status/phase changed and it's public
+      const finalSnap = await getDoc(docRef);
+      if (finalSnap.exists()) {
+        const finalData = finalSnap.data() as Lobby;
+        if (!finalData.config.isPrivate) {
+          this.refreshLobbyIndex();
+        }
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
     }
@@ -720,7 +812,7 @@ export const lobbyService = {
         updates.captain2 = null;
         updates.captain2Active = false;
       }
-      await updateDoc(doc(db, 'lobbies', id), updates);
+      await updateDoc(doc(db, 'lobbies', id), cleanData(updates));
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
     }
@@ -794,7 +886,8 @@ export const lobbyService = {
         return p;
       });
 
-      await updateDoc(docRef, updates);
+      await updateDoc(docRef, cleanData(updates));
+      if (!data.config.isPrivate) this.refreshLobbyIndex();
       return { success: true };
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${lobbyId}`);
@@ -814,10 +907,10 @@ export const lobbyService = {
   async sendChatMessage(lobbyId: string, message: Omit<ChatMessage, 'id' | 'timestamp'>): Promise<void> {
     try {
       const messagesRef = collection(db, 'lobbies', lobbyId, 'messages');
-      await addDoc(messagesRef, {
+      await addDoc(messagesRef, cleanData({
         ...message,
         timestamp: serverTimestamp()
-      });
+      }));
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `lobbies/${lobbyId}/messages`);
     }
@@ -833,5 +926,58 @@ export const lobbyService = {
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, `lobbies/${lobbyId}/messages`);
     });
+  },
+
+  async refreshLobbyIndex(): Promise<void> {
+    try {
+      const q = query(
+        collection(db, 'lobbies'),
+        orderBy('createdAt', 'desc'),
+        limit(50)
+      );
+      
+      const snap = await getDocs(q);
+      const publicLobbies = snap.docs.filter(d => {
+        const data = d.data() as Lobby;
+        return data.config && !data.config.isPrivate;
+      }).slice(0, 20);
+
+      console.log(`[Refresh Index] Found ${publicLobbies.length} public lobbies`);
+      const summaries: LobbySummary[] = publicLobbies.map(d => {
+        const data = d.data() as Lobby;
+        
+        const summary = {
+          id: d.id,
+          name: data.config.name || `${data.config.teamSize || 2}v${data.config.teamSize || 2} Draft`,
+          teamSize: data.config.teamSize || 2,
+          captain1Name: data.captain1Name || 'Captain 1',
+          captain2Name: data.captain2Name || 'Captain 2',
+          status: data.status || 'waiting',
+          phase: data.phase || 'waiting',
+          preset: data.config.preset ?? null,
+          mclRound: data.config.mclRound ?? null,
+          tournamentStage: data.config.tournamentStage ?? null,
+          lastActivityAt: data.lastActivityAt ?? null,
+          createdAt: data.createdAt ?? null
+        };
+        
+        // Remove strictly undefined fields
+        Object.keys(summary).forEach(key => {
+          if ((summary as any)[key] === undefined) {
+            delete (summary as any)[key];
+          }
+        });
+        
+        return summary as LobbySummary;
+      });
+
+      await setDoc(doc(db, 'metadata', 'lobby_index'), cleanData({
+        activeLobbies: summaries,
+        lastUpdate: serverTimestamp()
+      }), { merge: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'metadata/lobby_index');
+      console.error("Failed to refresh lobby index:", error);
+    }
   }
 };

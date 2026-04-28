@@ -29,6 +29,8 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ lobby, isVisible, 
     );
   }
 
+  const picks = Array.isArray(lobby.picks) ? lobby.picks : [];
+  
   return (
     <div className="flex flex-col items-center gap-6 w-full">
       <div 
@@ -61,35 +63,41 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ lobby, isVisible, 
           if (game) {
             // Logic for past game visualization
             const teamSize = lobby.config.teamSize;
+            const picksA = Array.isArray(game.picksA) ? game.picksA : [];
+            const picksB = Array.isArray(game.picksB) ? game.picksB : [];
+            const colorsA = Array.isArray(game.colorsA) ? game.colorsA : [];
+            const colorsB = Array.isArray(game.colorsB) ? game.colorsB : [];
+
             if (teamSize === 1) {
-              if (pos.playerId === 1) { godId = game.picksA[0]; team = 'A'; }
-              if (pos.playerId === 2) { godId = game.picksB[0]; team = 'B'; }
+              if (pos.playerId === 1) { godId = picksA[0]; team = 'A'; }
+              if (pos.playerId === 2) { godId = picksB[0]; team = 'B'; }
             } else if (teamSize === 2) {
-              if (pos.playerId === 1) { godId = game.picksA[0]; team = 'A'; }
-              if (pos.playerId === 2) { godId = game.picksA[1]; team = 'A'; }
-              if (pos.playerId === 3) { godId = game.picksB[0]; team = 'B'; }
-              if (pos.playerId === 4) { godId = game.picksB[1]; team = 'B'; }
+              if (pos.playerId === 1) { godId = picksA[0]; team = 'A'; }
+              if (pos.playerId === 2) { godId = picksA[1]; team = 'A'; }
+              if (pos.playerId === 3) { godId = picksB[0]; team = 'B'; }
+              if (pos.playerId === 4) { godId = picksB[1]; team = 'B'; }
             } else {
-              if (pos.playerId === 1) { godId = game.picksA[0]; team = 'A'; }
-              if (pos.playerId === 4) { godId = game.picksA[1]; team = 'A'; }
-              if (pos.playerId === 5) { godId = game.picksA[2]; team = 'A'; }
-              if (pos.playerId === 3) { godId = game.picksB[0]; team = 'B'; }
-              if (pos.playerId === 2) { godId = game.picksB[1]; team = 'B'; }
-              if (pos.playerId === 6) { godId = game.picksB[2]; team = 'B'; }
+              if (pos.playerId === 1) { godId = picksA[0]; team = 'A'; }
+              if (pos.playerId === 4) { godId = picksA[1]; team = 'A'; }
+              if (pos.playerId === 5) { godId = picksA[2]; team = 'A'; }
+              if (pos.playerId === 3) { godId = picksB[0]; team = 'B'; }
+              if (pos.playerId === 2) { godId = picksB[1]; team = 'B'; }
+              if (pos.playerId === 6) { godId = picksB[2]; team = 'B'; }
             }
             showGod = !!godId;
-            const colorIdx = team === 'A' ? game.picksA.indexOf(godId!) : game.picksB.indexOf(godId!);
+            const colorIdx = team === 'A' ? picksA.indexOf(godId!) : picksB.indexOf(godId!);
             playerColor = team === 'A' 
-              ? (game.colorsA?.[colorIdx] || '#3b82f6') 
-              : (game.colorsB?.[colorIdx] || '#ef4444');
+              ? (colorsA[colorIdx] || '#3b82f6') 
+              : (colorsB[colorIdx] || '#ef4444');
             
             // Try to find player name in roster
             const roster = team === 'A' ? game.rosterA : game.rosterB;
-            const playerInRoster = roster?.find(p => p.playerId === pos.playerId);
+            const safeRoster = Array.isArray(roster) ? roster : [];
+            const playerInRoster = safeRoster.find(p => p.playerId === pos.playerId);
             playerName = playerInRoster?.playerName || (team === 'A' ? (lobby.captain1Name || 'Team A') : (lobby.captain2Name || 'Team B'));
           } else {
             // Logic for current draft visualization
-            const pick = lobby.picks.find(p => p.playerId === pos.playerId);
+            const pick = picks.find(p => p.playerId === pos.playerId);
             godId = pick?.godId || null;
             team = pick?.team || null;
             showGod = !!godId && isVisible(pick!);
@@ -261,9 +269,9 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ lobby, isVisible, 
               timeLeft <= 5 ? "border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)]" : "border-slate-800"
             )}
           >
-            <Clock className={cn("w-5 h-5", timeLeft <= 5 ? "text-red-500 animate-pulse" : "text-amber-500")} />
-            <span className={cn("text-3xl font-black tabular-nums tracking-tight", timeLeft <= 5 ? "text-red-500" : "text-white")}>
-              {timeLeft}
+            <Clock className={cn("w-5 h-5", (timeLeft || 0) <= 5 ? "text-red-500 animate-pulse" : "text-amber-500")} />
+            <span className={cn("text-3xl font-black tabular-nums tracking-tight", (timeLeft || 0) <= 5 ? "text-red-500" : "text-white")}>
+              {timeLeft !== null ? timeLeft : '--'}
             </span>
           </motion.div>
         )}

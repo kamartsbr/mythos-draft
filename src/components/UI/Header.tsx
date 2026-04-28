@@ -1,4 +1,4 @@
-import { Sword, Users, Copy, Volume2, VolumeX, Bug, User, X, Check } from 'lucide-react';
+import { Sword, Users, Copy, Volume2, VolumeX, Bug, User, X, Check, Shield, Key } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Lobby } from '../../types';
 import { soundService } from '../../services/soundService';
@@ -23,6 +23,9 @@ interface HeaderProps {
   setShowBugModal: (val: boolean) => void;
   nickname: string;
   setNickname: (val: string) => void;
+  isAdmin?: boolean;
+  authenticateAdmin?: (token: string) => boolean;
+  logoutAdmin?: () => void;
 }
 
 export function Header({ 
@@ -41,7 +44,10 @@ export function Header({
   showBugModal,
   setShowBugModal,
   nickname,
-  setNickname
+  setNickname,
+  isAdmin,
+  authenticateAdmin,
+  logoutAdmin
 }: HeaderProps) {
   const [isSoundEnabled, setIsSoundEnabled] = useState(true);
   const [isEditingNick, setIsEditingNick] = useState(false);
@@ -161,7 +167,36 @@ export function Header({
               )}
             </button>
             <div className="h-8 w-px bg-slate-800 mx-1" />
-            
+
+            {/* Discreet Admin Login Button */}
+            {authenticateAdmin && (
+              <button 
+                onClick={() => {
+                  if (isAdmin) {
+                     if (window.confirm('Do you want to exit Admin mode?')) {
+                        logoutAdmin?.();
+                     }
+                     return;
+                  }
+                  const pass = window.prompt('Admin password:');
+                  if (pass) {
+                     const ok = authenticateAdmin(pass);
+                     if (ok) alert('Admin mode enabled.');
+                     else alert('Incorrect password.');
+                  }
+                }}
+                className={cn(
+                  "p-2.5 rounded-xl transition-all duration-300",
+                  isAdmin 
+                    ? "bg-amber-500/20 text-amber-400 border border-amber-500/50" 
+                    : "bg-slate-900 border border-slate-800 text-slate-500 hover:text-amber-500 hover:border-amber-500/50"
+                )}
+                title={isAdmin ? "Admin Active" : "Admin Login"}
+              >
+                {isAdmin ? <Shield className="w-4 h-4" /> : <Key className="w-4 h-4" />}
+              </button>
+            )}
+
             {/* Nickname Editing */}
             <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl">
               {isEditingNick ? (

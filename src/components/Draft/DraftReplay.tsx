@@ -78,7 +78,7 @@ export function DraftReplay({ lobby, onClose, t, lang }: DraftReplayProps) {
   }, [replayLog, currentStep]);
 
   const gameForVisualizer = useMemo(() => {
-    const mapId = state.seriesMaps[state.currentGameNumber - 1] || lobby.seriesMaps[state.currentGameNumber - 1] || lobby.selectedMap;
+    const mapId = state.seriesMaps[state.currentGameNumber - 1] || (lobby.seriesMaps || [])[state.currentGameNumber - 1] || lobby.selectedMap;
     
     return {
       gameNumber: state.currentGameNumber,

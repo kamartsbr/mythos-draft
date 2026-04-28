@@ -1,6 +1,16 @@
 import { Lobby } from '../types';
 import { MAJOR_GODS, MAPS } from '../constants';
 
+const GOD_EMOJIS: Record<string, string> = {
+  zeus: '⚡', poseidon: '🌊', hades: '💀', demeter: '🌾',
+  ra: '☀️', isis: '🪄', set: '🦂',
+  odin: '🦅', thor: '🔨', loki: '🐍', freyr: '🐗',
+  kronos: '⏳', oranos: '🌌', gaia: '🌍',
+  amaterasu: '⛩️', susanoo: '🗡️', tsukuyomi: '🌙',
+  fuxi: '☯️', nuwa: '🌸', shennong: '🌿',
+  quetzalcoatl: '🪶', tezcatlipoca: '🐆', huitzilopochtli: '🩸'
+};
+
 export const discordService = {
   async updateLobbyWebhook(lobby: Lobby) {
     if (!lobby.discordWebhookUrl) return;
@@ -72,11 +82,44 @@ export const discordService = {
     const teamBName = lobby.captain2Name || 'Guest';
     
     // Score Format: Team A name (X) - (Y) Team B name
-    const scoreText = `${teamAName} (${lobby.scoreA}) - (${lobby.scoreB}) ${teamBName}`;
+    const scoreText = `**${lobby.scoreA}** - **${lobby.scoreB}**`;
     
+    // Determine Map Image
+    const fallbackImage = isMCL 
+      ? 'https://static.wikia.nocookie.net/ageofempires/images/2/2f/AoMR_IP_HS_triptych.jpeg/revision/latest'
+      : 'https://static.wikia.nocookie.net/ageofempires/images/2/2f/AoMR_IP_HS_triptych.jpeg/revision/latest';
+    
+    let mapImage = fallbackImage;
+
+    let currentMapId = lobby.selectedMap;
+    if (!currentMapId && lobby.seriesMaps && lobby.seriesMaps[lobby.currentGame - 1]) {
+      currentMapId = lobby.seriesMaps[lobby.currentGame - 1];
+    }
+    
+    if (currentMapId) {
+      const foundMap = MAPS.find(m => m.id === currentMapId);
+      if (foundMap && foundMap.image) {
+        mapImage = foundMap.image;
+      }
+    }
+
+    const cleanValue = (val: any) => {
+      const s = String(val || '').trim();
+      return s.length > 0 ? s : '\u200b';
+    };
+
+    const getAbsoluteUrl = (path: string) => {
+      if (!path) return '';
+      if (path.startsWith('http')) return path;
+      const baseUrl = window.location.origin.includes('ais-dev-') 
+        ? window.location.origin.replace('ais-dev-', 'ais-pre-')
+        : window.location.origin;
+      return `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
+    };
+
     const embed: any = {
-      title: isMCL ? `🏆 MCL: ${lobby.config.name}` : `🏆 ${lobby.config.name}`,
-      description: `**Status:** ${isFinished ? '✅ DRAFT FINISHED' : '⚔️ ' + phaseText}\n**Score:** ${scoreText}`,
+      title: (isMCL ? `🏆 MCL: ${lobby.config.name}` : `🏆 ${lobby.config.name}`) || 'Mythos Draft Update',
+      description: `*Age of Mythology Draft*`,
       color: isFinished ? 0x22c55e : 0xf59e0b, 
       fields: [],
       timestamp: new Date().toISOString(),
@@ -87,55 +130,71 @@ export const discordService = {
           : 'https://static.wikia.nocookie.net/ageofempires/images/8/89/AoMR_Hades_icon.png'
       },
       thumbnail: {
-        url: isMCL ? 'https://liquipedia.net/commons/images/c/c0/Mythic_Clan_League_allmode.png' : null
+        url: getAbsoluteUrl(mapImage)
       },
       image: {
-        url: isMCL 
+        url: getAbsoluteUrl(isMCL 
           ? 'https://static.wikia.nocookie.net/ageofempires/images/2/2f/AoMR_IP_HS_triptych.jpeg/revision/latest'
-          : 'https://static.wikia.nocookie.net/ageofempires/images/2/2f/AoMR_IP_HS_triptych.jpeg/revision/latest'
+          : 'https://static.wikia.nocookie.net/ageofempires/images/2/2f/AoMR_IP_HS_triptych.jpeg/revision/latest')
       }
     };
 
-    // Players Info
-    const playersA = (lobby.teamAPlayers || []).map(p => p.name).join(', ') || teamAName;
-    const playersB = (lobby.teamBPlayers || []).map(p => p.name).join(', ') || teamBName;
-
-    // Team A: Red icon (🔴), Team B: Blue icon (🔵)
+    // Add Status and Score as inline fields
     embed.fields.push(
-      { name: `🔴 ${teamAName.toUpperCase()}`, value: playersA, inline: true },
-      { name: `🔵 ${teamBName.toUpperCase()}`, value: playersB, inline: true },
+      { name: '📊 STATUS', value: cleanValue(isFinished ? '✅ FINAL RESULT' : `⚔️ ${phaseText}`), inline: true },
+      { name: '🎯 SCORE', value: cleanValue(scoreText), inline: true },
+      { name: '\u200b', value: '\u200b', inline: false }
+    );
+
+    // Players Info
+    const tAPlayers = Array.isArray(lobby.teamAPlayers) ? lobby.teamAPlayers : Object.values(lobby.teamAPlayers || {});
+    const tBPlayers = Array.isArray(lobby.teamBPlayers) ? lobby.teamBPlayers : Object.values(lobby.teamBPlayers || {});
+    
+    const playersA = cleanValue(tAPlayers.map(p => (p as any).name).join(', ') || teamAName);
+    const playersB = cleanValue(tBPlayers.map(p => (p as any).name).join(', ') || teamBName);
+
+    embed.fields.push(
+      { name: `🔴 ${cleanValue(teamAName).toUpperCase()}`, value: playersA, inline: true },
+      { name: `🔵 ${cleanValue(teamBName).toUpperCase()}`, value: playersB, inline: true },
       { name: '\u200b', value: '\u200b', inline: false }
     );
 
     // Map Info
-    if (lobby.selectedMap) {
-      const mapName = MAPS.find(m => m.id === lobby.selectedMap)?.name || lobby.selectedMap;
-      embed.fields.push({ name: '📍 SELECTED MAP', value: `**${mapName}**`, inline: false });
-    } else if (lobby.seriesMaps && lobby.seriesMaps[lobby.currentGame - 1]) {
-        const mapName = MAPS.find(m => m.id === lobby.seriesMaps[lobby.currentGame - 1])?.name || lobby.seriesMaps[lobby.currentGame - 1];
-        embed.fields.push({ name: '📍 SELECTED MAP', value: `**${mapName}**`, inline: false });
+    if (currentMapId) {
+      const mapName = MAPS.find(m => m.id === currentMapId)?.name || currentMapId;
+      embed.fields.push({ name: '📍 SELECTED MAP', value: cleanValue(`**${mapName}**`), inline: false });
     }
 
     // Picks
-    const picksA = lobby.picks
-      .filter(p => p.team === 'A' && p.godId)
-      .map(p => {
-        const god = MAJOR_GODS.find(g => g.id === p.godId);
-        return `${god?.name || p.godId}${p.isRandom ? ' (🎲)' : ''}`;
-      })
-      .join('\n') || 'None';
+    const formatPicks = (team: 'A' | 'B') => {
+      const teamPicks = lobby.picks.filter(p => p.team === team && p.godId);
+      const teamBans = (lobby.replayLog || [])
+        .filter(step => step.action === 'BAN' && step.target === 'GOD' && step.player === team && step.gameNumber === lobby.currentGame)
+        .map(step => step.id);
 
-    const picksB = lobby.picks
-      .filter(p => p.team === 'B' && p.godId)
-      .map(p => {
-        const god = MAJOR_GODS.find(g => g.id === p.godId);
-        return `${god?.name || p.godId}${p.isRandom ? ' (🎲)' : ''}`;
-      })
-      .join('\n') || 'None';
+      let text = '';
+      if (teamBans.length > 0) {
+        text += '🚫 ' + teamBans.map(id => GOD_EMOJIS[id.toLowerCase()] || '✨').join(' ') + '\n\n';
+      }
+
+      if (teamPicks.length === 0) {
+        text += '*Draft in Progress...*';
+        return text;
+      }
+      
+      text += teamPicks.map(p => {
+        const godId = p.godId || '';
+        const god = MAJOR_GODS.find(g => g.id === godId);
+        const emoji = godId ? GOD_EMOJIS[godId.toLowerCase()] || '✨' : '✨';
+        return `${emoji} **${god?.name || godId}**${p.isRandom ? ' (🎲)' : ''}`;
+      }).join('\n');
+
+      return cleanValue(text);
+    };
 
     embed.fields.push(
-      { name: 'Picks A', value: picksA, inline: true },
-      { name: 'Picks B', value: picksB, inline: true }
+      { name: 'Picks A', value: formatPicks('A'), inline: true },
+      { name: 'Picks B', value: formatPicks('B'), inline: true }
     );
 
     // Link
@@ -143,10 +202,22 @@ export const discordService = {
       ? window.location.origin.replace('ais-dev-', 'ais-pre-')
       : window.location.origin;
     const lobbyUrl = `${baseUrl}/?lobby=${lobby.id}`;
-    embed.description += `\n\n[**JOIN DRAFT LOBBY**](${lobbyUrl})`;
 
     return {
-      embeds: [embed]
+      embeds: [embed],
+      components: [
+        {
+          type: 1,
+          components: [
+            {
+              type: 2,
+              style: 5,
+              label: '📺 WATCH LIVE',
+              url: lobbyUrl
+            }
+          ]
+        }
+      ]
     };
   }
 };

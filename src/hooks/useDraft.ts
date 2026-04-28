@@ -420,7 +420,14 @@ export function useDraft(
       return () => clearTimeout(timeout);
     }
 
-    const currentTurn = lobby.turnOrder[lobby.turn];
+    const picks = Array.isArray(lobby.picks) ? lobby.picks : [];
+    const bans = Array.isArray(lobby.bans) ? lobby.bans : [];
+    const mapBans = Array.isArray(lobby.mapBans) ? lobby.mapBans : [];
+    const turnOrder = Array.isArray(lobby.turnOrder) ? lobby.turnOrder : [];
+    const seriesMaps = Array.isArray(lobby.seriesMaps) ? lobby.seriesMaps : [];
+    const mapPool = Array.isArray(lobby.mapPool) ? lobby.mapPool : [];
+
+    const currentTurn = turnOrder[lobby.turn];
     if (!currentTurn || currentTurn.player !== 'ADMIN') return;
     if (!isCaptain1) return;
 
@@ -433,9 +440,9 @@ export function useDraft(
 
           const availableMaps = MAPS.filter(m => 
             allowedMaps.includes(m.id) && 
-            !lobby.mapBans.includes(m.id) && 
-            !lobby.seriesMaps.includes(m.id) &&
-            !(lobby.config.preset === 'CASCA' && lobby.config.tournamentStage === 'PLAYOFFS' && lobby.mapPool?.includes(m.id))
+            !mapBans.includes(m.id) && 
+            !seriesMaps.includes(m.id) &&
+            !(lobby.config.preset === 'CASCA' && lobby.config.tournamentStage === 'PLAYOFFS' && mapPool.includes(m.id))
           );
           if (availableMaps.length > 0) {
             const randomMap = availableMaps[Math.floor(Math.random() * availableMaps.length)];
@@ -445,8 +452,8 @@ export function useDraft(
       } else if (currentTurn.target === 'GOD') {
         if (currentTurn.action === 'PICK' || currentTurn.action === 'BAN') {
           const availableGods = MAJOR_GODS.filter(g => 
-            !lobby.bans.includes(g.id) && 
-            (currentTurn.modifier === 'GLOBAL' || !lobby.picks.some(p => p.godId === g.id))
+            !bans.includes(g.id) && 
+            (currentTurn.modifier === 'GLOBAL' || !picks.some(p => p.godId === g.id))
           );
           if (availableGods.length > 0) {
             const randomGod = availableGods[Math.floor(Math.random() * availableGods.length)];

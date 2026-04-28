@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Shield, Sword, X, User, Users, Dices, RefreshCw, UserMinus, UserPlus } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { Lobby, PickEntry } from '../../types';
+import { Lobby, PickEntry, Substitution } from '../../types';
 import { PlayerSlot } from './PlayerSlot';
 import { MAJOR_GODS, MAPS } from '../../constants';
 
@@ -22,7 +22,8 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
   const [showSubAlert, setShowSubAlert] = useState(false);
   const prevGameRef = useRef<number>(0);
   
-  const mySubs = lobby.lastSubs?.filter(s => s.team === team) || [];
+  const lastSubs = (Array.isArray(lobby.lastSubs) ? lobby.lastSubs : []) as Substitution[];
+  const mySubs = lastSubs.filter(s => s.team === team);
 
   useEffect(() => {
     if (lobby.phase.startsWith('god_') && mySubs.length > 0 && lobby.currentGame !== prevGameRef.current) {
@@ -36,8 +37,8 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
     }
   }, [lobby.phase, mySubs.length, lobby.currentGame, lobby.status]);
 
-  const optimisticPicks = [...lobby.picks];
-  const optimisticBans = [...lobby.replayLog];
+  const optimisticPicks = Array.isArray(lobby.picks) ? [...lobby.picks] : [];
+  const optimisticBans = Array.isArray(lobby.replayLog) ? [...lobby.replayLog] : [];
 
   if (optimisticAction) {
     if (optimisticAction.type === 'pick' && isCurrentTurn) {

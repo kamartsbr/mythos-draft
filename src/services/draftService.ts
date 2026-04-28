@@ -2,6 +2,7 @@ import { doc, updateDoc, serverTimestamp, runTransaction } from 'firebase/firest
 import { db, auth } from '../firebase';
 import { Lobby, DraftTurn, PickEntry, TurnAction, TurnTarget, TurnModifier, TurnExecution, Substitution } from '../types';
 import { MAPS, MAJOR_GODS, MCL_ROUND_MAPS, getMCLPicks, PLAYER_COLORS } from '../constants';
+import { normalizeLobbyData, cleanData } from './lobbyService';
 
 enum OperationType {
   CREATE = 'create',
@@ -11,6 +12,20 @@ enum OperationType {
   GET = 'get',
   WRITE = 'write',
 }
+
+const cleanData = (obj: any): any => {
+  if (obj === null || obj === undefined) return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(item => cleanData(item));
+  } else if (typeof obj === 'object') {
+    const newObj: any = {};
+    Object.keys(obj).forEach(key => {
+      newObj[key] = cleanData(obj[key]);
+    });
+    return newObj;
+  }
+  return obj;
+};
 
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const errInfo = {
@@ -36,7 +51,8 @@ export const draftService = {
     isCaptain2: boolean,
     targetPlayerId?: number,
     playerName?: string,
-    options?: { isRandom?: boolean }
+    options?: { isRandom?: boolean },
+    retryCount = 0
   ): Promise<{ success: boolean; error?: string }> {
     try {
       return await runTransaction(db, async (transaction) => {
@@ -44,7 +60,7 @@ export const draftService = {
         const lobbyDoc = await transaction.get(lobbyRef);
         if (!lobbyDoc.exists()) return { success: false, error: "Lobby not found" };
         
-        const freshLobby = { id: lobbyDoc.id, ...lobbyDoc.data() } as Lobby;
+        const freshLobby = normalizeLobbyData({ id: lobbyDoc.id, ...lobbyDoc.data() });
         
         if (freshLobby.status !== 'drafting') return { success: false, error: "Not drafting" };
         
@@ -55,7 +71,7 @@ export const draftService = {
                          (isCaptain2 && currentTurn.player === 'B') ||
                          (currentTurn.player === 'BOTH');
         
-        // ... (timer check remains same)
+        // ... (timer check)
         let isTimerExpired = false;
         if (freshLobby.timerStart) {
           let startTime: number;
@@ -68,7 +84,11 @@ export const draftService = {
           }
           const elapsed = (Date.now() - startTime) / 1000;
           const duration = freshLobby.config.timerDuration || 60;
-          if (elapsed >= duration + 1) { // 1 second grace period on server check
+          let clampedDuration = duration;
+          if (typeof clampedDuration !== 'number' || clampedDuration < 0 || clampedDuration > 120) {
+            clampedDuration = 60;
+          }
+          if (elapsed >= clampedDuration + 1) { // 1 second grace period on server check
             isTimerExpired = true;
           }
         }
@@ -86,7 +106,7 @@ export const draftService = {
           mapBans: [...(freshLobby.mapBans || [])],
           seriesMaps: [...(freshLobby.seriesMaps || [])],
           replayLog: [...(freshLobby.replayLog || [])],
-          hiddenActions: [...(freshLobby.hiddenActions || [])],
+          hiddenActions: Array.isArray(freshLobby.hiddenActions) ? [...freshLobby.hiddenActions] : [],
           mapPool: freshLobby.mapPool ? [...freshLobby.mapPool] : [],
           turn: freshLobby.turn,
           phase: freshLobby.phase,
@@ -275,10 +295,17 @@ export const draftService = {
           updates.timerStart = null;
         }
 
-        transaction.update(lobbyRef, updates);
+        // Sanitization of updateMask: 
+        // We are already passing only the necessary fields in 'updates' 
+        // which will be used in transaction.update
+        transaction.update(lobbyRef, cleanData(updates));
         return { success: true };
       });
-    } catch (error) {
+    } catch (error: any) {
+      if (error.message.includes('failed-precondition') && retryCount < 3) {
+        await new Promise(r => setTimeout(r, 500));
+        return this.handleAction(lobby, actionId, isCaptain1, isCaptain2, targetPlayerId, playerName, options, retryCount + 1);
+      }
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${lobby.id}`);
       return { success: false, error: "Update failed" };
     }
@@ -383,8 +410,8 @@ export const draftService = {
           
           const nextGameNumber = nextLobby.currentGame;
 
-          if (nextLobby.seriesMaps.length > 0) {
-            nextLobby.selectedMap = nextLobby.seriesMaps[nextGameNumber - 1];
+          if ((nextLobby.seriesMaps || []).length > 0) {
+            nextLobby.selectedMap = (nextLobby.seriesMaps || [])[nextGameNumber - 1];
           } else {
             nextLobby.selectedMap = null;
           }
@@ -396,6 +423,11 @@ export const draftService = {
           
           if (nextLobby.selectedMap && nextLobby.selectedMap !== "") {
             newTurnOrder = [...godOrder];
+            // Force the phase directly to a god phase to prevent being stuck in a non-existent map phase
+            const firstGodTurn = newTurnOrder[0];
+            if (firstGodTurn) {
+              nextLobby.phase = (firstGodTurn.action === 'BAN' ? 'god_ban' : 'god_pick');
+            }
           } else {
             // Special Case: Casca Grossa Playoffs
             if (lobby.config.preset === 'CASCA' && lobby.config.tournamentStage === 'PLAYOFFS') {
@@ -458,7 +490,11 @@ export const draftService = {
             }
           }
           
-          nextLobby.timerStart = null; // Wait for ready
+          if (nextLobby.selectedMap && nextLobby.selectedMap !== "") {
+            nextLobby.timerStart = serverTimestamp();
+          } else {
+            nextLobby.timerStart = null; // Wait for ready
+          }
           nextLobby.reportVoteA = null;
           nextLobby.reportVoteB = null;
           nextLobby.reportStartAt = null;
@@ -543,7 +579,11 @@ export const draftService = {
           }
           const elapsed = (Date.now() - startTime) / 1000;
           const duration = freshLobby.config.timerDuration || 60;
-          if (elapsed >= duration + 1) isTimerExpired = true;
+          let clampedDuration = duration;
+          if (typeof clampedDuration !== 'number' || clampedDuration < 0 || clampedDuration > 120) {
+            clampedDuration = 60;
+          }
+          if (elapsed >= clampedDuration + 1) isTimerExpired = true;
         }
 
         const isAutoPickFallback = isTimerExpired && (isCaptain1 || isCaptain2);
@@ -611,7 +651,7 @@ export const draftService = {
           });
         }
 
-        transaction.update(lobbyRef, updates);
+        transaction.update(lobbyRef, cleanData(updates));
         return { success: true };
       });
     } catch (error) {

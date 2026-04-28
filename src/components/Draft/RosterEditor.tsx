@@ -15,12 +15,12 @@ interface RosterEditorProps {
 }
 
 export function RosterEditor({ lobby, team, onClose, onSave, t }: RosterEditorProps) {
+  const picks = Array.isArray(lobby.picks) ? lobby.picks : [];
   const teamPicks = useMemo(() => {
-    const picks = lobby.picks.filter(p => p.team === team);
     const isMCL = lobby.config.preset?.includes('MCL');
     
     // Sort picks to ensure Player 1, 2, 3 order
-    return [...picks].sort((a, b) => {
+    return picks.filter(p => p.team === team).sort((a, b) => {
       if (isMCL) {
         const useGame2Order = lobby.currentGame === 2 || (lobby.currentGame === 3 && lobby.lastWinner === 'A');
         const order = getMCLTeamOrder(team, lobby.selectedMap || null, useGame2Order);
@@ -83,8 +83,7 @@ export function RosterEditor({ lobby, team, onClose, onSave, t }: RosterEditorPr
       }
     }
 
-    // Create full picks array with updates
-    const allPicks = lobby.picks.map(p => {
+    const allPicks = (Array.isArray(lobby.picks) ? lobby.picks : []).map(p => {
       if (p.team === team) {
         const edited = editedPicks.find(ep => ep.playerId === p.playerId);
         return edited || p;

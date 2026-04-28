@@ -43,17 +43,21 @@ export function GodPicker({ lobby, isCaptain1, isCaptain2, handlePickerAction, t
   
   const isRevealing = lobby.phase === 'revealing';
   
-  const teamAGods = lobby.picks.filter(p => p.team === 'A' && p.godId).map(p => p.godId!);
-  const teamBGods = lobby.picks.filter(p => p.team === 'B' && p.godId).map(p => p.godId!);
+  const picks = Array.isArray(lobby.picks) ? lobby.picks : [];
+  const history = Array.isArray(lobby.history) ? lobby.history : [];
   
-  const usedGodsA = lobby.history.map(h => h.picksA[0]).filter(Boolean);
-  const usedGodsB = lobby.history.map(h => h.picksB[0]).filter(Boolean);
+  const teamAGods = picks.filter(p => p.team === 'A' && p.godId).map(p => p.godId!);
+  const teamBGods = picks.filter(p => p.team === 'B' && p.godId).map(p => p.godId!);
+  
+  const usedGodsA = history.map(h => h.picksA ? h.picksA[0] : null).filter(Boolean);
+  const usedGodsB = history.map(h => h.picksB ? h.picksB[0] : null).filter(Boolean);
 
   const isCascaGroup = lobby.config.preset === 'CASCA' && lobby.config.tournamentStage === 'GROUP';
   const gameMap = MAPS.find(m => m.id === lobby.selectedMap);
   
+  const allowedPantheons = Array.isArray(lobby.config.allowedPantheons) ? lobby.config.allowedPantheons : [];
   const myGodPool = isCascaGroup 
-    ? MAJOR_GODS.filter(g => g.culture !== 'Aztec' && (!lobby.config.allowedPantheons || lobby.config.allowedPantheons.includes(g.id))).map(g => g.id)
+    ? MAJOR_GODS.filter(g => g.culture !== 'Aztec' && (allowedPantheons.length === 0 || allowedPantheons.includes(g.id))).map(g => g.id)
     : (myTeam === 'A' ? teamAGods : teamBGods);
     
   const myUsedGods = isCascaGroup ? [] : (myTeam === 'A' ? usedGodsA : usedGodsB);

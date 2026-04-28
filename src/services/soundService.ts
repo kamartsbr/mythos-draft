@@ -20,11 +20,22 @@ class SoundService {
     if (!this.enabled) return;
     
     try {
-      const audio = new Audio(SOUNDS[soundName]);
+      const url = SOUNDS[soundName];
+      const audio = new Audio(url);
       audio.volume = 0.4;
-      audio.play().catch(e => console.warn('Sound play blocked by browser:', e));
+      
+      // Wrap play in a promise-safe check
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(e => {
+          // If SSL error or blocked, we just ignore it
+          if (e.name !== 'NotAllowedError') {
+             console.warn(`Audio play failed for ${soundName}:`, e.message);
+          }
+        });
+      }
     } catch (error) {
-      console.error('Error playing sound:', error);
+      // Silently catch audio context errors
     }
   }
 }

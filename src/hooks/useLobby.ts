@@ -67,25 +67,51 @@ export function useLobby(initialNickname: string) {
   useEffect(() => {
     if (!isAuthReady) return;
     
+    // Check sessionStorage first
+    const storedAdminObj = sessionStorage.getItem('isAdmin');
+    const isStoredAdmin = storedAdminObj === 'true';
+
     // Support standard ?admin=, hash #admin=, and even malformed &admin=
-    const getParam = (name: string) => {
-      const search = new URLSearchParams(window.location.search).get(name);
-      if (search) return search;
-      
-      const hash = new URLSearchParams(window.location.hash.substring(1)).get(name);
-      if (hash) return hash;
-
-      // Fallback for &admin= TYPO as seen in some screenshots
-      const fullUrl = window.location.href;
-      const match = fullUrl.match(new RegExp(`[?&#]${name}=([^&#]+)`));
-      return match ? decodeURIComponent(match[1]) : null;
-    };
-
-    const adminKey = getParam('admin');
-    const isGlobalAdmin = adminKey === 'MYTHOS_ADMIN_2026' || 
+    // only to auto-login old links if needed, but the prompt is to remove reliance on URL
+    // Actually the prompt says "não exiba o token na URL" implying we just don't have to keep it in the URL,
+    // but reading it if it's there temporarily is fine. Let's strictly rely on sessionStorage and email.
+    const isGlobalAdmin = isStoredAdmin || 
                           auth.currentUser?.email === 'goldpentakill@gmail.com';
     setIsAdmin(isGlobalAdmin);
+
+    // If there is an admin token in the URL, remove it so it's not displayed
+    const url = new URL(window.location.href);
+    let urlChanged = false;
+    
+    // Clean up ?admin=
+    if (url.searchParams.has('admin')) {
+      const token = url.searchParams.get('admin');
+      if (token === 'mythosadmin2026@') {
+        sessionStorage.setItem('isAdmin', 'true');
+        setIsAdmin(true);
+      }
+      url.searchParams.delete('admin');
+      urlChanged = true;
+    }
+    
+    if (urlChanged) {
+      window.history.replaceState({}, '', url.toString());
+    }
   }, [isAuthReady, guestId, auth.currentUser?.email]);
+
+  const authenticateAdmin = useCallback((token: string) => {
+    if (token === 'mythosadmin2026@') {
+      sessionStorage.setItem('isAdmin', 'true');
+      setIsAdmin(true);
+      return true;
+    }
+    return false;
+  }, []);
+
+  const logoutAdmin = useCallback(() => {
+    sessionStorage.removeItem('isAdmin');
+    setIsAdmin(false);
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -125,12 +151,20 @@ export function useLobby(initialNickname: string) {
 
   // Subscriptions
   useEffect(() => {
+    // Optimization: If we have a lobbyId, we IMMEDIATELY stop listening to public lobbies
+    // to save bandwidth and prevent unneeded re-renders during gameplay.
     if (!lobbyId) {
+      console.log("[Lobby] Inscrição no índice global iniciada.");
       const unsub = lobbyService.subscribeToPublicLobbies((lobbies) => {
         setPublicLobbies(Array.isArray(lobbies) ? lobbies.slice(0, 20) : []);
       });
       return unsub;
     }
+
+    // Entering a specific lobby - unsubscribe from global index happens automatically 
+    // because this effect cleans up when lobbyId becomes truthy.
+    console.log("[Lobby] Inscrição no lobby específico:", lobbyId);
+    setPublicLobbies([]); // Clear list to free memory
 
     const unsub = lobbyService.subscribeToLobby(
       lobbyId, 
@@ -150,7 +184,7 @@ export function useLobby(initialNickname: string) {
 
         setIsCaptain1(isC1);
         setIsCaptain2(isC2);
-        setIsSpectator(shouldBeSpectator || !!data.spectators?.some(s => s.id === guestId));
+        setIsSpectator(shouldBeSpectator || !!(Array.isArray(data.spectators) ? data.spectators : Object.values(data.spectators || {})).some((s: any) => s.id === guestId));
       },
       (err) => setError("Lobby error: " + err.message)
     );
@@ -230,6 +264,11 @@ export function useLobby(initialNickname: string) {
     await lobbyService.forceUnpause(lobbyId);
   }, [lobbyId]);
 
+  const forceStartDraft = useCallback(async () => {
+    if (!lobbyId) return;
+    await lobbyService.forceStartDraft(lobbyId);
+  }, [lobbyId]);
+
   const leaveSlot = useCallback(async () => {
     if (!lobbyId) return;
     const team = isCaptain1 ? 'A' : 'B';
@@ -249,6 +288,8 @@ export function useLobby(initialNickname: string) {
     isSpectator,
     setIsSpectator,
     isAdmin,
+    authenticateAdmin,
+    logoutAdmin,
     publicLobbies,
     error,
     setError,
@@ -262,6 +303,7 @@ export function useLobby(initialNickname: string) {
     resetCurrentGame,
     forceFinish,
     forceUnpause,
+    forceStartDraft,
     isAuthReady
   };
 }

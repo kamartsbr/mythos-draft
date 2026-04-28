@@ -26,25 +26,80 @@ export const generateId = () => Math.random().toString(36).substring(2, 9);
 
 const getMillis = (val: any): number => {
   if (!val) return 0;
+  // Handle Firestore Timestamp
   if (typeof val.toMillis === 'function') return val.toMillis();
   if (typeof val.toDate === 'function') {
     const d = val.toDate();
     if (d && !isNaN(d.getTime())) return d.getTime();
   }
+  
+  // Handle plain number (could be seconds or millis)
+  if (typeof val === 'number') {
+    // If it's a seconds-based timestamp (like 1.7e9), convert to millis
+    if (val < 10000000000) return val * 1000;
+    return val;
+  }
+  
+  // Handle string or other Date-parseable
   const parsed = new Date(val).getTime();
   return isNaN(parsed) ? 0 : parsed;
 };
 
-const cleanData = (obj: any) => {
-  const newObj = { ...obj };
-  Object.keys(newObj).forEach(key => {
-    if (newObj[key] === undefined) {
-      delete newObj[key];
-    } else if (newObj[key] && typeof newObj[key] === 'object' && !newObj[key].toDate) {
-      newObj[key] = cleanData(newObj[key]);
+export const cleanData = (obj: any): any => {
+  if (obj === null || obj === undefined) return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(item => cleanData(item));
+  }
+  if (typeof obj !== 'object' || obj.toDate) return obj;
+
+  const newObj: any = {};
+  Object.keys(obj).forEach(key => {
+    if (obj[key] !== undefined) {
+      newObj[key] = cleanData(obj[key]);
     }
   });
   return newObj;
+};
+
+const sanitizeArray = (val: any): any[] => {
+  if (!val) return [];
+  if (Array.isArray(val)) return val.filter(i => i !== null && i !== undefined);
+  return Object.values(val).filter(i => i !== null && i !== undefined);
+};
+
+export const normalizeLobbyData = (data: any): Lobby => {
+  if (!data) return data;
+  
+  // Firebase occasionally converts sparse arrays to objects. Ensure arrays are standard Arrays and remove holes.
+  const arrayFields = [
+    'seriesMaps', 
+    'spectators', 
+    'picks', 
+    'bans', 
+    'mapBans', 
+    'replayLog', 
+    'history', 
+    'turnOrder',
+    'teamAPlayers',
+    'teamBPlayers',
+    'mapPool',
+    'hiddenActions',
+    'lastSubs'
+  ];
+
+  for (const field of arrayFields) {
+    data[field] = sanitizeArray(data[field]);
+  }
+
+  // Also normalize config array fields
+  if (data.config) {
+    const configArrayFields = ['allowedPantheons', 'allowedMaps', 'mapTurnOrder', 'godTurnOrder'];
+    for (const field of configArrayFields) {
+      data.config[field] = sanitizeArray(data.config[field]);
+    }
+  }
+  
+  return data as Lobby;
 };
 
 export const lobbyService = {
@@ -61,7 +116,11 @@ export const lobbyService = {
 
   async refreshLobbyIndex(): Promise<void> {
     try {
-      console.log("[Lobby Index] Atualizando índice...");
+      // Optimization: Index refresh is heavy. We use a lightweight lock to prevent concurrent refreshes 
+      // from the same client session causing UI stutter.
+      if ((this as any)._isRefreshingIndex) return;
+      (this as any)._isRefreshingIndex = true;
+
       // We use 'lastActivityAt' instead of 'createdAt' for ordering. 
       // This is crucial because Firestore's query engine automatically excludes any documents 
       // from the result set if they are missing the field specified in an 'orderBy' or 'where' clause. 
@@ -93,7 +152,7 @@ export const lobbyService = {
           } as LobbySummary;
         })
         .filter((l): l is LobbySummary => l !== null)
-        .slice(0, 20); // Somente os 20 mais recentes que são públicos e não ocultos
+        .slice(0, 20);
 
       await setDoc(doc(db, 'metadata', 'lobby_index'), cleanData({
         activeLobbies: summaries,
@@ -101,16 +160,17 @@ export const lobbyService = {
         initialized: true
       }), { merge: true });
 
-      console.log(`[Lobby Index] Índice atualizado com ${summaries.length} lobbies.`);
     } catch (err) {
       console.error("[Lobby Index] Erro ao atualizar índice:", err);
+    } finally {
+      (this as any)._isRefreshingIndex = false;
     }
   },
 
   async getLobby(id: string): Promise<Lobby | null> {
     try {
       const docSnap = await getDoc(doc(db, 'lobbies', id));
-      return docSnap.exists() ? (docSnap.data() as Lobby) : null;
+      return docSnap.exists() ? normalizeLobbyData(docSnap.data()) : null;
     } catch (error) {
       handleFirestoreError(error, OperationType.GET, `lobbies/${id}`);
       return null;
@@ -124,7 +184,13 @@ export const lobbyService = {
         lastActivityAt: serverTimestamp()
       }));
       
-      if (updates.status || updates.scoreA !== undefined || updates.scoreB !== undefined) {
+      // Index is primarily for public/waiting lobbies. 
+      // Only refresh if visibility or status changes in a way that affects the list.
+      const statusChanged = updates.status === 'finished' || updates.status === 'waiting' || updates.status === 'INCOMPLETE';
+      const isVisibilityUpdate = updates.isHidden !== undefined;
+      
+      if (statusChanged || isVisibilityUpdate) {
+        // Optimization: Only refresh for major state changes that affect the public list
         await this.refreshLobbyIndex();
       }
     } catch (error) {
@@ -145,32 +211,28 @@ export const lobbyService = {
 
   async forceUnpause(id: string): Promise<void> {
     const lobbyRef = doc(db, 'lobbies', id);
-    await runTransaction(db, async (transaction) => {
-      const lobbyDoc = await transaction.get(lobbyRef);
-      if (!lobbyDoc.exists()) return;
+    try {
+      await runTransaction(db, async (transaction) => {
+        const lobbyDoc = await transaction.get(lobbyRef);
+        if (!lobbyDoc.exists()) return;
 
-      const data = lobbyDoc.data() as Lobby;
-      if (!data.isPaused) return;
+        const data = normalizeLobbyData(lobbyDoc.data());
+        if (!data.isPaused) return;
 
-      const updates: Partial<Lobby> = {
-        captain1Active: true,
-        captain2Active: true,
-        isPaused: false,
-        lastActivityAt: serverTimestamp()
-      };
+        const updates: Partial<Lobby> = {
+          captain1Active: true,
+          captain2Active: true,
+          isPaused: false,
+          timerStart: serverTimestamp(),
+          timerPausedAt: null,
+          lastActivityAt: serverTimestamp()
+        };
 
-      if (data.timerStart && data.timerPausedAt) {
-        const pausedAt = getMillis(data.timerPausedAt);
-        const now = Date.now();
-        const pausedDuration = now - pausedAt;
-        const oldStart = getMillis(data.timerStart);
-        
-        updates.timerStart = Timestamp.fromMillis(oldStart + pausedDuration);
-        updates.timerPausedAt = null;
-      }
-
-      transaction.update(lobbyRef, cleanData(updates));
-    });
+        transaction.update(lobbyRef, updates);
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
+    }
   },
 
   async updatePresence(id: string, captain: 'A' | 'B', active: boolean): Promise<void> {
@@ -182,7 +244,7 @@ export const lobbyService = {
         const docSnap = await transaction.get(docRef);
         if (!docSnap.exists()) return;
         
-        const data = docSnap.data() as Lobby;
+        const data = normalizeLobbyData(docSnap.data());
         const updates: any = { lastActivityAt: serverTimestamp() };
         
         if (captain === 'A') updates.captain1Active = active;
@@ -270,7 +332,7 @@ export const lobbyService = {
       await runTransaction(db, async (transaction) => {
         const docSnap = await transaction.get(docRef);
         if (!docSnap.exists()) return;
-        const data = docSnap.data() as Lobby;
+        const data = normalizeLobbyData(docSnap.data());
         
         if (data.resetRequest) return;
 
@@ -298,12 +360,12 @@ export const lobbyService = {
       await runTransaction(db, async (transaction) => {
         const docSnap = await transaction.get(docRef);
         if (!docSnap.exists()) return;
-        const data = docSnap.data() as Lobby;
+        const data = normalizeLobbyData(docSnap.data());
         
         if (!data.resetRequest) return;
 
         if (accept) {
-          const filteredReplayLog = (data.replayLog || []).filter(log => log.gameNumber !== data.currentGame);
+          const filteredReplayLog = (data.replayLog || []).filter((log: any) => log.gameNumber !== data.currentGame);
           const newSeriesMaps = [...(data.seriesMaps || [])];
           
           let restoredMap = "";
@@ -321,7 +383,7 @@ export const lobbyService = {
             status: 'drafting',
             phase: 'ready',
             turn: 0,
-            picks: data.picks.map(p => ({ ...p, godId: null, isRandom: false })),
+            picks: (Array.isArray(data.picks) ? data.picks : []).map(p => ({ ...(p as any), godId: null, isRandom: false })),
             bans: [],
             mapBans: data.currentGame === 1 ? [] : data.mapBans,
             readyA: false,
@@ -369,10 +431,10 @@ export const lobbyService = {
         const docSnap = await transaction.get(docRef);
         if (!docSnap.exists()) return;
         
-        const data = docSnap.data() as Lobby;
+        const data = normalizeLobbyData(docSnap.data());
         
         // Remove current game's actions from replayLog
-        const filteredReplayLog = (data.replayLog || []).filter(log => log.gameNumber !== data.currentGame);
+        const filteredReplayLog = (data.replayLog || []).filter((log: any) => log.gameNumber !== data.currentGame);
         
         // Restore pre-determined map for MCL if applicable
         const newSeriesMaps = [...(data.seriesMaps || [])];
@@ -391,7 +453,7 @@ export const lobbyService = {
           status: 'drafting',
           phase: 'ready',
           turn: 0,
-          picks: data.picks.map(p => ({ ...p, godId: null, isRandom: false })), // Keep players but remove gods
+          picks: (Array.isArray(data.picks) ? data.picks : []).map(p => ({ ...(p as any), godId: null, isRandom: false })), // Keep players but remove gods
           bans: [],
           mapBans: data.currentGame === 1 ? [] : data.mapBans,
           readyA: false,
@@ -458,7 +520,8 @@ export const lobbyService = {
   subscribeToLobby(id: string, onUpdate: (lobby: Lobby) => void, onError: (err: Error) => void): Unsubscribe {
     return onSnapshot(doc(db, 'lobbies', id), (docSnap) => {
       if (docSnap.exists()) {
-        onUpdate(docSnap.data() as Lobby);
+        const data = normalizeLobbyData(docSnap.data());
+        onUpdate(data);
       }
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, `lobbies/${id}`);
@@ -609,7 +672,7 @@ export const lobbyService = {
         return { success: false, error: "Lobby not found" };
       }
 
-      const data = docSnap.data() as Lobby;
+      const data = normalizeLobbyData(docSnap.data());
       const updates: any = {};
 
       const isMCL = data.config.preset === 'MCL';
@@ -630,7 +693,7 @@ export const lobbyService = {
         }
         
         if (!isMCL) {
-          updates.picks = data.picks.map(p => {
+          updates.picks = (Array.isArray(data.picks) ? data.picks : Object.values(data.picks || {})).map((p: any) => {
             if (p.team === 'A') {
               if (playerNames && playerNames[p.playerId]) {
                 return { ...p, playerName: playerNames[p.playerId] };
@@ -662,7 +725,7 @@ export const lobbyService = {
         }
 
         if (!isMCL) {
-          updates.picks = (updates.picks || data.picks).map(p => {
+          updates.picks = (Array.isArray(updates.picks || data.picks) ? (updates.picks || data.picks) : Object.values(updates.picks || data.picks || {})).map((p: any) => {
             if (p.team === 'B') {
               if (playerNames && playerNames[p.playerId]) {
                 return { ...p, playerName: playerNames[p.playerId] };
@@ -678,8 +741,8 @@ export const lobbyService = {
           .filter(([id]) => teamSlots.includes(Number(id)))
           .map(([id, name]) => ({ name: name as string, position: Number(id) }));
       } else {
-        const spectators = data.spectators || [];
-        if (!spectators.some(s => s.id === guestId)) {
+        const spectators = Array.isArray(data.spectators) ? data.spectators : Object.values(data.spectators || {});
+        if (!spectators.some((s: any) => s.id === guestId)) {
           updates.spectators = [...spectators, { id: guestId, name: nickname }];
         }
       }
@@ -713,7 +776,7 @@ export const lobbyService = {
     }
   },
 
- async setReady(id: string, team: 'A' | 'B', isReadyArg: any, guestId: string, generateTurnOrder: any): Promise<void> {
+  async setReady(id: string, team: 'A' | 'B', isReadyArg: any, guestId: string, generateTurnOrder: any): Promise<void> {
     const docRef = doc(db, 'lobbies', id);
     const isReady = !!isReadyArg;
 
@@ -722,7 +785,7 @@ export const lobbyService = {
         const docSnap = await transaction.get(docRef);
         if (!docSnap.exists()) throw new Error("Lobby not found");
         
-        const data = docSnap.data() as Lobby;
+        const data = normalizeLobbyData(docSnap.data());
 
         if (team === 'A' && data.captain1 !== guestId) throw new Error("Not authorized for Team A");
         if (team === 'B' && data.captain2 !== guestId) throw new Error("Not authorized for Team B");
@@ -740,11 +803,11 @@ export const lobbyService = {
             if (data.captain1 === data.captain2) updates.readyA = isReady;
           }
           
-          const isAReady = team === 'A' ? isReady : (data.captain1 === data.captain2 ? isReady : data.readyA);
-          const isBReady = team === 'B' ? isReady : (data.captain1 === data.captain2 ? isReady : data.readyB);
+          const isAReady = team === 'A' ? isReady : (data.captain1 === data.captain2 ? isReady : (data.readyA || false));
+          const isBReady = team === 'B' ? isReady : (data.captain1 === data.captain2 ? isReady : (data.readyB || false));
           
           if (isAReady && isBReady) {
-            if (data.status === 'waiting' || (data.status === 'drafting' && data.phase === 'ready')) {
+            if (data.status === 'waiting' || (data.status === 'drafting' && (data.phase === 'ready' || data.phase === 'waiting'))) {
               updates.status = 'drafting';
               updates.turn = 0;
               updates.timerStart = serverTimestamp();
@@ -759,15 +822,75 @@ export const lobbyService = {
               updates.timerStart = serverTimestamp();
             }
           }
+        } else if (data.phase === 'ready') {
+          // Handle readiness for Game 2+
+          if (team === 'A') {
+            updates.readyA_nextGame = isReady;
+            if (data.captain1 === data.captain2) updates.readyB_nextGame = isReady;
+          } else {
+            updates.readyB_nextGame = isReady;
+            if (data.captain1 === data.captain2) updates.readyA_nextGame = isReady;
+          }
+
+          const isAReady = team === 'A' ? isReady : (data.captain1 === data.captain2 ? isReady : (data.readyA_nextGame || false));
+          const isBReady = team === 'B' ? isReady : (data.captain1 === data.captain2 ? isReady : (data.readyB_nextGame || false));
+
+          if (isAReady && isBReady) {
+            updates.status = 'drafting';
+            updates.turn = 0;
+            updates.timerStart = serverTimestamp();
+            const currentTurn = data.turnOrder[0];
+            if (currentTurn) {
+              updates.phase = currentTurn.target === 'MAP' 
+                ? (currentTurn.action === 'BAN' ? 'map_ban' : 'map_pick') 
+                : (currentTurn.action === 'BAN' ? 'god_ban' : 'god_pick');
+            }
+            // Clear next game ready for the game after this one
+            updates.readyA_nextGame = false;
+            updates.readyB_nextGame = false;
+          }
         }
 
-        transaction.update(docRef, { ...updates, lastActivityAt: serverTimestamp() });
+        transaction.update(docRef, cleanData({ ...updates, lastActivityAt: serverTimestamp() }));
       });
 
       const finalSnap = await getDoc(docRef);
       if (finalSnap.exists() && !finalSnap.data().config.isPrivate) {
         await this.refreshLobbyIndex();
       }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
+    }
+  },
+
+  async forceStartDraft(id: string): Promise<void> {
+    try {
+      const docRef = doc(db, 'lobbies', id);
+      await runTransaction(db, async (transaction) => {
+        const docSnap = await transaction.get(docRef);
+        if (!docSnap.exists()) return;
+        const data = normalizeLobbyData(docSnap.data());
+        
+        const updates: any = {
+          status: 'drafting',
+          turn: 0,
+          timerStart: serverTimestamp(),
+          readyA: true,
+          readyB: true,
+          readyA_nextGame: false,
+          readyB_nextGame: false,
+          lastActivityAt: serverTimestamp()
+        };
+
+        const currentTurn = data.turnOrder[0];
+        if (currentTurn) {
+          updates.phase = currentTurn.target === 'MAP' 
+            ? (currentTurn.action === 'BAN' ? 'map_ban' : 'map_pick') 
+            : (currentTurn.action === 'BAN' ? 'god_ban' : 'god_pick');
+        }
+
+        transaction.update(docRef, cleanData(updates));
+      });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
     }
@@ -800,7 +923,7 @@ export const lobbyService = {
       const docSnap = await getDoc(docRef);
       if (!docSnap.exists()) return { success: false, error: "Lobby not found" };
       
-      const data = docSnap.data() as Lobby;
+      const data = normalizeLobbyData(docSnap.data());
       const updates = {
         captain1: guestId, captain1Name: `${nickname} (A)`,
         captain2: guestId, captain2Name: `${nickname} (B)`,

@@ -14,13 +14,25 @@ export function useTimer(
   const isProcessing = useRef(false);
   const lastTriggeredTurn = useRef<number | null>(null);
   const lastTriggerAt = useRef<number>(0);
+  const lastGameChangeAt = useRef<number>(0);
   const workerRef = useRef<Worker | null>(null);
   const lobbyRef = useRef(lobby);
 
   // Keep lobbyRef in sync for the interval without re-subscribing useEffect unnecessarily
   useEffect(() => {
+    if (lobby?.currentGame !== lobbyRef.current?.currentGame) {
+      lastGameChangeAt.current = Date.now();
+    }
     lobbyRef.current = lobby;
   }, [lobby]);
+
+  useEffect(() => {
+    // Reset internal timer state whenever the currentGame changes
+    // This prevents "leaking" timer artifacts or trigger states from previous games
+    lastTriggeredTurn.current = null;
+    isProcessing.current = false;
+    setTimeLeft(null);
+  }, [lobby?.currentGame]);
 
   // Helper to shuffle array for better randomness
   const shuffle = <T>(array: T[]): T[] => {
@@ -51,24 +63,56 @@ export function useTimer(
     // Retry logic: If we triggered for this turn but it failed (turn hasn't changed), 
     // allow retry after 5 seconds to prevent permanent stall.
     const nowMs = Date.now();
+
+    if (isProcessing.current) return;
+
+    // Retry logic: If we triggered for this turn but it failed (turn hasn't changed), 
+    // allow retry after 5 seconds to prevent permanent stall.
     if (lastTriggeredTurn.current === currentLobby.turn && (nowMs - lastTriggerAt.current) < 5000) {
       return;
     }
 
     let startTime: number;
-    if (typeof currentLobby.timerStart === 'string') {
-      startTime = new Date(currentLobby.timerStart).getTime();
-    } else if (currentLobby.timerStart && typeof (currentLobby.timerStart as any).toMillis === 'function') {
-      startTime = (currentLobby.timerStart as any).toMillis();
+    const ts = currentLobby.timerStart;
+    
+    if (ts && typeof (ts as any).toMillis === 'function') {
+      startTime = (ts as any).toMillis();
+    } else if (ts && typeof (ts as any).toDate === 'function') {
+      const d = (ts as any).toDate();
+      startTime = d ? d.getTime() : Date.now();
+    } else if (typeof ts === 'number') {
+      startTime = ts < 10000000000 ? ts * 1000 : ts;
+    } else if (typeof ts === 'string') {
+      startTime = new Date(ts).getTime();
     } else {
       startTime = Date.now();
     }
 
     const nowServer = getServerTime();
-    const elapsed = (nowServer - startTime) / 1000;
+    const elapsed = Math.max(0, (nowServer - startTime) / 1000);
     const duration = currentLobby.config.timerDuration || 60;
     const remaining = Math.max(0, duration - Math.floor(elapsed));
-    setTimeLeft(remaining);
+    
+    // Protection: if the calculated time is suspiciously large (e.g. > 1 hour),
+    // it likely indicates a clock sync issue or a corrupted timestamp.
+    if (remaining > 3600) {
+      setTimeLeft(null);
+    } else {
+      setTimeLeft(remaining);
+    }
+
+    if (isProcessing.current) return;
+
+    // Retry logic: If we triggered for this turn but it failed (turn hasn't changed), 
+    // allow retry after 5 seconds to prevent permanent stall.
+    if (lastTriggeredTurn.current === currentLobby.turn && (nowMs - lastTriggerAt.current) < 5000) {
+      return;
+    }
+
+    // Debounce: prevent actions immediately after game change
+    if ((nowMs - lastGameChangeAt.current) < 2000) {
+      return;
+    }
     
     if (elapsed >= duration) {
       isProcessing.current = true;
@@ -93,10 +137,13 @@ export function useTimer(
           return;
         }
 
-        const teamAGods = currentLobby.picks.filter(p => p.team === 'A' && p.godId).map(p => p.godId!);
-        const teamBGods = currentLobby.picks.filter(p => p.team === 'B' && p.godId).map(p => p.godId!);
-        const usedGodsA = currentLobby.history.map(h => h.picksA[0]).filter(Boolean);
-        const usedGodsB = currentLobby.history.map(h => h.picksB[0]).filter(Boolean);
+        const picks = Array.isArray(currentLobby.picks) ? currentLobby.picks : [];
+        const history = Array.isArray(currentLobby.history) ? currentLobby.history : [];
+
+        const teamAGods = picks.filter(p => p.team === 'A' && p.godId).map(p => p.godId!);
+        const teamBGods = picks.filter(p => p.team === 'B' && p.godId).map(p => p.godId!);
+        const usedGodsA = history.map(h => (h.picksA && h.picksA[0]) ? h.picksA[0] : null).filter(Boolean);
+        const usedGodsB = history.map(h => (h.picksB && h.picksB[0]) ? h.picksB[0] : null).filter(Boolean);
 
         const isCascaGroup = currentLobby.config.preset === 'CASCA' && currentLobby.config.tournamentStage === 'GROUP';
         
@@ -156,25 +203,37 @@ export function useTimer(
 
       let actionId = '';
       if (currentTurn.target === 'MAP') {
+        const allowedMaps = Array.isArray(currentLobby.config.allowedMaps) && currentLobby.config.allowedMaps.length > 0 
+          ? currentLobby.config.allowedMaps 
+          : MAPS.map(m => m.id);
+          
+        const mapBans = Array.isArray(currentLobby.mapBans) ? currentLobby.mapBans : [];
+        const seriesMaps = Array.isArray(currentLobby.seriesMaps) ? currentLobby.seriesMaps : [];
+        const mapPool = Array.isArray(currentLobby.mapPool) ? currentLobby.mapPool : [];
+
         const availableMaps = MAPS.filter(m => 
-          currentLobby.config.allowedMaps.includes(m.id) && 
-          !currentLobby.mapBans.includes(m.id) && 
-          !currentLobby.seriesMaps.includes(m.id)
+          allowedMaps.includes(m.id) && 
+          !mapBans.includes(m.id) && 
+          !seriesMaps.includes(m.id) &&
+          (currentLobby.config.preset !== 'CASCA' || currentLobby.config.tournamentStage !== 'PLAYOFFS' || currentLobby.currentGame <= 1 || mapPool.includes(m.id))
         );
         if (availableMaps.length > 0) {
           const shuffled = shuffle(availableMaps);
           actionId = shuffled[0].id;
         }
       } else if (currentTurn.target === 'GOD') {
+        const allowedPantheons = Array.isArray(currentLobby.config.allowedPantheons) ? currentLobby.config.allowedPantheons : [];
+        const bans = Array.isArray(currentLobby.bans) ? currentLobby.bans : [];
+        const picks = Array.isArray(currentLobby.picks) ? currentLobby.picks : [];
+
         const availableGods = MAJOR_GODS.filter(g => {
-          const isAllowed = !currentLobby.config.allowedPantheons || 
-                            currentLobby.config.allowedPantheons.length === 0 || 
-                            currentLobby.config.allowedPantheons.includes(g.id) ||
-                            currentLobby.config.allowedPantheons.includes(g.culture);
-          const isBanned = currentLobby.bans.includes(g.id);
-          const isPicked = currentLobby.picks.some(p => p.godId === g.id);
+          const isAllowed = allowedPantheons.length === 0 || 
+                            allowedPantheons.includes(g.id) ||
+                            allowedPantheons.includes(g.culture);
+          const isBanned = bans.includes(g.id);
+          const isPicked = picks.some(p => p.godId === g.id);
           const actingTeam = currentTurn.player === 'A' ? 'A' : (currentTurn.player === 'B' ? 'B' : (isCaptain1 ? 'A' : 'B'));
-          const isPickedByMyTeam = currentLobby.picks.some(p => p.team === actingTeam && p.godId === g.id);
+          const isPickedByMyTeam = picks.some(p => p.team === actingTeam && p.godId === g.id);
           
           if (!isAllowed || isBanned || isPickedByMyTeam) return false;
           if (currentLobby.config.isExclusive && isPicked) return false;

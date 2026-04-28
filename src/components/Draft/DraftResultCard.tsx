@@ -19,8 +19,12 @@ export function DraftResultCard({ lobby, t, cardRef }: DraftResultCardProps) {
   const isFinished = lobby.status === 'finished';
   const currentMap = MAPS.find(m => m.id === lobby.selectedMap);
   
+  const picks = Array.isArray(lobby.picks) ? lobby.picks : [];
+  const replayLog = Array.isArray(lobby.replayLog) ? lobby.replayLog : [];
+  const history = Array.isArray(lobby.history) ? lobby.history : [];
+
   // If finished, we show a wider card with all games
-  const gameRows = Math.ceil(lobby.history.length / 3);
+  const gameRows = Math.ceil(history.length / 3);
   const cardWidth = isFinished ? '1200px' : '800px';
   // Base height (header + score + footer) + rows of games
   // Increased base and row height to prevent cut-off
@@ -29,11 +33,11 @@ export function DraftResultCard({ lobby, t, cardRef }: DraftResultCardProps) {
     : '600px';
 
   // Extract bans from replayLog
-  const teamABans = lobby.replayLog.filter(step => step.action === 'BAN' && step.target === 'GOD' && step.player === 'A').map(step => step.id);
-  const teamBBans = lobby.replayLog.filter(step => step.action === 'BAN' && step.target === 'GOD' && step.player === 'B').map(step => step.id);
+  const teamABans = replayLog.filter(step => step.action === 'BAN' && step.target === 'GOD' && step.player === 'A').map(step => step.id);
+  const teamBBans = replayLog.filter(step => step.action === 'BAN' && step.target === 'GOD' && step.player === 'B').map(step => step.id);
   
-  const teamAMapBans = lobby.replayLog.filter(step => step.action === 'BAN' && step.target === 'MAP' && step.player === 'A').map(step => step.id);
-  const teamBMapBans = lobby.replayLog.filter(step => step.action === 'BAN' && step.target === 'MAP' && step.player === 'B').map(step => step.id);
+  const teamAMapBans = replayLog.filter(step => step.action === 'BAN' && step.target === 'MAP' && step.player === 'A').map(step => step.id);
+  const teamBMapBans = replayLog.filter(step => step.action === 'BAN' && step.target === 'MAP' && step.player === 'B').map(step => step.id);
 
   return (
     <div 
@@ -140,7 +144,7 @@ export function DraftResultCard({ lobby, t, cardRef }: DraftResultCardProps) {
 
           {/* Games Grid */}
           <div className="grid grid-cols-3 gap-6">
-            {lobby.history.map((game, idx) => {
+            {history.map((game, idx) => {
               const map = MAPS.find(m => m.id === game.mapId);
               return (
                 <div key={idx} className="bg-slate-900/60 border border-slate-800 rounded-3xl overflow-hidden flex flex-col">
@@ -312,7 +316,7 @@ export function DraftResultCard({ lobby, t, cardRef }: DraftResultCardProps) {
             )}
             
             <div className="grid grid-cols-3 gap-3">
-              {lobby.picks.filter(p => p.team === 'A').map((pick, i) => {
+              {picks.filter(p => p.team === 'A').map((pick, i) => {
                 const god = MAJOR_GODS.find(g => g.id === pick.godId);
                 return (
                   <div key={i} className="flex flex-col gap-1">
@@ -394,7 +398,7 @@ export function DraftResultCard({ lobby, t, cardRef }: DraftResultCardProps) {
             )}
 
             <div className="grid grid-cols-3 gap-3">
-              {lobby.picks.filter(p => p.team === 'B').map((pick, i) => {
+              {picks.filter(p => p.team === 'B').map((pick, i) => {
                 const god = MAJOR_GODS.find(g => g.id === pick.godId);
                 return (
                   <div key={i} className="flex flex-col gap-1">

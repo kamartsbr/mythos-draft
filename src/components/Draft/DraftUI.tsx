@@ -6,6 +6,7 @@ import { useSoundNotifications } from '../../hooks/useSoundNotifications';
 import { soundService } from '../../services/soundService';
 import { Lobby } from '../../types';
 import { DraftHeader } from './DraftHeader';
+import { AdminBar } from './AdminBar';
 import { DraftBoard } from './DraftBoard';
 import { SpectatorPanel } from './SpectatorPanel';
 import { JoinLobbyModal } from '../Lobby/JoinLobbyModal';
@@ -47,10 +48,13 @@ interface DraftUIProps {
   showSpectatorModal: boolean;
   setShowSpectatorModal: (val: boolean) => void;
   isAdmin: boolean;
+  authenticateAdmin: (token: string) => boolean;
+  logoutAdmin: () => void;
   forceReset: () => void;
   resetCurrentGame: () => void;
   forceFinish: () => void;
   forceUnpause: () => void;
+  forceStartDraft: () => void;
   leaveSlot: () => void;
   playerNames: Record<number, string>;
   setPlayerNames: (val: any) => void;
@@ -69,7 +73,7 @@ interface DraftUIProps {
 }
 
 export function DraftUI(props: DraftUIProps) {
-  const { lobby, isCaptain1, isCaptain2, handleAction, handlePickerAction, t, setLobbyId, onHome, error, setError, getShareableUrl, updateRoster, clearSubs, requestReset, respondReset, showBugModal, setShowBugModal } = props;
+  const { lobby, isCaptain1, isCaptain2, handleAction, handlePickerAction, t, setLobbyId, onHome, error, setError, getShareableUrl, updateRoster, clearSubs, requestReset, respondReset, showBugModal, setShowBugModal, forceStartDraft } = props;
   const { timeLeft } = useTimer(lobby, isCaptain1, isCaptain2, handleAction, handlePickerAction);
   useSoundNotifications(lobby, timeLeft, isCaptain1, isCaptain2);
   
@@ -90,19 +94,74 @@ export function DraftUI(props: DraftUIProps) {
       // Logic for spectators during ongoing draft if needed
     }
   }, [lobby.status, lobby.phase, props.isSpectator]);
-  const prevPicksCount = useRef(lobby.picks.length);
-  const prevBansCount = useRef(lobby.bans.length);
+  const picks = Array.isArray(lobby.picks) ? lobby.picks : [];
+  const bans = Array.isArray(lobby.bans) ? lobby.bans : [];
+  const prevPicksCount = useRef(picks.length);
+  const prevBansCount = useRef(bans.length);
 
   useEffect(() => {
-    if (lobby.picks.length > prevPicksCount.current) {
+    if (picks.length > prevPicksCount.current) {
       soundService.play('pick');
     }
-    if (lobby.bans.length > prevBansCount.current) {
+    if (bans.length > prevBansCount.current) {
       soundService.play('ban');
     }
-    prevPicksCount.current = lobby.picks.length;
-    prevBansCount.current = lobby.bans.length;
-  }, [lobby.picks.length, lobby.bans.length]);
+    prevPicksCount.current = picks.length;
+    prevBansCount.current = bans.length;
+  }, [picks.length, bans.length]);
+
+  const seriesMapsList = useMemo(() => (Array.isArray(lobby.seriesMaps) ? lobby.seriesMaps : Object.values(lobby.seriesMaps || {})), [lobby.seriesMaps]);
+
+  const mapElements = useMemo(() => seriesMapsList.map((mapId, idx) => {
+    const map = MAPS.find(m => m.id === mapId);
+    const isCurrent = lobby.currentGame === idx + 1;
+    const history = Array.isArray(lobby.history) ? lobby.history : [];
+    const canView = history && history[idx];
+    const replayLog = Array.isArray(lobby.replayLog) ? lobby.replayLog : [];
+    const pickStep = replayLog.find(step => step.action === 'PICK' && step.target === 'MAP' && step.id === mapId && step.gameNumber === idx + 1);
+
+    return (
+      <motion.div 
+        key={idx}
+        initial={false}
+        animate={isCurrent ? { scale: 1.1 } : { scale: 1 }}
+        whileHover={canView ? { scale: 1.05 } : {}}
+        onClick={() => canView && setViewGameIndex(idx)}
+        role={canView ? "button" : "presentation"}
+        tabIndex={canView ? 0 : undefined}
+        aria-label={map ? t.mapNames?.[map.id] || map.name : `GAME ${idx + 1}`}
+        onKeyDown={(e) => {
+          if (canView && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            setViewGameIndex(idx);
+          }
+        }}
+        className={cn(
+          "relative w-56 aspect-video rounded-2xl overflow-hidden border-4 transition-all duration-500",
+          isCurrent ? "border-amber-500 shadow-[0_0_30px_rgba(245,158,11,0.3)] z-10" : 
+          canView ? "border-slate-800 opacity-80 cursor-pointer hover:border-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500" : "border-slate-800 opacity-40 grayscale"
+        )}
+      >
+        {map ? (
+          <img src={map.image} alt={map.name} loading="lazy" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+        ) : (
+          <div className="w-full h-full bg-slate-950 flex items-center justify-center">
+            <span className="text-xs font-black text-slate-700 uppercase tracking-widest">GAME {idx + 1}</span>
+          </div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent" />
+        <div className="absolute bottom-3 left-4">
+          <span className={cn(
+            "text-xs font-black uppercase tracking-widest flex items-center gap-1",
+            isCurrent ? "text-amber-500" : "text-slate-500"
+          )}>
+            {map ? (t.mapNames?.[map.id] || map.name) : `GAME ${idx + 1}`}
+            {pickStep?.isRandom && <Dices className="w-3 h-3 text-amber-500" />}
+          </span>
+        </div>
+      </motion.div>
+    );
+  }), [seriesMapsList, lobby.currentGame, lobby.history, lobby.replayLog, t.mapNames]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col overflow-hidden selection:bg-amber-500/30">
@@ -123,6 +182,21 @@ export function DraftUI(props: DraftUIProps) {
         setShowBugModal={setShowBugModal}
         nickname={props.nickname}
         setNickname={props.setNickname}
+        isAdmin={props.isAdmin}
+        authenticateAdmin={props.authenticateAdmin}
+        logoutAdmin={props.logoutAdmin}
+      />
+
+      <AdminBar 
+        isAdmin={props.isAdmin}
+        onResetGame={props.resetCurrentGame}
+        onResetSeries={props.forceReset}
+        onForceFinish={props.forceFinish}
+        onForceUnpause={props.forceUnpause}
+        onForceStart={props.forceStartDraft}
+        t={t}
+        status={lobby.status}
+        phase={lobby.phase}
       />
 
       <main className="flex-1 flex flex-col pt-[68px] md:pt-0 overflow-y-auto md:overflow-hidden relative custom-scrollbar">
@@ -167,54 +241,7 @@ export function DraftUI(props: DraftUIProps) {
         {(lobby.config.preset === 'MCL' || (lobby.status !== 'finished' && lobby.config.teamSize !== 1)) && (
           <div className="bg-slate-900/30 border-b border-slate-900 p-4 md:p-6 z-30 overflow-x-auto custom-scrollbar" aria-label="Series Maps">
             <div className="flex items-center justify-start md:justify-center gap-4 md:gap-8 min-w-max px-4">
-              {useMemo(() => lobby.seriesMaps.map((mapId, idx) => {
-                const map = MAPS.find(m => m.id === mapId);
-                const isCurrent = lobby.currentGame === idx + 1;
-                const canView = lobby.history && lobby.history[idx];
-                const pickStep = lobby.replayLog?.find(step => step.action === 'PICK' && step.target === 'MAP' && step.id === mapId && step.gameNumber === idx + 1);
-
-                return (
-                  <motion.div 
-                    key={idx}
-                    initial={false}
-                    animate={isCurrent ? { scale: 1.1 } : { scale: 1 }}
-                    whileHover={canView ? { scale: 1.05 } : {}}
-                    onClick={() => canView && setViewGameIndex(idx)}
-                    role={canView ? "button" : "presentation"}
-                    tabIndex={canView ? 0 : undefined}
-                    aria-label={map ? t.mapNames?.[map.id] || map.name : `GAME ${idx + 1}`}
-                    onKeyDown={(e) => {
-                      if (canView && (e.key === 'Enter' || e.key === ' ')) {
-                        e.preventDefault();
-                        setViewGameIndex(idx);
-                      }
-                    }}
-                    className={cn(
-                      "relative w-56 aspect-video rounded-2xl overflow-hidden border-4 transition-all duration-500",
-                      isCurrent ? "border-amber-500 shadow-[0_0_30px_rgba(245,158,11,0.3)] z-10" : 
-                      canView ? "border-slate-800 opacity-80 cursor-pointer hover:border-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500" : "border-slate-800 opacity-40 grayscale"
-                    )}
-                  >
-                    {map ? (
-                      <img src={map.image} alt={map.name} loading="lazy" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                    ) : (
-                      <div className="w-full h-full bg-slate-950 flex items-center justify-center">
-                        <span className="text-xs font-black text-slate-700 uppercase tracking-widest">GAME {idx + 1}</span>
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent" />
-                    <div className="absolute bottom-3 left-4">
-                      <span className={cn(
-                        "text-xs font-black uppercase tracking-widest flex items-center gap-1",
-                        isCurrent ? "text-amber-500" : "text-slate-500"
-                      )}>
-                        {map ? (t.mapNames?.[map.id] || map.name) : `GAME ${idx + 1}`}
-                        {pickStep?.isRandom && <Dices className="w-3 h-3 text-amber-500" />}
-                      </span>
-                    </div>
-                  </motion.div>
-                );
-              }), [lobby.seriesMaps, lobby.currentGame, lobby.history, lobby.replayLog, t.mapNames])}
+              {mapElements}
             </div>
           </div>
         )}

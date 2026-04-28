@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Sword, Loader2, AlertTriangle, Github, MessageSquare, Scroll, User, X } from 'lucide-react';
+import { Sword, Loader2, AlertTriangle, Github, MessageSquare, Scroll, User, X, Key, Shield } from 'lucide-react';
 import { useLobby } from './hooks/useLobby';
 import { useDraft } from './hooks/useDraft';
 import { useDraftConfig } from './hooks/useDraftConfig';
@@ -83,6 +83,8 @@ function AppContent() {
     isSpectator,
     setIsSpectator,
     isAdmin,
+    authenticateAdmin,
+    logoutAdmin,
     publicLobbies,
     error,
     setError,
@@ -96,6 +98,7 @@ function AppContent() {
     resetCurrentGame,
     forceFinish,
     forceUnpause,
+    forceStartDraft,
     isAuthReady
   } = useLobby(localStorage.getItem('mythos_nickname') || '');
 
@@ -186,7 +189,7 @@ function AppContent() {
   // Auto-join as spectator if should be spectator but not in list
   useEffect(() => {
     if (isAuthReady && lobbyId && lobby && isSpectator && !isCaptain1 && !isCaptain2 && guestId) {
-      const alreadyInList = lobby.spectators?.some(s => s.id === guestId);
+      const alreadyInList = (Array.isArray(lobby.spectators) ? lobby.spectators : Object.values(lobby.spectators || {})).some((s: any) => s.id === guestId);
       if (!alreadyInList) {
         join(lobbyId, 'SPECTATOR', 0, {}, nickname || 'Spectator');
       }
@@ -216,7 +219,7 @@ function AppContent() {
                       config.seriesType === 'BO9' ? 9 : 
                       (config.customGameCount || 1);
 
-    const initialSeriesMaps: string[] = new Array(gameCount).fill("");
+    const initialSeriesMaps: string[] = [];
 
     if (config.preset === 'MCL') {
       const mclPicks = getMCLPicks(1, initialSeriesMaps[0] || null, null);
@@ -281,6 +284,9 @@ function AppContent() {
       const roundMap = MCL_ROUND_MAPS[config.mclRound];
       if (roundMap && gameCount >= 3) {
         // Map 1 and 2 will be picked, Map 3 is pre-determined.
+        // Prevent sparse array issues by explicitly filling previous indices
+        initialSeriesMaps[0] = "";
+        initialSeriesMaps[1] = "";
         initialSeriesMaps[2] = roundMap;
       }
     }
@@ -378,6 +384,33 @@ function AppContent() {
           {/* Global Language Toggle - Show when not in a lobby or when auth is required */}
           {(!lobbyId || (authError === 'anonymous_disabled' && !guestId)) && (
             <div className="fixed top-4 right-4 z-[100] flex items-center gap-2">
+              {/* Discreet Admin Login Button */}
+              <button 
+                onClick={() => {
+                  if (isAdmin) {
+                     if (window.confirm('Do you want to exit Admin mode?')) {
+                        logoutAdmin();
+                     }
+                     return;
+                  }
+                  const pass = window.prompt('Admin password:');
+                  if (pass) {
+                     const ok = authenticateAdmin(pass);
+                     if (ok) alert('Admin mode enabled.');
+                     else alert('Incorrect password.');
+                  }
+                }}
+                className={cn(
+                  "p-2 rounded-xl backdrop-blur-md transition-all duration-300 h-10 flex items-center justify-center",
+                  isAdmin 
+                    ? "bg-amber-500/20 text-amber-400 border border-amber-500/50" 
+                    : "bg-slate-900/80 text-slate-500 hover:text-amber-500 border border-slate-800 hover:border-amber-500/50"
+                )}
+                title={isAdmin ? "Admin Active" : "Admin Login"}
+              >
+                {isAdmin ? <Shield className="w-4 h-4" /> : <Key className="w-4 h-4" />}
+              </button>
+
               {/* Nickname Display/Edit */}
               <div className="flex items-center gap-2 bg-slate-900/80 backdrop-blur-md border border-slate-800 px-3 py-1.5 rounded-xl h-10">
                 {isEditingNick ? (
@@ -663,7 +696,7 @@ function AppContent() {
                       onJoin={(id) => {
                         setLobbyId(id);
                         const targetLobby = publicLobbies.find(l => l.id === id);
-                        if (targetLobby && (targetLobby.captain1 === guestId || targetLobby.captain2 === guestId || targetLobby.spectators?.some(s => s.id === guestId))) {
+                        if (targetLobby && (targetLobby.captain1 === guestId || targetLobby.captain2 === guestId || (Array.isArray(targetLobby.spectators) ? targetLobby.spectators : Object.values(targetLobby.spectators || {})).some((s: any) => s.id === guestId))) {
                           setShowJoinModal(false);
                         } else {
                           setShowJoinModal(true);
@@ -751,10 +784,13 @@ function AppContent() {
               isCaptain1={isCaptain1} 
               isCaptain2={isCaptain2} 
               isAdmin={isAdmin}
+              authenticateAdmin={authenticateAdmin}
+              logoutAdmin={logoutAdmin}
               forceReset={forceReset}
               resetCurrentGame={resetCurrentGame}
               forceFinish={forceFinish}
               forceUnpause={forceUnpause}
+              forceStartDraft={forceStartDraft}
               leaveSlot={leaveSlot}
               handleAction={handleAction}
               handlePickerAction={handlePickerAction}

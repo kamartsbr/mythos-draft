@@ -65,7 +65,8 @@ export function PickBanPanel({
     try {
       const isFinished = lobby.status === 'finished';
       const width = isFinished ? 1200 : 800;
-      const gameRows = Math.ceil(lobby.history.length / 3);
+      const history = Array.isArray(lobby.history) ? lobby.history : [];
+      const gameRows = Math.ceil(history.length / 3);
       const height = isFinished ? (500 + (gameRows * 350)) : 600;
 
       const dataUrl = await toPng(cardRef.current, {
@@ -105,11 +106,12 @@ export function PickBanPanel({
     if (lobby.phase !== 'god_pick') return undefined;
     
     const team = currentTurn?.player;
+    const picks = Array.isArray(lobby.picks) ? lobby.picks : [];
     if (team === 'A' || team === 'B') {
-      const nextPick = lobby.picks.find(p => p.team === team && p.godId === null);
+      const nextPick = picks.find(p => p.team === team && p.godId === null);
       return nextPick?.playerId;
     } else if (team === 'BOTH') {
-      const nextPick = lobby.picks.find(p => p.godId === null);
+      const nextPick = picks.find(p => p.godId === null);
       return nextPick?.playerId;
     }
     return undefined;
@@ -201,42 +203,216 @@ export function PickBanPanel({
 
   // If we are viewing a previous game, we show its results
   const isViewingHistory = viewGameIndex !== null;
-  const historyGame = isViewingHistory ? lobby.history[viewGameIndex!] : null;
+  const history = Array.isArray(lobby.history) ? lobby.history : [];
+  const historyGame = isViewingHistory ? history[viewGameIndex!] : null;
 
   const filteredGods = useMemo(() => {
+    const allowedPantheons = Array.isArray(lobby.config.allowedPantheons) ? lobby.config.allowedPantheons : [];
     return MAJOR_GODS.filter(god => {
       const matchesSearch = god.name.toLowerCase().includes(search.toLowerCase());
       const matchesPantheon = selectedPantheon === 'ALL' || god.culture === selectedPantheon;
-      const isAllowed = !lobby.config.allowedPantheons || 
-                        lobby.config.allowedPantheons.length === 0 || 
-                        lobby.config.allowedPantheons.includes(god.id);
+      const isAllowed = allowedPantheons.length === 0 || 
+                        allowedPantheons.includes(god.id);
       return matchesSearch && matchesPantheon && isAllowed;
     });
   }, [search, selectedPantheon, lobby.config.allowedPantheons]);
 
   const availableMaps = useMemo(() => {
     let maps = MAPS;
-    if (lobby.config.allowedMaps && lobby.config.allowedMaps.length > 0) {
-      maps = MAPS.filter(m => lobby.config.allowedMaps.includes(m.id));
+    const allowedMaps = Array.isArray(lobby.config.allowedMaps) ? lobby.config.allowedMaps : [];
+    if (allowedMaps.length > 0) {
+      maps = MAPS.filter(m => allowedMaps.includes(m.id));
     }
 
     // Special Case: Casca Grossa Playoffs restricted selection for subsequent games
-    if (lobby.config.preset === 'CASCA' && lobby.config.tournamentStage === 'PLAYOFFS' && lobby.currentGame > 1 && lobby.mapPool) {
-      maps = maps.filter(m => lobby.mapPool?.includes(m.id));
+    const mapPool = Array.isArray(lobby.mapPool) ? lobby.mapPool : [];
+    if (lobby.config.preset === 'CASCA' && lobby.config.tournamentStage === 'PLAYOFFS' && lobby.currentGame > 1 && mapPool.length > 0) {
+      maps = maps.filter(m => mapPool.includes(m.id));
     }
 
     return maps;
   }, [lobby.config.allowedMaps, lobby.config.preset, lobby.config.tournamentStage, lobby.currentGame, lobby.mapPool]);
 
-  const isGodBanned = (godId: string) => lobby.bans.includes(godId) || (optimisticAction?.type === 'ban' && optimisticAction.id === godId);
-  const isGodPicked = (godId: string) => lobby.picks.some(p => p.godId === godId) || (optimisticAction?.type === 'pick' && optimisticAction.id === godId);
+  const picks = Array.isArray(lobby.picks) ? lobby.picks : [];
+  const bans = Array.isArray(lobby.bans) ? lobby.bans : [];
+  const mapBans = Array.isArray(lobby.mapBans) ? lobby.mapBans : [];
+  const seriesMaps = Array.isArray(lobby.seriesMaps) ? lobby.seriesMaps : [];
+
+  const isGodBanned = (godId: string) => bans.includes(godId) || (optimisticAction?.type === 'ban' && optimisticAction.id === godId);
+  const isGodPicked = (godId: string) => picks.some(p => p.godId === godId) || (optimisticAction?.type === 'pick' && optimisticAction.id === godId);
   const isGodPickedByMyTeam = (godId: string) => {
     const myTeam = isCaptain1 ? 'A' : isCaptain2 ? 'B' : null;
     if (!myTeam) return false;
-    return lobby.picks.some(p => p.team === myTeam && p.godId === godId) || (optimisticAction?.type === 'pick' && optimisticAction.id === godId);
+    return picks.some(p => p.team === myTeam && p.godId === godId) || (optimisticAction?.type === 'pick' && optimisticAction.id === godId);
   };
-  const isMapBanned = (mapId: string) => lobby.mapBans.includes(mapId) || (optimisticAction?.type === 'map_ban' && optimisticAction.id === mapId);
-  const isMapPicked = (mapId: string) => lobby.seriesMaps.includes(mapId) || (optimisticAction?.type === 'map_pick' && optimisticAction.id === mapId);
+  const isMapBanned = (mapId: string) => mapBans.includes(mapId) || (optimisticAction?.type === 'map_ban' && optimisticAction.id === mapId);
+  const isMapPicked = (mapId: string) => seriesMaps.includes(mapId) || (optimisticAction?.type === 'map_pick' && optimisticAction.id === mapId);
+
+  const mapGridElements = useMemo(() => availableMaps.map(map => {
+    const isBanned = isMapBanned(map.id);
+    const isPicked = isMapPicked(map.id);
+    const isDisabled = isBanned || isPicked || !isMyTurn;
+
+    return (
+      <motion.button
+        key={map.id}
+        whileHover={!isDisabled ? { scale: 1.05, y: -4 } : {}}
+        whileTap={!isDisabled ? { scale: 0.95 } : {}}
+        onClick={() => !isDisabled && handleAction(map.id)}
+        disabled={isDisabled}
+        aria-label={t.mapNames?.[map.id] || map.name}
+        className={cn(
+          "relative aspect-video rounded-2xl overflow-hidden border-2 transition-all duration-300 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500",
+          isBanned ? "border-red-600 shadow-[0_0_15px_rgba(220,38,38,0.4)]" :
+          isPicked ? "border-green-500/50 opacity-40 grayscale" :
+          isMyTurn ? "border-slate-800 hover:border-amber-500 shadow-lg hover:shadow-amber-500/10" :
+          "border-slate-800 opacity-60 grayscale"
+        )}
+      >
+        <img 
+          src={map.image} 
+          alt={map.name}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          crossOrigin="anonymous"
+          className={cn(
+            "w-full h-full object-cover transition-transform duration-700 group-hover:scale-110",
+            isBanned && "grayscale saturate-[3] sepia-[0.2] hue-rotate-[-50deg] brightness-[0.7]"
+          )}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent" />
+        <div className="absolute bottom-0 left-0 right-0 p-3">
+          <span className="text-[10px] font-black text-white uppercase tracking-tight truncate block">
+            {t.mapNames?.[map.id] || map.name}
+          </span>
+        </div>
+        {isBanned && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-950/60 backdrop-blur-[1px] z-10">
+            <motion.div
+              initial={{ scale: 0, rotate: -45 }}
+              animate={{ scale: 1, rotate: 0 }}
+              className="relative"
+            >
+              <X className="w-16 h-16 text-red-500 drop-shadow-[0_0_20px_rgba(239,68,68,1)]" strokeWidth={4} />
+            </motion.div>
+            <motion.span 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-[12px] font-black text-red-500 uppercase tracking-[0.3em] mt-2 drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]"
+            >
+              {t.banned}
+            </motion.span>
+          </div>
+        )}
+        {isPicked && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-green-950/80 backdrop-blur-[2px] z-10">
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+            >
+              <Check className="w-16 h-16 text-green-500 drop-shadow-[0_0_15px_rgba(34,197,94,0.8)]" strokeWidth={3} />
+            </motion.div>
+            <motion.span 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-[10px] font-black text-green-500 uppercase tracking-[0.2em] mt-2 drop-shadow-md"
+            >
+              {t.picked}
+            </motion.span>
+          </div>
+        )}
+      </motion.button>
+    );
+  }), [availableMaps, isMyTurn, lobby.mapBans, lobby.seriesMaps, optimisticAction, t.mapNames, handleAction]);
+
+  const godGridElements = useMemo(() => filteredGods.map(god => {
+    const isBanned = isGodBanned(god.id);
+    const isPicked = isGodPicked(god.id);
+    const isPickedByMyTeam = isGodPickedByMyTeam(god.id);
+    const isDisabled = isBanned || (lobby.config.isExclusive && isPicked) || isPickedByMyTeam || !isMyTurn;
+
+    return (
+      <motion.button
+        key={god.id}
+        layoutId={`god-${god.id}`}
+        whileHover={!isDisabled ? { scale: 1.05, y: -1 } : {}}
+        whileTap={!isDisabled ? { scale: 0.95 } : {}}
+        onClick={() => {
+          if (isDisabled) return;
+          if (lobby.config.preset === 'MCL' && lobby.phase === 'god_pick') {
+            setSelectedGodId(prev => prev === god.id ? null : god.id);
+          } else {
+            handleAction(god.id);
+          }
+        }}
+        disabled={isDisabled}
+        aria-label={god.name}
+        className={cn(
+          "relative aspect-square rounded-xl overflow-hidden border transition-all duration-300 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500",
+          isBanned ? "border-red-600 shadow-[0_0_10px_rgba(220,38,38,0.4)]" :
+          (isPicked && lobby.config.isExclusive) || isPickedByMyTeam ? "border-blue-900/50 opacity-40 grayscale" :
+          selectedGodId === god.id ? "border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)] scale-105" :
+          isMyTurn ? "border-slate-800 hover:border-amber-500 shadow-lg hover:shadow-amber-500/10" :
+          "border-slate-800 opacity-60 grayscale"
+        )}
+      >
+        <img 
+          src={god.image} 
+          alt={god.name}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          crossOrigin="anonymous"
+          className={cn(
+            "w-full h-full object-cover transition-transform duration-700 group-hover:scale-110",
+            isBanned && "grayscale saturate-[3] sepia-[0.2] hue-rotate-[-50deg] brightness-[0.5]"
+          )}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent" />
+        <div className="absolute bottom-0 left-0 right-0 p-1">
+          <span className="text-[7px] font-black text-white uppercase tracking-tighter truncate block text-center">
+            {god.name}
+          </span>
+        </div>
+        
+        {/* Status Overlays */}
+        <AnimatePresence>
+          {isBanned && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 2 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-red-950/60 backdrop-blur-[1px]"
+            >
+              <motion.div
+                initial={{ rotate: -45, scale: 5 }}
+                animate={{ rotate: -12, scale: 1 }}
+                className="border border-red-500 px-1 py-0.5 rounded shadow-2xl"
+              >
+                <span className="text-[8px] font-black text-red-500 uppercase tracking-tighter italic">BANNED</span>
+              </motion.div>
+              <X className="w-8 h-8 text-red-500 absolute opacity-20" strokeWidth={3} />
+            </motion.div>
+          )}
+          
+          {((isPicked && lobby.config.isExclusive) || isPickedByMyTeam) && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 2 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-blue-950/60 backdrop-blur-[1px]"
+            >
+              <motion.div
+                initial={{ rotate: 12, scale: 5 }}
+                animate={{ rotate: 12, scale: 1 }}
+                className="border border-blue-500 px-1 py-0.5 rounded shadow-2xl"
+              >
+                <span className="text-[8px] font-black text-blue-500 uppercase tracking-tighter italic">PICKED</span>
+              </motion.div>
+              <Check className="w-8 h-8 text-blue-500 absolute opacity-20" strokeWidth={3} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.button>
+    );
+  }), [filteredGods, isMyTurn, lobby.bans, lobby.picks, lobby.config.isExclusive, lobby.config.preset, lobby.phase, selectedGodId, optimisticAction, handleAction]);
 
   if (isViewingHistory && historyGame) {
     const gameMap = MAPS.find(m => m.id === historyGame.mapId);
@@ -291,7 +467,8 @@ export function PickBanPanel({
   }
 
   if (lobby.phase === 'post_draft' && lobby.status === 'drafting') {
-    const gameMapId = lobby.seriesMaps[lobby.currentGame - 1];
+    const seriesMaps = Array.isArray(lobby.seriesMaps) ? lobby.seriesMaps : [];
+    const gameMapId = seriesMaps[lobby.currentGame - 1];
     const gameMap = MAPS.find(m => m.id === gameMapId);
 
     return (
@@ -408,7 +585,7 @@ export function PickBanPanel({
     );
   }
 
-  if (lobby.phase === 'map_ban' || lobby.phase === 'map_pick') {
+  if ((lobby.phase === 'map_ban' || lobby.phase === 'map_pick') && (!lobby.selectedMap || lobby.selectedMap === "")) {
     return (
       <div className="flex flex-col h-full p-8">
         <div className="mb-8 flex flex-col items-center gap-6">
@@ -433,30 +610,14 @@ export function PickBanPanel({
               )}
             >
               <Clock className={cn("w-6 h-6 md:w-8 md:h-8", timeLeft <= 5 ? "text-red-500 animate-pulse" : "text-amber-500")} />
-              <span className={cn("text-4xl md:text-6xl font-black tabular-nums tracking-tight", timeLeft <= 5 ? "text-red-500" : "text-white")}>
-                {timeLeft}
+              <span className={cn("text-4xl md:text-6xl font-black tabular-nums tracking-tight", (timeLeft || 0) <= 5 ? "text-red-500" : "text-white")}>
+                {timeLeft !== null ? timeLeft : '--'}
               </span>
             </motion.div>
           )}
 
           <div className="w-full flex items-center justify-between">
             <div className="flex items-center gap-4">
-              {isAdmin && (
-                <>
-                  <button 
-                    onClick={() => setShowResetGameConfirm(true)}
-                    className="px-4 py-2 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-500 hover:text-white transition-all shadow-lg shadow-amber-500/5"
-                  >
-                    Reset Current Game
-                  </button>
-                  <button 
-                    onClick={() => setShowFinishConfirm(true)}
-                    className="px-4 py-2 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-lg shadow-red-500/5 mr-4"
-                  >
-                    {t.forceFinish || "Forçar Fim"}
-                  </button>
-                </>
-              )}
               {(isCaptain1 || isCaptain2) && (
                 <button 
                   onClick={() => setShowRequestResetConfirm(true)}
@@ -477,82 +638,7 @@ export function PickBanPanel({
         </div>
 
         <div className="grid grid-cols-3 md:grid-cols-4 gap-4 overflow-y-auto pr-2 custom-scrollbar max-w-5xl mx-auto w-full">
-          {useMemo(() => availableMaps.map(map => {
-            const isBanned = isMapBanned(map.id);
-            const isPicked = isMapPicked(map.id);
-            const isDisabled = isBanned || isPicked || !isMyTurn;
-
-            return (
-              <motion.button
-                key={map.id}
-                whileHover={!isDisabled ? { scale: 1.05, y: -4 } : {}}
-                whileTap={!isDisabled ? { scale: 0.95 } : {}}
-                onClick={() => !isDisabled && handleAction(map.id)}
-                disabled={isDisabled}
-                aria-label={t.mapNames?.[map.id] || map.name}
-                className={cn(
-                  "relative aspect-video rounded-2xl overflow-hidden border-2 transition-all duration-300 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500",
-                  isBanned ? "border-red-600 shadow-[0_0_15px_rgba(220,38,38,0.4)]" :
-                  isPicked ? "border-green-500/50 opacity-40 grayscale" :
-                  isMyTurn ? "border-slate-800 hover:border-amber-500 shadow-lg hover:shadow-amber-500/10" :
-                  "border-slate-800 opacity-60 grayscale"
-                )}
-              >
-                <img 
-                  src={map.image} 
-                  alt={map.name}
-                  loading="lazy"
-                  referrerPolicy="no-referrer"
-                  crossOrigin="anonymous"
-                  className={cn(
-                    "w-full h-full object-cover transition-transform duration-700 group-hover:scale-110",
-                    isBanned && "grayscale saturate-[3] sepia-[0.2] hue-rotate-[-50deg] brightness-[0.7]"
-                  )}
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent" />
-                <div className="absolute bottom-0 left-0 right-0 p-3">
-                  <span className="text-[10px] font-black text-white uppercase tracking-tight truncate block">
-                    {t.mapNames?.[map.id] || map.name}
-                  </span>
-                </div>
-                {isBanned && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-950/60 backdrop-blur-[1px] z-10">
-                    <motion.div
-                      initial={{ scale: 0, rotate: -45 }}
-                      animate={{ scale: 1, rotate: 0 }}
-                      className="relative"
-                    >
-                      <X className="w-16 h-16 text-red-500 drop-shadow-[0_0_20px_rgba(239,68,68,1)]" strokeWidth={4} />
-                    </motion.div>
-                    <motion.span 
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="text-[12px] font-black text-red-500 uppercase tracking-[0.3em] mt-2 drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]"
-                    >
-                      {t.banned}
-                    </motion.span>
-                  </div>
-                )}
-                {isPicked && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-green-950/80 backdrop-blur-[2px] z-10">
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                    >
-                      <Check className="w-16 h-16 text-green-500 drop-shadow-[0_0_15px_rgba(34,197,94,0.8)]" strokeWidth={3} />
-                    </motion.div>
-                    <motion.span 
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="text-[10px] font-black text-green-500 uppercase tracking-[0.2em] mt-2 drop-shadow-md"
-                    >
-                      {t.picked}
-                    </motion.span>
-                  </div>
-                )}
-              </motion.button>
-            );
-          }), [availableMaps, isMyTurn, lobby.mapBans, lobby.seriesMaps, optimisticAction, t.mapNames, handleAction])}
+          {mapGridElements}
         </div>
         
         {modalsPortal}
@@ -615,22 +701,6 @@ export function PickBanPanel({
           />
         </div>
         
-        {isAdmin && (
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={() => setShowResetGameConfirm(true)}
-              className="px-6 py-2 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-amber-500 hover:text-white transition-all shadow-lg shadow-amber-500/5"
-            >
-              Reset Current Game
-            </button>
-            <button 
-              onClick={() => setShowFinishConfirm(true)}
-              className="px-6 py-2 bg-red-500/10 border border-red-500/20 text-red-500 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-lg shadow-red-500/5"
-            >
-              {t.forceFinish || "Forçar Fim"}
-            </button>
-          </div>
-        )}
         {(isCaptain1 || isCaptain2) && (
           <button 
             onClick={() => setShowRequestResetConfirm(true)}
@@ -725,94 +795,7 @@ export function PickBanPanel({
       {/* Gods Grid */}
       <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
         <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-1.5 pb-2">
-          {useMemo(() => filteredGods.map(god => {
-            const isBanned = isGodBanned(god.id);
-            const isPicked = isGodPicked(god.id);
-            const isPickedByMyTeam = isGodPickedByMyTeam(god.id);
-            const isDisabled = isBanned || (lobby.config.isExclusive && isPicked) || isPickedByMyTeam || !isMyTurn;
-
-            return (
-              <motion.button
-                key={god.id}
-                layoutId={`god-${god.id}`}
-                whileHover={!isDisabled ? { scale: 1.05, y: -1 } : {}}
-                whileTap={!isDisabled ? { scale: 0.95 } : {}}
-                onClick={() => {
-                  if (isDisabled) return;
-                  if (lobby.config.preset === 'MCL' && lobby.phase === 'god_pick') {
-                    setSelectedGodId(prev => prev === god.id ? null : god.id);
-                  } else {
-                    handleAction(god.id);
-                  }
-                }}
-                disabled={isDisabled}
-                aria-label={god.name}
-                className={cn(
-                  "relative aspect-square rounded-xl overflow-hidden border transition-all duration-300 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500",
-                  isBanned ? "border-red-600 shadow-[0_0_10px_rgba(220,38,38,0.4)]" :
-                  (isPicked && lobby.config.isExclusive) || isPickedByMyTeam ? "border-blue-900/50 opacity-40 grayscale" :
-                  selectedGodId === god.id ? "border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)] scale-105" :
-                  isMyTurn ? "border-slate-800 hover:border-amber-500 shadow-lg hover:shadow-amber-500/10" :
-                  "border-slate-800 opacity-60 grayscale"
-                )}
-              >
-                <img 
-                  src={god.image} 
-                  alt={god.name}
-                  loading="lazy"
-                  referrerPolicy="no-referrer"
-                  crossOrigin="anonymous"
-                  className={cn(
-                    "w-full h-full object-cover transition-transform duration-700 group-hover:scale-110",
-                    isBanned && "grayscale saturate-[3] sepia-[0.2] hue-rotate-[-50deg] brightness-[0.5]"
-                  )}
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent" />
-                <div className="absolute bottom-0 left-0 right-0 p-1">
-                  <span className="text-[7px] font-black text-white uppercase tracking-tighter truncate block text-center">
-                    {god.name}
-                  </span>
-                </div>
-                
-                {/* Status Overlays */}
-                <AnimatePresence>
-                  {isBanned && (
-                    <motion.div 
-                      initial={{ opacity: 0, scale: 2 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-red-950/60 backdrop-blur-[1px]"
-                    >
-                      <motion.div
-                        initial={{ rotate: -45, scale: 5 }}
-                        animate={{ rotate: -12, scale: 1 }}
-                        className="border border-red-500 px-1 py-0.5 rounded shadow-2xl"
-                      >
-                        <span className="text-[8px] font-black text-red-500 uppercase tracking-tighter italic">BANNED</span>
-                      </motion.div>
-                      <X className="w-8 h-8 text-red-500 absolute opacity-20" strokeWidth={3} />
-                    </motion.div>
-                  )}
-                  
-                  {((isPicked && lobby.config.isExclusive) || isPickedByMyTeam) && (
-                    <motion.div 
-                      initial={{ opacity: 0, scale: 2 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-blue-950/60 backdrop-blur-[1px]"
-                    >
-                      <motion.div
-                        initial={{ rotate: 12, scale: 5 }}
-                        animate={{ rotate: 12, scale: 1 }}
-                        className="border border-blue-500 px-1 py-0.5 rounded shadow-2xl"
-                      >
-                        <span className="text-[8px] font-black text-blue-500 uppercase tracking-tighter italic">PICKED</span>
-                      </motion.div>
-                      <Check className="w-8 h-8 text-blue-500 absolute opacity-20" strokeWidth={3} />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.button>
-            );
-          }), [filteredGods, isMyTurn, lobby.bans, lobby.picks, lobby.config.isExclusive, lobby.config.preset, lobby.phase, selectedGodId, optimisticAction, handleAction])}
+          {godGridElements}
         </div>
       </div>
 

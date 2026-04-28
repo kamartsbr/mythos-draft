@@ -38,6 +38,7 @@ interface DraftBoardProps {
   resetCurrentGame: () => void;
   forceFinish: () => void;
   forceUnpause: () => void;
+  forceStartDraft: () => void;
   onShowReplay: () => void;
   updateRoster: (newPicks: PickEntry[], subs: Substitution[]) => void;
   clearSubs: () => void;
@@ -46,7 +47,18 @@ interface DraftBoardProps {
 }
 
 export function DraftBoard(props: DraftBoardProps) {
-  const { lobby, isCaptain1, isCaptain2, t, handleReady, isProcessing, optimisticReady, optimisticAction, reportScore, resetVotes, copyUrl, handlePickerAction, onHome, viewGameIndex, setViewGameIndex, error, setError, isAdmin, forceReset, resetCurrentGame, forceFinish, forceUnpause, updateRoster, clearSubs, requestReset, respondReset } = props;
+  const { lobby, isCaptain1, isCaptain2, t, handleReady, isProcessing, optimisticReady, optimisticAction, reportScore, resetVotes, copyUrl, handlePickerAction, onHome, viewGameIndex, setViewGameIndex, error, setError, isAdmin, forceReset, resetCurrentGame, forceFinish, forceUnpause, updateRoster, clearSubs, requestReset, respondReset, forceStartDraft } = props;
+  
+  // Safety check for mallformed lobby data
+  if (!lobby || !lobby.config) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8">
+        <Loader2 className="w-12 h-12 text-amber-500 animate-spin mb-4" />
+        <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Carregando dados do lobby...</p>
+      </div>
+    );
+  }
+
   const [confirmWinner, setConfirmWinner] = useState<'A' | 'B' | null>(null);
   const [conflictCountdown, setConflictCountdown] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
@@ -73,8 +85,9 @@ export function DraftBoard(props: DraftBoardProps) {
 
   useEffect(() => {
     if (lobby.config.preset === 'MCL' && !hasDismissedComboWarning) {
-      const teamAPicks = lobby.picks.filter(p => p.team === 'A').map(p => p.godId);
-      const teamBPicks = lobby.picks.filter(p => p.team === 'B').map(p => p.godId);
+      const picks = Array.isArray(lobby.picks) ? lobby.picks : [];
+      const teamAPicks = picks.filter(p => p.team === 'A').map(p => p.godId);
+      const teamBPicks = picks.filter(p => p.team === 'B').map(p => p.godId);
 
       const hasComboA = (teamAPicks.includes('ra') || teamAPicks.includes('set')) && teamAPicks.includes('demeter');
       const hasComboB = (teamBPicks.includes('ra') || teamBPicks.includes('set')) && teamBPicks.includes('demeter');
@@ -90,7 +103,8 @@ export function DraftBoard(props: DraftBoardProps) {
   }, [lobby.picks, lobby.config.preset, isCaptain1, isCaptain2, hasDismissedComboWarning]);
 
   useEffect(() => {
-    if (lobby.phase.startsWith('god_') && lobby.lastSubs && lobby.lastSubs.length > 0) {
+    const lastSubs = Array.isArray(lobby.lastSubs) ? lobby.lastSubs : [];
+    if (lobby.phase.startsWith('god_') && lastSubs.length > 0) {
       if (isAdmin || isCaptain1) { // Limit to one client avoiding duplicate DB writes
         const timer = setTimeout(() => {
           clearSubs();
@@ -98,7 +112,7 @@ export function DraftBoard(props: DraftBoardProps) {
         return () => clearTimeout(timer);
       }
     }
-  }, [lobby.phase, lobby.lastSubs?.length, isAdmin, isCaptain1, clearSubs]);
+  }, [lobby.phase, lobby.lastSubs, isAdmin, isCaptain1, clearSubs]);
 
   useEffect(() => {
     if (lobby.voteConflict && lobby.voteConflictCount < 2) {
@@ -878,14 +892,6 @@ export function DraftBoard(props: DraftBoardProps) {
                   <br />
                   {t.waitingForReturn}
                 </p>
-                {isAdmin && (
-                  <button
-                    onClick={forceUnpause}
-                    className="mt-4 px-6 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-[10px] uppercase tracking-widest transition-all shadow-xl shadow-amber-500/20"
-                  >
-                    ADMIN: FORCE UNPAUSE
-                  </button>
-                )}
               </div>
             </motion.div>
           )}
@@ -906,33 +912,6 @@ export function DraftBoard(props: DraftBoardProps) {
           optimisticAction={optimisticAction}
         />
       </div>
-
-      {/* Admin Tools */}
-      {isAdmin && (
-        <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-2">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setShowResetConfirm(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full font-bold text-xs shadow-xl border border-amber-500/50"
-          >
-            <RefreshCw className="w-4 h-4" />
-            ADMIN: RESET CURRENT GAME
-          </motion.button>
-        </div>
-      )}
-
-      <ConfirmModal 
-        isOpen={showResetConfirm}
-        onClose={() => setShowResetConfirm(false)}
-        onConfirm={() => {
-          resetCurrentGame();
-          setShowResetConfirm(false);
-        }}
-        title="Admin: Reset Current Game"
-        message="This will clear all picks and bans for the current game only, returning to the start of this game's draft phase. Series score and history will be preserved. Are you sure?"
-        confirmText="Reset Game"
-      />
 
       {/* Modals & Overlays */}
       <AnimatePresence>

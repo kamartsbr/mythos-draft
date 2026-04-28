@@ -138,8 +138,14 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
     );
   }
 
-  const teamAPicks = lobby.picks.filter(p => p.team === 'A');
-  const teamBPicks = lobby.picks.filter(p => p.team === 'B');
+  const picks = Array.isArray(lobby.picks) ? lobby.picks : [];
+  const seriesMaps = Array.isArray(lobby.seriesMaps) ? lobby.seriesMaps : [];
+  const history = Array.isArray(lobby.history) ? lobby.history : [];
+  const turnOrder = Array.isArray(lobby.turnOrder) ? lobby.turnOrder : [];
+  const spectators = Array.isArray(lobby.spectators) ? lobby.spectators : [];
+
+  const teamAPicks = picks.filter(p => p.team === 'A');
+  const teamBPicks = picks.filter(p => p.team === 'B');
 
   const is1v1 = lobby.config.teamSize === 1;
   const isGodPickerPhase = ['god_picker', 'revealing', 'post_draft', 'reporting'].includes(lobby.phase);
@@ -151,7 +157,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                            lobby.status === 'finished' ||
                            (lobby.phase === 'ready' && lobby.currentGame > 1 && displayGameIdx < lobby.currentGame - 1);
 
-  const historyGame = lobby.history[displayGameIdx];
+  const historyGame = history[displayGameIdx];
   const displayedGameWinner = historyGame?.winner;
 
   // For 1v1, if we are in a match phase, we only want to show the currently selected gods
@@ -171,16 +177,16 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
 
   const isMyTeamTurn = (team: 'A' | 'B') => {
     if (isViewingHistory) return false;
-    const turn = lobby.turnOrder[lobby.turn];
+    const turn = turnOrder[lobby.turn];
     if (!turn) return false;
     return turn.target === 'GOD' && (turn.player === team || turn.player === 'BOTH');
   };
 
   const currentlyPickingPlayerId = (team: 'A' | 'B') => {
-    const godPicksBeforeThisTurn = lobby.turnOrder
+    const godPicksBeforeThisTurn = turnOrder
       .filter((t, i) => i < lobby.turn && t.target === 'GOD' && (t.player === team || t.player === 'BOTH'))
       .length;
-    const originalTeamPicks = lobby.picks.filter(p => p.team === team);
+    const originalTeamPicks = picks.filter(p => p.team === team);
     return originalTeamPicks[godPicksBeforeThisTurn]?.playerId;
   };
 
@@ -301,7 +307,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                       <span className="text-[8px] text-slate-500 uppercase font-bold">Manual</span>
                     </div>
                     <button 
-                      onClick={() => setDisplayGameIdx(Math.min(lobby.seriesMaps.length - 1, displayGameIdx + 1))}
+                      onClick={() => setDisplayGameIdx(Math.min(seriesMaps.length - 1, displayGameIdx + 1))}
                       className="p-2 hover:text-cyan-400 transition-colors"
                     >
                       <ChevronRight className="w-5 h-5" />
@@ -801,7 +807,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
               exit={{ y: 100, opacity: 0 }}
               className="w-full flex justify-center gap-8 pb-12"
             >
-              {lobby.seriesMaps.map((mapId, idx) => {
+              {(Array.isArray(lobby.seriesMaps) ? lobby.seriesMaps : Object.values(lobby.seriesMaps || {})).map((mapId, idx) => {
                 const map = MAPS.find(m => m.id === mapId);
                 const isPlayed = idx < (manualMode ? displayGameIdx : lobby.currentGame - 1);
                 const isCurrent = idx === (manualMode ? displayGameIdx : lobby.currentGame - 1);

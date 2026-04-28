@@ -1,20 +1,42 @@
 <div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+<img width="1200" height="475" alt="Mythos Draft Banner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+
+# Mythos Draft: Age of Mythology Drafting Tool
+**A high-performance, secure, and accessible drafting platform for competitive Age of Mythology players.**
+
+[Live Demo](https://ai.studio/apps/0195b9ca-2f50-4fe1-a432-8f33bb22a396) | [AOM: Retold Community](#)
 </div>
 
-# Run and deploy your AI Studio app
+---
 
-This contains everything you need to run your app locally.
+## 🚀 The Project
+Mythos Draft is a real-time drafting tool designed for the competitive Age of Mythology scene. It allows captains to ban and pick gods and maps in a synchronized environment, providing a professional experience for tournaments and ranked practice.
 
-View your app in AI Studio: https://ai.studio/apps/0195b9ca-2f50-4fe1-a432-8f33bb22a396
+## 🛠️ Technical Highlights (The "Engineering" Bit)
+This project evolved from a basic prototype into a production-ready application through several architectural enhancements:
 
-## Run Locally
+* **Database Resilience:** Implemented advanced Firestore Security Rules to ensure data integrity, preventing unauthorized modifications through owner-based validation and immutable "Finished" states.
+* **Performance Optimization:** Optimized React rendering cycles using `useMemo` and `React.memo` to isolate heavy UI components (God Grids) from the real-time timer state, significantly reducing CPU overhead.
+* **Robust Data Normalization:** Developed a custom timestamp abstraction layer to handle inconsistent data types from Firestore, ensuring 100% uptime for cleanup services and timers.
+* **Accessibility (a11y):** Fully navigable via keyboard with ARIA labels support, making the competitive scene more inclusive.
+* **Real-time Sync:** Powered by Firebase with anonymous authentication for a seamless, zero-friction user experience.
 
-**Prerequisites:**  Node.js
+## 💻 Tech Stack
+* **Frontend:** React, TypeScript, Tailwind CSS
+* **Backend:** Firebase (Firestore, Auth, Hosting)
+* **AI:** Gemini 3 Flash (Logic Optimization & Architecture)
 
+## 📦 Run Locally
+**Prerequisites:** Node.js (v18+)
 
-1. Install dependencies:
+1. Clone the repository:
+   `git clone https://github.com/kamartsbr/MythosDraftv1.git`
+2. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
+3. Set your environment variables in `.env.local`:
+   `VITE_FIREBASE_API_KEY=your_key`
+4. Start the development server:
    `npm run dev`
+
+---
+<p align="center">Developed with focus on competitive integrity and clean code.</p>

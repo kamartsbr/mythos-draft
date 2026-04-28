@@ -477,7 +477,7 @@ export function PickBanPanel({
         </div>
 
         <div className="grid grid-cols-3 md:grid-cols-4 gap-4 overflow-y-auto pr-2 custom-scrollbar max-w-5xl mx-auto w-full">
-          {availableMaps.map(map => {
+          {useMemo(() => availableMaps.map(map => {
             const isBanned = isMapBanned(map.id);
             const isPicked = isMapPicked(map.id);
             const isDisabled = isBanned || isPicked || !isMyTurn;
@@ -489,8 +489,9 @@ export function PickBanPanel({
                 whileTap={!isDisabled ? { scale: 0.95 } : {}}
                 onClick={() => !isDisabled && handleAction(map.id)}
                 disabled={isDisabled}
+                aria-label={t.mapNames?.[map.id] || map.name}
                 className={cn(
-                  "relative aspect-video rounded-2xl overflow-hidden border-2 transition-all duration-300 group",
+                  "relative aspect-video rounded-2xl overflow-hidden border-2 transition-all duration-300 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500",
                   isBanned ? "border-red-600 shadow-[0_0_15px_rgba(220,38,38,0.4)]" :
                   isPicked ? "border-green-500/50 opacity-40 grayscale" :
                   isMyTurn ? "border-slate-800 hover:border-amber-500 shadow-lg hover:shadow-amber-500/10" :
@@ -500,6 +501,7 @@ export function PickBanPanel({
                 <img 
                   src={map.image} 
                   alt={map.name}
+                  loading="lazy"
                   referrerPolicy="no-referrer"
                   crossOrigin="anonymous"
                   className={cn(
@@ -550,7 +552,7 @@ export function PickBanPanel({
                 )}
               </motion.button>
             );
-          })}
+          }), [availableMaps, isMyTurn, lobby.mapBans, lobby.seriesMaps, optimisticAction, t.mapNames, handleAction])}
         </div>
         
         {modalsPortal}
@@ -723,7 +725,7 @@ export function PickBanPanel({
       {/* Gods Grid */}
       <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
         <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-1.5 pb-2">
-          {filteredGods.map(god => {
+          {useMemo(() => filteredGods.map(god => {
             const isBanned = isGodBanned(god.id);
             const isPicked = isGodPicked(god.id);
             const isPickedByMyTeam = isGodPickedByMyTeam(god.id);
@@ -744,8 +746,9 @@ export function PickBanPanel({
                   }
                 }}
                 disabled={isDisabled}
+                aria-label={god.name}
                 className={cn(
-                  "relative aspect-square rounded-xl overflow-hidden border transition-all duration-300 group",
+                  "relative aspect-square rounded-xl overflow-hidden border transition-all duration-300 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500",
                   isBanned ? "border-red-600 shadow-[0_0_10px_rgba(220,38,38,0.4)]" :
                   (isPicked && lobby.config.isExclusive) || isPickedByMyTeam ? "border-blue-900/50 opacity-40 grayscale" :
                   selectedGodId === god.id ? "border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)] scale-105" :
@@ -756,6 +759,7 @@ export function PickBanPanel({
                 <img 
                   src={god.image} 
                   alt={god.name}
+                  loading="lazy"
                   referrerPolicy="no-referrer"
                   crossOrigin="anonymous"
                   className={cn(
@@ -808,7 +812,7 @@ export function PickBanPanel({
                 </AnimatePresence>
               </motion.button>
             );
-          })}
+          }), [filteredGods, isMyTurn, lobby.bans, lobby.picks, lobby.config.isExclusive, lobby.config.preset, lobby.phase, selectedGodId, optimisticAction, handleAction])}
         </div>
       </div>
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Dices } from 'lucide-react';
 import { useTimer } from '../../hooks/useTimer';
@@ -165,9 +165,9 @@ export function DraftUI(props: DraftUIProps) {
 
         {/* Series Maps Bar - Always Visible */}
         {(lobby.config.preset === 'MCL' || (lobby.status !== 'finished' && lobby.config.teamSize !== 1)) && (
-          <div className="bg-slate-900/30 border-b border-slate-900 p-4 md:p-6 z-30 overflow-x-auto custom-scrollbar">
+          <div className="bg-slate-900/30 border-b border-slate-900 p-4 md:p-6 z-30 overflow-x-auto custom-scrollbar" aria-label="Series Maps">
             <div className="flex items-center justify-start md:justify-center gap-4 md:gap-8 min-w-max px-4">
-              {lobby.seriesMaps.map((mapId, idx) => {
+              {useMemo(() => lobby.seriesMaps.map((mapId, idx) => {
                 const map = MAPS.find(m => m.id === mapId);
                 const isCurrent = lobby.currentGame === idx + 1;
                 const canView = lobby.history && lobby.history[idx];
@@ -180,14 +180,23 @@ export function DraftUI(props: DraftUIProps) {
                     animate={isCurrent ? { scale: 1.1 } : { scale: 1 }}
                     whileHover={canView ? { scale: 1.05 } : {}}
                     onClick={() => canView && setViewGameIndex(idx)}
+                    role={canView ? "button" : "presentation"}
+                    tabIndex={canView ? 0 : undefined}
+                    aria-label={map ? t.mapNames?.[map.id] || map.name : `GAME ${idx + 1}`}
+                    onKeyDown={(e) => {
+                      if (canView && (e.key === 'Enter' || e.key === ' ')) {
+                        e.preventDefault();
+                        setViewGameIndex(idx);
+                      }
+                    }}
                     className={cn(
                       "relative w-56 aspect-video rounded-2xl overflow-hidden border-4 transition-all duration-500",
                       isCurrent ? "border-amber-500 shadow-[0_0_30px_rgba(245,158,11,0.3)] z-10" : 
-                      canView ? "border-slate-800 opacity-80 cursor-pointer hover:border-slate-600" : "border-slate-800 opacity-40 grayscale"
+                      canView ? "border-slate-800 opacity-80 cursor-pointer hover:border-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500" : "border-slate-800 opacity-40 grayscale"
                     )}
                   >
                     {map ? (
-                      <img src={map.image} alt={map.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      <img src={map.image} alt={map.name} loading="lazy" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                     ) : (
                       <div className="w-full h-full bg-slate-950 flex items-center justify-center">
                         <span className="text-xs font-black text-slate-700 uppercase tracking-widest">GAME {idx + 1}</span>
@@ -205,7 +214,7 @@ export function DraftUI(props: DraftUIProps) {
                     </div>
                   </motion.div>
                 );
-              })}
+              }), [lobby.seriesMaps, lobby.currentGame, lobby.history, lobby.replayLog, t.mapNames])}
             </div>
           </div>
         )}

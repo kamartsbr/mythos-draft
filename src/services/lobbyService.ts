@@ -24,7 +24,6 @@ import { PLAYER_COLORS, MCL_ROUND_MAPS } from '../constants';
 
 export const generateId = () => Math.random().toString(36).substring(2, 9);
 
-// ADICIONE ISSO AQUI:
 const cleanData = (obj: any) => {
   const newObj = { ...obj };
   Object.keys(newObj).forEach(key => {
@@ -36,16 +35,64 @@ const cleanData = (obj: any) => {
   });
   return newObj;
 };
+
 export const lobbyService = {
   async createLobby(id: string, lobby: Lobby): Promise<void> {
     try {
       await setDoc(doc(db, 'lobbies', id), cleanData(lobby));
-      // Trigger index refresh on creation if public
       if (!lobby.config.isPrivate) {
-        this.refreshLobbyIndex();
+        await this.refreshLobbyIndex();
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `lobbies/${id}`);
+    }
+  },
+
+  async refreshLobbyIndex(): Promise<void> {
+    try {
+      console.log("[Lobby Index] Atualizando índice...");
+      // We use 'lastActivityAt' instead of 'createdAt' for ordering. 
+      // This is crucial because Firestore's query engine automatically excludes any documents 
+      // from the result set if they are missing the field specified in an 'orderBy' or 'where' clause. 
+      // By using a field that is consistently updated during the lifecycle of a draft, 
+      // we ensure older, but still relevant drafts are not dropped from the index queries.
+      const q = query(
+        collection(db, 'lobbies'),
+        orderBy('lastActivityAt', 'desc'),
+        limit(50)
+      );
+
+      const snap = await getDocs(q);
+      const summaries = snap.docs
+        .map(d => {
+          const data = d.data() as Lobby;
+          if (!data.config || data.config.isPrivate || data.isHidden === true) return null;
+
+          return {
+            id: d.id,
+            name: data.config.name || `${data.config.teamSize || 2}v${data.config.teamSize || 2} Draft`,
+            teamSize: data.config.teamSize || 2,
+            captain1Name: data.captain1Name || 'Captain 1',
+            captain2Name: data.captain2Name || 'Captain 2',
+            status: data.status || 'waiting',
+            phase: data.phase || 'waiting',
+            preset: data.config.preset ?? null,
+            lastActivityAt: data.lastActivityAt ?? null,
+            createdAt: data.createdAt ?? null
+          } as LobbySummary;
+        })
+        .filter((l): l is LobbySummary => l !== null)
+        .slice(0, 20); // Somente os 20 mais recentes que são públicos e não ocultos
+
+      await setDoc(doc(db, 'metadata', 'lobby_index'), cleanData({
+        activeLobbies: summaries,
+        lastUpdated: serverTimestamp(),
+        initialized: true
+      }), { merge: true });
+
+      console.log(`[Lobby Index] Índice atualizado com ${summaries.length} lobbies.`);
+    } catch (err) {
+      console.error("[Lobby Index] Erro ao atualizar índice:", err);
     }
   },
 
@@ -61,13 +108,13 @@ export const lobbyService = {
 
   async updateLobby(id: string, updates: Partial<Lobby>): Promise<void> {
     try {
-    await updateDoc(doc(db, 'lobbies', id), cleanData({
-      ...updates,
-    lastActivityAt: serverTimestamp()
-}));  
-      // If status or score changed, refresh index
+      await updateDoc(doc(db, 'lobbies', id), cleanData({
+        ...updates,
+        lastActivityAt: serverTimestamp()
+      }));
+      
       if (updates.status || updates.scoreA !== undefined || updates.scoreB !== undefined) {
-        this.refreshLobbyIndex();
+        await this.refreshLobbyIndex();
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
@@ -97,19 +144,21 @@ export const lobbyService = {
       const updates: Partial<Lobby> = {
         captain1Active: true,
         captain2Active: true,
-        isPaused: false
+        isPaused: false,
+        lastActivityAt: serverTimestamp()
       };
 
       if (data.timerStart && data.timerPausedAt) {
-        const pausedAt = (data.timerPausedAt as any).toDate().getTime();
-        const now = new Date().getTime();
+        const pausedAt = (data.timerPausedAt as any).toDate ? (data.timerPausedAt as any).toDate().getTime() : new Date(data.timerPausedAt as any).getTime();
+        const now = Date.now();
         const pausedDuration = now - pausedAt;
-        const oldStart = (data.timerStart as any).toDate().getTime();
+        const oldStart = (data.timerStart as any).toDate ? (data.timerStart as any).toDate().getTime() : new Date(data.timerStart as any).getTime();
+        
         updates.timerStart = Timestamp.fromMillis(oldStart + pausedDuration);
         updates.timerPausedAt = null;
       }
 
-      transaction.update(lobbyRef, updates);
+      transaction.update(lobbyRef, cleanData(updates));
     });
   },
 
@@ -123,9 +172,7 @@ export const lobbyService = {
         if (!docSnap.exists()) return;
         
         const data = docSnap.data() as Lobby;
-        const updates: any = {
-          lastActivityAt: serverTimestamp()
-        };
+        const updates: any = { lastActivityAt: serverTimestamp() };
         
         if (captain === 'A') updates.captain1Active = active;
         if (captain === 'B') updates.captain2Active = active;
@@ -135,37 +182,36 @@ export const lobbyService = {
         
         const timerPhases = ['drafting', 'map_ban', 'map_pick', 'god_ban', 'god_pick', 'god_picker'];
         const isTimerPhase = timerPhases.includes(data.phase);
-        
         const wasPaused = data.isPaused ?? false;
         const nowPaused = isTimerPhase && (!c1Active || !c2Active);
         
         updates.isPaused = nowPaused;
 
         if (!wasPaused && nowPaused && data.timerStart) {
-          // Pausing: calculate and store remaining time
           let startTime: number;
-          if (typeof data.timerStart === 'string') {
-            startTime = new Date(data.timerStart).getTime();
-          } else if (data.timerStart && typeof data.timerStart.toMillis === 'function') {
+          if (data.timerStart instanceof Timestamp) {
             startTime = data.timerStart.toMillis();
+          } else if (typeof (data.timerStart as any).toMillis === 'function') {
+            startTime = (data.timerStart as any).toMillis();
           } else {
-            startTime = Date.now();
+            startTime = new Date(data.timerStart as any).getTime();
           }
           
           const now = getServerTime();
           const elapsed = (now - startTime) / 1000;
           const duration = data.config.timerDuration || 60;
           updates.pausedTimeLeft = Math.max(0, duration - Math.floor(elapsed));
+          updates.timerPausedAt = serverTimestamp();
         } else if (wasPaused && !nowPaused && data.pausedTimeLeft !== undefined && data.pausedTimeLeft !== null) {
-          // Resuming: adjust timerStart based on stored remaining time
           const now = getServerTime();
           const duration = data.config.timerDuration || 60;
           const newStartTimeMillis = now - (duration - data.pausedTimeLeft) * 1000;
           updates.timerStart = Timestamp.fromMillis(newStartTimeMillis);
           updates.pausedTimeLeft = null;
+          updates.timerPausedAt = null;
         }
 
-        transaction.update(docRef, updates);
+        transaction.update(docRef, cleanData(updates));
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
@@ -192,6 +238,7 @@ export const lobbyService = {
         voteConflictCount: 0,
         reportStartAt: null,
         timerStart: null,
+        timerPausedAt: null,
         isPaused: false,
         scoreA: 0,
         scoreB: 0,
@@ -440,8 +487,14 @@ export const lobbyService = {
   async fallbackToDirectQuery(onUpdate: (lobbies: LobbySummary[]) => void): Promise<void> {
     try {
       console.log("[Lobby Index] Falling back to direct query on 'lobbies' collection...");
+      // We use 'lastActivityAt' instead of 'createdAt' for ordering. 
+      // This is crucial because Firestore's query engine automatically excludes any documents 
+      // from the result set if they are missing the field specified in an 'orderBy' or 'where' clause. 
+      // By using a field that is consistently updated during the lifecycle of a draft, 
+      // we ensure older, but still relevant drafts are not dropped from the index queries.
       const q = query(
         collection(db, 'lobbies'),
+        orderBy('lastActivityAt', 'desc'),
         limit(50)
       );
       const s = await getDocs(q);
@@ -454,7 +507,7 @@ export const lobbyService = {
             console.warn(`Lobby ${d.id} is missing config`, data);
             return null;
           }
-          if (data.config.isPrivate) return null;
+          if (data.config.isPrivate || data.isHidden === true) return null;
 
           const summary = {
             id: d.id,
@@ -480,7 +533,8 @@ export const lobbyService = {
 
           return summary;
         })
-        .filter((l): l is LobbySummary => l !== null);
+        .filter((l): l is LobbySummary => l !== null)
+        .slice(0, 20);
       
       onUpdate(summaries);
     } catch (err) {
@@ -497,7 +551,8 @@ export const lobbyService = {
       const twelveHours = 12 * 60 * 60 * 1000;
 
       if (metaSnap.exists()) {
-        const lastCleanup = metaSnap.data().lastCleanupAt?.toMillis() || 0;
+        const lastVal = metaSnap.data().lastCleanupAt;
+        const lastCleanup = lastVal?.toMillis?.() || lastVal?.toDate?.()?.getTime() || (lastVal ? new Date(lastVal).getTime() : 0);
         if (now - lastCleanup < twelveHours) return;
       }
 
@@ -654,7 +709,7 @@ export const lobbyService = {
     }
   },
 
-  async setReady(id: string, team: 'A' | 'B', isReadyArg: any, guestId: string, generateTurnOrder: any): Promise<void> {
+ async setReady(id: string, team: 'A' | 'B', isReadyArg: any, guestId: string, generateTurnOrder: any): Promise<void> {
     const docRef = doc(db, 'lobbies', id);
     const isReady = !!isReadyArg;
 
@@ -665,7 +720,6 @@ export const lobbyService = {
         
         const data = docSnap.data() as Lobby;
 
-        // Verify guestId matches the captain for the team
         if (team === 'A' && data.captain1 !== guestId) throw new Error("Not authorized for Team A");
         if (team === 'B' && data.captain2 !== guestId) throw new Error("Not authorized for Team B");
 
@@ -676,126 +730,39 @@ export const lobbyService = {
         if (isReadyWaitPhase) {
           if (team === 'A') {
             updates.readyA = isReady;
-            if (data.captain1 && data.captain2 && data.captain1 === data.captain2) updates.readyB = isReady;
-          }
-          if (team === 'B') {
+            if (data.captain1 === data.captain2) updates.readyB = isReady;
+          } else {
             updates.readyB = isReady;
-            if (data.captain1 && data.captain2 && data.captain1 === data.captain2) updates.readyA = isReady;
+            if (data.captain1 === data.captain2) updates.readyA = isReady;
           }
           
-          const isAReady = team === 'A' ? isReady : (data.captain1 && data.captain2 && data.captain1 === data.captain2 ? isReady : data.readyA);
-          const isBReady = team === 'B' ? isReady : (data.captain1 && data.captain2 && data.captain1 === data.captain2 ? isReady : data.readyB);
+          const isAReady = team === 'A' ? isReady : (data.captain1 === data.captain2 ? isReady : data.readyA);
+          const isBReady = team === 'B' ? isReady : (data.captain1 === data.captain2 ? isReady : data.readyB);
           
           if (isAReady && isBReady) {
             if (data.status === 'waiting' || (data.status === 'drafting' && data.phase === 'ready')) {
               updates.status = 'drafting';
               updates.turn = 0;
               updates.timerStart = serverTimestamp();
-              
               const currentTurn = data.turnOrder[0];
               if (currentTurn) {
-                if (currentTurn.target === 'MAP') {
-                  updates.phase = currentTurn.action === 'BAN' ? 'map_ban' : 'map_pick';
-                } else {
-                  updates.phase = currentTurn.action === 'BAN' ? 'god_ban' : 'god_pick';
-                }
+                updates.phase = currentTurn.target === 'MAP' 
+                  ? (currentTurn.action === 'BAN' ? 'map_ban' : 'map_pick') 
+                  : (currentTurn.action === 'BAN' ? 'god_ban' : 'god_pick');
               }
             } else if (data.phase === 'ready_picker') {
               updates.phase = 'god_picker';
               updates.timerStart = serverTimestamp();
             }
           }
-        } else {
-          // Phase is 'ready' or 'finished' (next game ready check)
-          if (team === 'A') {
-            updates.readyA_nextGame = isReady;
-            if (data.captain1 && data.captain2 && data.captain1 === data.captain2) updates.readyB_nextGame = isReady;
-          }
-          if (team === 'B') {
-            updates.readyB_nextGame = isReady;
-            if (data.captain1 && data.captain2 && data.captain1 === data.captain2) updates.readyA_nextGame = isReady;
-          }
-          
-          const isAReady = team === 'A' ? isReady : (data.captain1 && data.captain2 && data.captain1 === data.captain2 ? isReady : data.readyA_nextGame);
-          const isBReady = team === 'B' ? isReady : (data.captain1 && data.captain2 && data.captain1 === data.captain2 ? isReady : data.readyB_nextGame);
-          
-          if (isAReady && isBReady) {
-            const nextGameNumber = data.currentGame;
-            const { mapOrder, godOrder } = generateTurnOrder(data.config, nextGameNumber, data.lastWinner);
-            
-            let effectiveTurnOrder: any[] = [];
-            let selectedMap = data.seriesMaps[nextGameNumber - 1];
-            
-            if (selectedMap && selectedMap !== "") {
-              effectiveTurnOrder = [...godOrder];
-            } else {
-              if (data.config.loserPicksNextMap && data.lastWinner) {
-                const loser = data.lastWinner === 'A' ? 'B' : 'A';
-                effectiveTurnOrder = [{ player: loser, action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' }, ...godOrder];
-              } else {
-                effectiveTurnOrder = [...mapOrder, ...godOrder];
-              }
-            }
-
-            if (nextGameNumber > 1) {
-              let shouldInvert = true;
-              if (data.config.preset === 'MCL') {
-                // generateTurnOrder already handles the correct starting team for MCL
-                shouldInvert = false;
-              } else if (nextGameNumber === 3 && data.config.preset !== 'MCL') {
-                shouldInvert = true;
-              } else {
-                shouldInvert = true;
-              }
-              
-              if (shouldInvert) {
-                effectiveTurnOrder = effectiveTurnOrder.map(t => {
-                  if (t.target === 'GOD') {
-                    return { ...t, player: t.player === 'A' ? 'B' : t.player === 'B' ? 'A' : t.player };
-                  }
-                  return t;
-                });
-              }
-            }
-
-            // MCL Special Rule: Force Map Pick for Guest in Game 2
-            if (data.config.preset === 'MCL' && nextGameNumber === 2) {
-              effectiveTurnOrder = [
-                { player: 'B', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' },
-                ...effectiveTurnOrder.filter(t => t.target === 'GOD')
-              ];
-            }
-
-            updates.readyA_nextGame = false;
-            updates.readyB_nextGame = false;
-            updates.status = 'drafting';
-            updates.turn = 0;
-            updates.turnOrder = effectiveTurnOrder;
-            updates.timerStart = serverTimestamp();
-            updates.rosterChangedA = false;
-            updates.rosterChangedB = false;
-            
-            const currentTurn = effectiveTurnOrder[0];
-            if (currentTurn) {
-              if (currentTurn.target === 'MAP') {
-                updates.phase = currentTurn.action === 'BAN' ? 'map_ban' : 'map_pick';
-              } else {
-                updates.phase = currentTurn.action === 'BAN' ? 'god_ban' : 'god_pick';
-              }
-            }
-          }
         }
-        
+
         transaction.update(docRef, { ...updates, lastActivityAt: serverTimestamp() });
       });
 
-      // Refresh index if status/phase changed and it's public
       const finalSnap = await getDoc(docRef);
-      if (finalSnap.exists()) {
-        const finalData = finalSnap.data() as Lobby;
-        if (!finalData.config.isPrivate) {
-          this.refreshLobbyIndex();
-        }
+      if (finalSnap.exists() && !finalSnap.data().config.isPrivate) {
+        await this.refreshLobbyIndex();
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
@@ -804,14 +771,9 @@ export const lobbyService = {
 
   async leaveSlot(id: string, team: 'A' | 'B'): Promise<void> {
     try {
-      const updates: any = {};
-      if (team === 'A') {
-        updates.captain1 = null;
-        updates.captain1Active = false;
-      } else {
-        updates.captain2 = null;
-        updates.captain2Active = false;
-      }
+      const updates = team === 'A' 
+        ? { captain1: null, captain1Active: false } 
+        : { captain2: null, captain2Active: false };
       await updateDoc(doc(db, 'lobbies', id), cleanData(updates));
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
@@ -835,79 +797,34 @@ export const lobbyService = {
       if (!docSnap.exists()) return { success: false, error: "Lobby not found" };
       
       const data = docSnap.data() as Lobby;
-      const teamSize = data.config.teamSize;
-      
-      const updates: any = {
-        captain1: guestId,
-        captain1Name: `${nickname} (A)`,
-        captain1Pos: teamSize === 1 ? 5 : 5,
-        captain2: guestId,
-        captain2Name: `${nickname} (B)`,
-        captain2Pos: teamSize === 1 ? 6 : 6,
-        readyA: true,
-        readyB: true,
-        teamAPlayers: [],
-        teamBPlayers: [],
-        status: 'drafting',
-        turn: 0,
-        turnOrder: data.turnOrder,
+      const updates = {
+        captain1: guestId, captain1Name: `${nickname} (A)`,
+        captain2: guestId, captain2Name: `${nickname} (B)`,
+        readyA: true, readyB: true,
+        status: 'drafting', turn: 0,
         timerStart: serverTimestamp(),
-        phase: data.turnOrder[0].target === 'MAP' 
-          ? (data.turnOrder[0].action === 'BAN' ? 'map_ban' : 'map_pick')
-          : (data.turnOrder[0].action === 'BAN' ? 'god_ban' : 'god_pick')
+        lastActivityAt: serverTimestamp(),
+        phase: data.turnOrder[0]?.target === 'MAP' ? 'map_ban' : 'god_ban'
       };
 
-      // Fill player names for both teams
-      const playerNamesA: Record<number, string> = {};
-      const playerNamesB: Record<number, string> = {};
-      
-      if (teamSize === 1) {
-        playerNamesA[5] = `${nickname} (A)`;
-        playerNamesB[6] = `${nickname} (B)`;
-      } else {
-        const isMCL = data.config.preset === 'MCL';
-        const slotsA = isMCL ? [1, 4, 5] : [1, 5, 4];
-        const slotsB = isMCL ? [2, 3, 6] : [2, 6, 3];
-        
-        slotsA.forEach(id => playerNamesA[id] = `${nickname} (A)`);
-        slotsB.forEach(id => playerNamesB[id] = `${nickname} (B)`);
-      }
-
-      updates.teamAPlayers = Object.entries(playerNamesA).map(([id, name]) => ({ name, position: Number(id) }));
-      updates.teamBPlayers = Object.entries(playerNamesB).map(([id, name]) => ({ name, position: Number(id) }));
-
-      updates.picks = data.picks.map(p => {
-        if (p.team === 'A' && playerNamesA[p.playerId]) {
-          return { ...p, playerName: playerNamesA[p.playerId] };
-        }
-        if (p.team === 'B' && playerNamesB[p.playerId]) {
-          return { ...p, playerName: playerNamesB[p.playerId] };
-        }
-        return p;
-      });
-
       await updateDoc(docRef, cleanData(updates));
-      if (!data.config.isPrivate) this.refreshLobbyIndex();
+      if (!data.config.isPrivate) await this.refreshLobbyIndex();
       return { success: true };
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `lobbies/${lobbyId}`);
       return { success: false, error: "Failed to join solo" };
     }
   },
 
   subscribeToPresets(onUpdate: (presets: any[]) => void): Unsubscribe {
     const q = query(collection(db, 'presets'), orderBy('createdAt', 'desc'), limit(20));
-    return onSnapshot(q, (snap) => {
-      onUpdate(snap.docs.map(d => d.data()));
-    }, (error) => {
+    return onSnapshot(q, (snap) => onUpdate(snap.docs.map(d => d.data())), (error) => {
       handleFirestoreError(error, OperationType.LIST, 'presets');
     });
   },
 
   async sendChatMessage(lobbyId: string, message: Omit<ChatMessage, 'id' | 'timestamp'>): Promise<void> {
     try {
-      const messagesRef = collection(db, 'lobbies', lobbyId, 'messages');
-      await addDoc(messagesRef, cleanData({
+      await addDoc(collection(db, 'lobbies', lobbyId, 'messages'), cleanData({
         ...message,
         timestamp: serverTimestamp()
       }));
@@ -917,67 +834,9 @@ export const lobbyService = {
   },
 
   subscribeToMessages(lobbyId: string, onUpdate: (messages: ChatMessage[]) => void): Unsubscribe {
-    const messagesRef = collection(db, 'lobbies', lobbyId, 'messages');
-    const q = query(messagesRef, orderBy('timestamp', 'asc'), limit(100));
-
+    const q = query(collection(db, 'lobbies', lobbyId, 'messages'), orderBy('timestamp', 'asc'), limit(100));
     return onSnapshot(q, (snap) => {
-      const messages = snap.docs.map(d => ({ id: d.id, ...d.data() } as ChatMessage));
-      onUpdate(messages);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, `lobbies/${lobbyId}/messages`);
+      onUpdate(snap.docs.map(d => ({ id: d.id, ...d.data() } as ChatMessage)));
     });
-  },
-
-  async refreshLobbyIndex(): Promise<void> {
-    try {
-      const q = query(
-        collection(db, 'lobbies'),
-        orderBy('createdAt', 'desc'),
-        limit(50)
-      );
-      
-      const snap = await getDocs(q);
-      const publicLobbies = snap.docs.filter(d => {
-        const data = d.data() as Lobby;
-        return data.config && !data.config.isPrivate;
-      }).slice(0, 20);
-
-      console.log(`[Refresh Index] Found ${publicLobbies.length} public lobbies`);
-      const summaries: LobbySummary[] = publicLobbies.map(d => {
-        const data = d.data() as Lobby;
-        
-        const summary = {
-          id: d.id,
-          name: data.config.name || `${data.config.teamSize || 2}v${data.config.teamSize || 2} Draft`,
-          teamSize: data.config.teamSize || 2,
-          captain1Name: data.captain1Name || 'Captain 1',
-          captain2Name: data.captain2Name || 'Captain 2',
-          status: data.status || 'waiting',
-          phase: data.phase || 'waiting',
-          preset: data.config.preset ?? null,
-          mclRound: data.config.mclRound ?? null,
-          tournamentStage: data.config.tournamentStage ?? null,
-          lastActivityAt: data.lastActivityAt ?? null,
-          createdAt: data.createdAt ?? null
-        };
-        
-        // Remove strictly undefined fields
-        Object.keys(summary).forEach(key => {
-          if ((summary as any)[key] === undefined) {
-            delete (summary as any)[key];
-          }
-        });
-        
-        return summary as LobbySummary;
-      });
-
-      await setDoc(doc(db, 'metadata', 'lobby_index'), cleanData({
-        activeLobbies: summaries,
-        lastUpdate: serverTimestamp()
-      }), { merge: true });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'metadata/lobby_index');
-      console.error("Failed to refresh lobby index:", error);
-    }
   }
-};
+}; // FIM DO OBJETO lobbyService

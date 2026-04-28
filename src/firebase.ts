@@ -1,16 +1,21 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import firebaseConfig from '../firebase-applet-config.json';
 
+// Inicializa o App com as configurações do JSON
 const app = initializeApp(firebaseConfig);
 
-// Standard Firestore initialization
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+/**
+ * ATENÇÃO JOÃO ALEXANDRE: 
+ * Forçamos o ID "ai-studio-0195b9ca-2f50-4fe1-a432-8f33bb22a396" 
+ * pois o seu projeto não utiliza o banco de dados "(default)".
+ */
+export const db = getFirestore(app, "ai-studio-0195b9ca-2f50-4fe1-a432-8f33bb22a396");
 
 export const auth = getAuth(app);
 
-console.log("[Firebase] Initialized with Database ID:", firebaseConfig.firestoreDatabaseId || "(default)");
+console.log("[Firebase] Initialized with Database ID: ai-studio-0195b9ca-2f50-4fe1-a432-8f33bb22a396");
 console.log("[Firebase] Project ID:", firebaseConfig.projectId);
 
 export enum OperationType {
@@ -43,7 +48,7 @@ export interface FirestoreErrorInfo {
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
-    databaseId: (db as any)._databaseId?.database || '(default)',
+    databaseId: "ai-studio-0195b9ca-2f50-4fe1-a432-8f33bb22a396",
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -62,12 +67,11 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Test connection
+// Teste de conexão automático
 async function testConnection() {
   try {
-    const path = 'test/connection';
-    console.log("Testing Firestore connection to database:", firebaseConfig.firestoreDatabaseId || "(default)");
-    // Use getDocFromServer to bypass local cache and force a network round-trip
+    console.log("Testing Firestore connection to database: ai-studio-0195b9ca-2f50-4fe1-a432-8f33bb22a396");
+    // Tenta ler um documento de teste para validar o acesso
     const docRef = doc(db, 'test', 'connection');
     await getDocFromServer(docRef);
     console.log("Firestore connection test successful");
@@ -75,11 +79,12 @@ async function testConnection() {
     const errorDetails = error instanceof Error ? error.message : String(error);
     console.error("App-level connection test fail:", errorDetails);
     
+    // Se o erro for de permissão, o índice ou as regras podem estar erradas, mas o 404 deve sumir
     if (errorDetails.includes('Missing or insufficient permissions')) {
-      handleFirestoreError(error, OperationType.GET, 'test/connection');
+      console.warn("Check your Firestore Rules in the Firebase Console.");
     }
   }
 }
 
-// Small delay to ensure initialization is complete
-setTimeout(testConnection, 500);
+// Pequeno delay para garantir que o resto do app carregou
+setTimeout(testConnection, 1000);

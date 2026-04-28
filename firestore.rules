@@ -1,8 +1,55 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+    
+    // Globals
+    function isSignedIn() { return request.auth != null; }
+    
+    match /lobbies/{lobbyId} {
+      function isParticipantOrAdmin(res) {
+        return isSignedIn() && (
+          res.data.adminId == request.auth.uid ||
+          res.data.captain1 == request.auth.uid ||
+          res.data.captain2 == request.auth.uid
+        );
+      }
+      
+      allow read: if true;
+      allow create: if isSignedIn();
+      
+      // Update is allowed ONLY if the user is a participant OR admin.
+      // ESTRUTURA ANTI-UPDATE-GAP + IMUTABILIDADE:
+      // Se o draft já estava 'finished' antes da edição, rejeitamos qualquer nova alteração (imutável).
+      // Isso impede que um draft finalizado seja adulterado por trás.
+      allow update: if isParticipantOrAdmin(resource)
+                    && resource.data.status != 'finished'; 
+
+      allow delete: if isSignedIn() && resource.data.adminId == request.auth.uid;
+      
+      // Messages match
+      match /messages/{messageId} {
+        allow read: if true;
+        allow create: if isSignedIn();
+        allow update, delete: if isSignedIn() && resource.data.senderId == request.auth.uid;
+      }
+      
+      // Admin overrides (if necessary - checking if the requester has some admin privileges is out of scope unless implemented)
+    }
+
+    match /metadata/{docId} {
+      allow read: if true;
+      // Index is updated securely by the client (since this is currently the client-side architecture)
+      allow write: if isSignedIn();
+    }
+    
+    match /presets/{presetId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && resource.data.createdBy == request.auth.uid;
+    }
+    
+    match /test/connection {
+      allow read: if true;
     }
   }
 }

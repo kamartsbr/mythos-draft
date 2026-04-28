@@ -301,7 +301,7 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
                       {god ? (
                         <>
                           <img 
-                            src={god.image} 
+                            src={god.image || null} 
                             alt={god.name}
                             referrerPolicy="no-referrer"
                             className="w-full h-full object-cover"

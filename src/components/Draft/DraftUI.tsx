@@ -215,7 +215,7 @@ export function DraftUI(props: DraftUIProps) {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
-                      const url = `${window.location.origin}/streamer/${lobby.id}?view=obs&scale=0.75`;
+                      const url = `${window.location.origin}/streamer/${lobby.id}`;
                       window.open(url, '_blank');
                     }}
                     className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 border border-indigo-400/50 text-white text-[10px] font-black uppercase tracking-widest transition-all shadow-[0_0_15px_rgba(79,70,229,0.3)]"

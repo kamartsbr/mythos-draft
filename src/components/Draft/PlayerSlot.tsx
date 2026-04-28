@@ -60,7 +60,7 @@ export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, ho
           className="absolute inset-0 z-0"
         >
           <img 
-            src={god.image} 
+            src={god.image || null} 
             alt={god.name}
             referrerPolicy="no-referrer"
             className={cn("w-full h-full object-cover transition-all duration-700", isHovered ? "grayscale" : "grayscale-[0.6] group-hover:grayscale-0")}

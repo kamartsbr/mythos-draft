@@ -11,7 +11,7 @@ interface DraftResultCardProps {
 }
 
 const getProxyUrl = (url: string | undefined) => {
-  if (!url) return '';
+  if (!url) return null;
   return `https://images.weserv.nl/?url=${encodeURIComponent(url)}&default=${encodeURIComponent(url)}`;
 };
 

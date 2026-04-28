@@ -1,5 +1,6 @@
 <div align="center">
-<img width="1200" height="475" alt="Mythos Draft Banner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+  <img src="./public/mythosdraftmainpage.png" alt="Mythos Draft Banner" width="1200">
+</div>
 
 # Mythos Draft: Age of Mythology Drafting Tool
 **A high-performance, secure, and accessible drafting platform for competitive Age of Mythology players.**

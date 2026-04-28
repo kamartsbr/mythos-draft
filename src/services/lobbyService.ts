@@ -24,6 +24,17 @@ import { PLAYER_COLORS, MCL_ROUND_MAPS } from '../constants';
 
 export const generateId = () => Math.random().toString(36).substring(2, 9);
 
+const getMillis = (val: any): number => {
+  if (!val) return 0;
+  if (typeof val.toMillis === 'function') return val.toMillis();
+  if (typeof val.toDate === 'function') {
+    const d = val.toDate();
+    if (d && !isNaN(d.getTime())) return d.getTime();
+  }
+  const parsed = new Date(val).getTime();
+  return isNaN(parsed) ? 0 : parsed;
+};
+
 const cleanData = (obj: any) => {
   const newObj = { ...obj };
   Object.keys(newObj).forEach(key => {
@@ -149,10 +160,10 @@ export const lobbyService = {
       };
 
       if (data.timerStart && data.timerPausedAt) {
-        const pausedAt = (data.timerPausedAt as any).toDate ? (data.timerPausedAt as any).toDate().getTime() : new Date(data.timerPausedAt as any).getTime();
+        const pausedAt = getMillis(data.timerPausedAt);
         const now = Date.now();
         const pausedDuration = now - pausedAt;
-        const oldStart = (data.timerStart as any).toDate ? (data.timerStart as any).toDate().getTime() : new Date(data.timerStart as any).getTime();
+        const oldStart = getMillis(data.timerStart);
         
         updates.timerStart = Timestamp.fromMillis(oldStart + pausedDuration);
         updates.timerPausedAt = null;
@@ -188,14 +199,7 @@ export const lobbyService = {
         updates.isPaused = nowPaused;
 
         if (!wasPaused && nowPaused && data.timerStart) {
-          let startTime: number;
-          if (data.timerStart instanceof Timestamp) {
-            startTime = data.timerStart.toMillis();
-          } else if (typeof (data.timerStart as any).toMillis === 'function') {
-            startTime = (data.timerStart as any).toMillis();
-          } else {
-            startTime = new Date(data.timerStart as any).getTime();
-          }
+          let startTime = getMillis(data.timerStart);
           
           const now = getServerTime();
           const elapsed = (now - startTime) / 1000;
@@ -341,10 +345,10 @@ export const lobbyService = {
 
           // Resume timer logic
           if (data.isPaused && data.timerStart && data.timerPausedAt) {
-             const pausedAt = (data.timerPausedAt as any).toDate().getTime();
-             const now = new Date().getTime();
+             const pausedAt = getMillis(data.timerPausedAt);
+             const now = Date.now();
              const pausedDuration = now - pausedAt;
-             const oldStart = (data.timerStart as any).toDate().getTime();
+             const oldStart = getMillis(data.timerStart);
              updates.timerStart = Timestamp.fromMillis(oldStart + pausedDuration);
              updates.timerPausedAt = null;
              updates.isPaused = false;
@@ -552,7 +556,7 @@ export const lobbyService = {
 
       if (metaSnap.exists()) {
         const lastVal = metaSnap.data().lastCleanupAt;
-        const lastCleanup = lastVal?.toMillis?.() || lastVal?.toDate?.()?.getTime() || (lastVal ? new Date(lastVal).getTime() : 0);
+        const lastCleanup = getMillis(lastVal);
         if (now - lastCleanup < twelveHours) return;
       }
 

@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./public/mythosdraftmainpage.png" alt="Mythos Draft Banner" width="1200">
+  <img src="https://github.com/user-attachments/assets/c4fd48af-4ba1-4730-b0a3-57316450c520" alt="Mythos Draft Banner" width="1200">
 </div>
 
 # Mythos Draft: Age of Mythology Drafting Tool

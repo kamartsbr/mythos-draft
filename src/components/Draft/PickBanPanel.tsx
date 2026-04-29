@@ -131,12 +131,17 @@ export function PickBanPanel({
   }, [lobby.turn]);
 
   useEffect(() => {
-    if ((isCaptain1 || isCaptain2)) {
-      const team = isCaptain1 ? 'A' : 'B';
+    if ((isCaptain1 || isCaptain2) || IS_DEV) {
+      let team = 'A';
+      if (IS_DEV && currentTurn?.player === 'B') {
+        team = 'B';
+      } else if (isCaptain2 && !isCaptain1) {
+        team = 'B';
+      }
       const godId = isMyTurn ? selectedGodId : null;
-      lobbyService.setHoveredGod(lobby.id, team, godId);
+      lobbyService.setHoveredGod(lobby.id, team as 'A' | 'B', godId);
     }
-  }, [selectedGodId, isMyTurn, isCaptain1, isCaptain2, lobby.id]);
+  }, [selectedGodId, isMyTurn, isCaptain1, isCaptain2, lobby.id, IS_DEV, currentTurn?.player]);
 
   useEffect(() => {
     if (lobby.phase !== lastPhase && lobby.status === 'drafting') {
@@ -243,9 +248,9 @@ export function PickBanPanel({
   const isGodBanned = (godId: string) => bans.includes(godId) || (optimisticAction?.type === 'ban' && optimisticAction.id === godId);
   const isGodPicked = (godId: string) => picks.some(p => p.godId === godId) || (optimisticAction?.type === 'pick' && optimisticAction.id === godId);
   const isGodPickedByMyTeam = (godId: string) => {
-    const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
+    // using outer IS_DEV
     const currentTurn = lobby.turnOrder[lobby.turn];
-    const myTeam = IS_DEV ? (currentTurn?.player === 'B' ? 'B' : 'A') : (isCaptain1 ? 'A' : isCaptain2 ? 'B' : null);
+    const myTeam = (IS_DEV && currentTurn?.player !== 'BOTH') ? (currentTurn?.player === 'B' ? 'B' : 'A') : (isCaptain1 ? 'A' : isCaptain2 ? 'B' : null);
     if (!myTeam) return false;
     return picks.some(p => p.team === myTeam && p.godId === godId) || (optimisticAction?.type === 'pick' && optimisticAction.id === godId);
   };

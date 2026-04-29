@@ -459,9 +459,9 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
               const isCurrentPlayerTurn = isGodTurn && isTeamTurn && pick.playerId === nextPickForTeam?.playerId;
               
               // Hide name from enemy team until god is picked
-              const isMyTeam = (isCaptain1 && team === 'A') || (isCaptain2 && team === 'B');
+              const isMyTeamOverride = IS_DEV || (isCaptain1 && team === 'A') || (isCaptain2 && team === 'B');
               const hasGod = pick.godId !== null;
-              const shouldHideName = !isMyTeam && !hasGod && lobby.config.preset === 'MCL';
+              const shouldHideName = !isMyTeamOverride && !hasGod && lobby.config.preset === 'MCL';
               const hoveredGodId = team === 'A' ? lobby.hoveredGodIdA : lobby.hoveredGodIdB;
               
               return (

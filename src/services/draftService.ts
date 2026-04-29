@@ -127,7 +127,7 @@ export const draftService = {
     const currentTurn = freshLobby.turnOrder[freshLobby.turn];
     if (!currentTurn) return { success: false, error: "No turn found" };
 
-    const isMyTurn = IS_DEV || 
+    const isMyTurn = IS_DEV || (freshLobby.captain1 === freshLobby.captain2) || 
                      (isCaptain1 && currentTurn.player === 'A') || 
                      (isCaptain2 && currentTurn.player === 'B') ||
                      (currentTurn.player === 'BOTH');
@@ -438,6 +438,7 @@ export const draftService = {
           const { mapOrder, godOrder } = generateStandardTurnOrder(lobby.config, nextLobby.currentGame, finalWinner);
           nextLobby.turnOrder = [...mapOrder, ...godOrder];
           nextLobby.turn = 0;
+          nextLobby.selectedMap = null; // Clear map for next game's pick/pre-selection
           nextLobby.picks = nextLobby.picks.map(p => ({ ...p, godId: null }));
           nextLobby.bans = [];
           

@@ -430,7 +430,10 @@ export const lobbyService = {
         const timerPhases = ['drafting', 'map_ban', 'map_pick', 'god_ban', 'god_pick', 'god_picker'];
         const isTimerPhase = timerPhases.includes(data.phase);
         const wasPaused = data.isPaused ?? false;
-        const nowPaused = isTimerPhase && (!c1Active || !c2Active);
+        
+        // Admin Solo mode:captain1 === captain2. Don't auto-pause if captains are same (Solo Mode)
+        const isSoloAdmin = data.captain1 && data.captain2 && data.captain1 === data.captain2;
+        const nowPaused = isTimerPhase && !isSoloAdmin && (!c1Active || !c2Active);
         
         updates.isPaused = nowPaused;
 
@@ -462,6 +465,15 @@ export const lobbyService = {
     if (IS_DEV) {
       const lobby = getLocalLobby(id);
       if (lobby) {
+        let initialSeriesMaps: string[] = [];
+        if (lobby.config.preset === 'MCL' && lobby.config.mclRound) {
+          const { MCL_ROUND_MAPS } = await import('../constants');
+          const roundMap = MCL_ROUND_MAPS[lobby.config.mclRound];
+          if (roundMap) {
+            initialSeriesMaps = ["", "", roundMap];
+          }
+        }
+
         setLocalLobby(id, {
           ...lobby,
           status: 'waiting',
@@ -476,7 +488,12 @@ export const lobbyService = {
           currentGame: 1,
           history: [],
           replayLog: [],
-          seriesMaps: [],
+          seriesMaps: initialSeriesMaps,
+          selectedMap: null,
+          isPaused: false,
+          timerStart: null,
+          timerPausedAt: null,
+          resetRequest: null,
           lastActivityAt: Date.now() as any
         } as any);
       }
@@ -649,7 +666,33 @@ export const lobbyService = {
     if (IS_DEV) {
       const lobby = getLocalLobby(id);
       if (lobby) {
-        setLocalLobby(id, { ...lobby, status: 'drafting', phase: 'ready', turn: 0, picks: (lobby.picks || []).map(p => ({ ...p, godId: null })), lastActivityAt: Date.now() as any } as any);
+        // Clear MCL picks if needed
+        let newPicks = (lobby.picks || []).map(p => ({ ...p, godId: null }));
+        if (lobby.config.preset === 'MCL') {
+          // If we are resetting, we might need to preserve the skeleton
+        }
+
+        const newSeriesMaps = [...(lobby.seriesMaps || [])];
+        if (lobby.config.preset === 'MCL' && lobby.currentGame < 3) {
+           newSeriesMaps[lobby.currentGame - 1] = "";
+        }
+
+        setLocalLobby(id, { 
+          ...lobby, 
+          status: 'drafting', 
+          phase: 'ready', 
+          turn: 0, 
+          picks: newPicks,
+          bans: [],
+          mapBans: lobby.currentGame === 1 ? [] : lobby.mapBans,
+          seriesMaps: newSeriesMaps,
+          selectedMap: (lobby.config.preset === 'MCL' && lobby.currentGame === 3) ? (lobby.seriesMaps ? lobby.seriesMaps[2] : null) : null,
+          isPaused: false,
+          timerStart: Date.now() as any,
+          timerPausedAt: null,
+          resetRequest: null,
+          lastActivityAt: Date.now() as any 
+        } as any);
       }
       return;
     }
@@ -1138,17 +1181,25 @@ export const lobbyService = {
 
           // Ensure map is set if it's pre-determined for this game (e.g. MCL R3 maps)
           if (preSelectedMap) {
-            updates.selectedMap = preSelectedMap;
-            
-            // If the first turn is a map pick, and we already have a map, skip that turn
-            if (data.turnOrder?.[0]?.target === 'MAP' && data.turnOrder?.[0]?.action === 'PICK') {
-              startingTurn = 1;
+            // MCL Rule: Game 1 (Host Pick), Game 2 (Guest Pick), Game 3 (Auto Pick)
+            // If it's Game 2, we want to pick, NOT use a pre-determined map (unless it was somehow there already, but MCL G2 should be empty)
+            if (data.config.preset === 'MCL' && data.currentGame === 2) {
+                // Game 2 MCL: Captain 2 picks map. Do not skip turn 0.
+                startingTurn = 0;
+            } else if (preSelectedMap && preSelectedMap !== "") {
+              updates.selectedMap = preSelectedMap;
+              
+              // If the first turn is a map pick, and we already have a map, skip that turn
+              if (data.turnOrder?.[0]?.target === 'MAP' && data.turnOrder?.[0]?.action === 'PICK') {
+                startingTurn = 1;
+              }
             }
-
+            
             // If it's MCL, we must also initialize the picks based on the pre-determined map
-            if (data.config.preset === 'MCL') {
+            // Only if a map is actually selected!
+            if (data.config.preset === 'MCL' && (updates.selectedMap || (preSelectedMap && data.currentGame !== 2))) {
               const { getMCLPicks } = await import('../constants');
-              const newMCLPicks = getMCLPicks(data.currentGame, updates.selectedMap, data.lastWinner || null);
+              const newMCLPicks = getMCLPicks(data.currentGame, updates.selectedMap || preSelectedMap, data.lastWinner || null);
               
               // Map names/ids from the config roster if available
               updates.picks = newMCLPicks.map(p => {
@@ -1294,6 +1345,12 @@ export const lobbyService = {
           ] : [{ name: 'Bot B', position: 6 }])
         );
 
+        const updatedPicks = (lobby.picks || []).map(p => {
+          const teamPlayers = p.team === 'A' ? mockPlayersA : mockPlayersB;
+          const playerAtPos = teamPlayers.find(tp => tp.position === p.playerId);
+          return { ...p, playerName: playerAtPos?.name || '' };
+        });
+
         setLocalLobby(id, { 
             ...lobby, 
             status: 'drafting', 
@@ -1306,7 +1363,8 @@ export const lobbyService = {
             captain2: lobby.captain2 || 'dev-bot-b',
             captain2Name: lobby.captain2Name || 'Bot B',
             teamAPlayers: mockPlayersA,
-            teamBPlayers: mockPlayersB
+            teamBPlayers: mockPlayersB,
+            picks: updatedPicks
         } as any);
       }
       return;
@@ -1398,6 +1456,12 @@ export const lobbyService = {
           ] : [{ name: `${nickname} (B)`, position: 6 }])
         );
 
+        const updatedPicks = (lobby.picks || []).map(p => {
+          const teamPlayers = p.team === 'A' ? mockPlayersA : mockPlayersB;
+          const playerAtPos = teamPlayers.find(tp => tp.position === p.playerId);
+          return { ...p, playerName: playerAtPos?.name || '' };
+        });
+
         setLocalLobby(lobbyId, { 
           ...lobby, 
           captain1: guestId, 
@@ -1406,6 +1470,7 @@ export const lobbyService = {
           captain2Name: `${nickname} (B)`,
           teamAPlayers: mockPlayersA,
           teamBPlayers: mockPlayersB,
+          picks: updatedPicks,
           readyA: true,
           readyB: true,
           status: 'drafting', 

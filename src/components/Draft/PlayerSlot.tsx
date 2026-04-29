@@ -153,9 +153,9 @@ export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, ho
       </div>
 
       {/* Turn Progress Bar */}
-      {isCurrentTurn && timeLeft !== null && timerDuration != null && (
+      {isCurrentTurn && timeLeft !== null && !isNaN(timeLeft) && timerDuration != null && timerDuration > 0 && (
         <motion.div 
-          animate={{ width: `${(timeLeft / timerDuration) * 100}%` }}
+          animate={{ width: `${Math.max(0, Math.min(100, (timeLeft / timerDuration) * 100))}%` }}
           className="absolute bottom-0 left-0 h-0.5 bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]"
         />
       )}

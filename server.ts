@@ -3,8 +3,15 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { initializeApp } from 'firebase/app';
-// Adicionado doc, updateDoc e deleteField para limpar o index
-import { getFirestore, collection, getDocs, deleteDoc, doc, updateDoc, deleteField } from 'firebase/firestore';
+// Adicionado writeBatch para garantir que ou deleta tudo (doc + index) ou nada
+import { 
+  getFirestore, 
+  collection, 
+  getDocs, 
+  doc, 
+  deleteField, 
+  writeBatch 
+} from 'firebase/firestore';
 import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -25,6 +32,7 @@ async function startServer() {
     if (fs.existsSync(configPath)) {
       const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       const appFirebase = initializeApp(firebaseConfig);
+      // Recomendação: Usar a ID da config para evitar redundância
       db = getFirestore(appFirebase, firebaseConfig.firestoreDatabaseId);
       console.log('[Firebase] Initialized successfully with database:', firebaseConfig.firestoreDatabaseId);
     } else {
@@ -36,13 +44,14 @@ async function startServer() {
 
   async function performCleanup() {
     if (!db) return;
-    console.log('[Cleanup] Starting automatic cleanup...');
+    console.log('[Cleanup] Starting atomic cleanup...');
     const now = new Date();
+    const batch = writeBatch(db); // Inicializa o batch atômico
+    const indexRef = doc(db, 'metadata', 'lobby_index');
+    let deleteCount = 0;
     
     try {
       const lobbiesSnap = await getDocs(collection(db, 'lobbies'));
-      const deletePromises: Promise<void>[] = [];
-      const updateIndexData: Record<string, any> = {};
       
       lobbiesSnap.forEach((d) => {
         const lobby = d.data();
@@ -72,35 +81,36 @@ async function startServer() {
         }
 
         if (shouldDelete) {
-          // Deleta o documento do lobby
-          deletePromises.push(deleteDoc(d.ref));
-          // Prepara a remoção do ID no metadata/lobby_index
-          updateIndexData[d.id] = deleteField();
+          // 1. Agenda a deleção do documento do lobby no batch
+          batch.delete(d.ref);
+          // 2. Agenda a remoção do campo no indexador no mesmo batch
+          batch.update(indexRef, {
+            [d.id]: deleteField()
+          });
+          deleteCount++;
         }
       });
       
-      // 1. Executa as deleções dos documentos
-      await Promise.all(deletePromises);
-
-      // 2. Atualiza o indexador apenas se houver o que remover
-      if (Object.keys(updateIndexData).length > 0) {
-        const indexRef = doc(db, 'metadata', 'lobby_index');
-        await updateDoc(indexRef, updateIndexData);
+      // Executa todas as operações agendadas de uma vez só
+      if (deleteCount > 0) {
+        await batch.commit();
+        console.log(`[Cleanup] Finished. Atomically deleted: ${deleteCount} lobbies and updated index.`);
+      } else {
+        console.log('[Cleanup] No inactive lobbies found.');
       }
 
-      console.log(`[Cleanup] Finished. Deleted: ${deletePromises.length} lobbies and updated index.`);
     } catch (error) {
-      console.error('[Cleanup] Error during cleanup (Permissions or undefined data):', error);
+      // Agora o erro captura falhas em qualquer parte do processo atômico
+      console.error('[Cleanup] Error during atomic cleanup:', error);
     }
   }
 
   if (db) {
-    // Configurado para rodar a cada 12 horas (12h * 60min * 60s * 1000ms)
     const TWELVE_HOURS = 12 * 60 * 60 * 1000;
     setInterval(performCleanup, TWELVE_HOURS);
     
-    // Executa uma vez ao iniciar
-    performCleanup();
+    // Pequeno delay para garantir que o app está pronto
+    setTimeout(performCleanup, 5000);
   }
 
   // Configuração do Vite / Estáticos

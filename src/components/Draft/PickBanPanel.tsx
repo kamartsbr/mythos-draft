@@ -600,7 +600,7 @@ export function PickBanPanel({
             </p>
           </div>
 
-          {timeLeft !== null && (
+          {timeLeft !== null && !isNaN(timeLeft) && (
             <motion.div 
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -611,7 +611,7 @@ export function PickBanPanel({
             >
               <Clock className={cn("w-6 h-6 md:w-8 md:h-8", timeLeft <= 5 ? "text-red-500 animate-pulse" : "text-amber-500")} />
               <span className={cn("text-4xl md:text-6xl font-black tabular-nums tracking-tight", (timeLeft || 0) <= 5 ? "text-red-500" : "text-white")}>
-                {timeLeft !== null ? timeLeft : '--'}
+                {typeof timeLeft === 'number' && !isNaN(timeLeft) ? timeLeft : '--'}
               </span>
             </motion.div>
           )}

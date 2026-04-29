@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { Sword, Loader2, AlertTriangle, Github, MessageSquare, Scroll, User, X, Key, Shield } from 'lucide-react';
 import { useLobby } from './hooks/useLobby';
@@ -44,11 +44,11 @@ function AppContent() {
       try {
         const { signInAnonymously, onAuthStateChanged } = await import('firebase/auth');
         const { auth } = await import('./firebase');
-        const { syncServerTime } = await import('./lib/serverTime');
+        const { getServerTimeOffset } = await import('./lib/serverTime');
         
         onAuthStateChanged(auth, async (user) => {
           if (user) {
-            syncServerTime();
+            getServerTimeOffset();
             // Trigger a one-time index refresh for the current database if user is premium/admin or just once per session
             lobbyService.refreshLobbyIndex().catch(console.error);
           } else {
@@ -157,6 +157,22 @@ function AppContent() {
   const [isEditingNick, setIsEditingNick] = useState(false);
   const [isPermanent, setIsPermanent] = useState(false);
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState('');
+  
+  const [paginatedLobbies, setPaginatedLobbies] = useState<LobbySummary[]>([]);
+  const [hasMore, setHasMore] = useState(true);
+
+  useEffect(() => {
+     lobbyService.getLobbiesPaginated(true).then((lbs) => {
+        setPaginatedLobbies(lbs);
+        setHasMore(lbs.length >= 20);
+     });
+  }, []);
+
+  const loadMore = async () => {
+      const next = await lobbyService.getLobbiesPaginated(false);
+      setPaginatedLobbies(prev => [...prev, ...next]);
+      setHasMore(next.length >= 20);
+  };
 
   useEffect(() => {
     setTempNickname(nickname);
@@ -291,6 +307,7 @@ function AppContent() {
       }
     }
 
+    const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
     const newLobby: Lobby = {
       id,
       status: 'waiting',
@@ -322,7 +339,7 @@ function AppContent() {
       replayLog: [],
       lastWinner: null,
       timerStart: null,
-      createdAt: (await import('firebase/firestore')).serverTimestamp(),
+      createdAt: IS_DEV ? Date.now() : (await import('firebase/firestore')).serverTimestamp(),
       hiddenActions: [],
       spectators: [],
       adminId: guestId,
@@ -339,6 +356,12 @@ function AppContent() {
 
   useEffect(() => {
     const test = async () => {
+      const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
+      if (IS_DEV) {
+        setConnStatus('ok');
+        console.log("[MOCK] Connection test bypassed in Development Mode");
+        return;
+      }
       try {
         const { doc, getDocFromServer } = await import('firebase/firestore');
         const { db } = await import('./firebase');
@@ -690,12 +713,12 @@ function AppContent() {
 
                   <div className="lg:col-span-5 space-y-6">
                     <LobbyList 
-                      lobbies={publicLobbies}
+                      lobbies={paginatedLobbies}
                       t={t}
                       isAdmin={isAdmin}
                       onJoin={(id) => {
                         setLobbyId(id);
-                        const targetLobby = publicLobbies.find(l => l.id === id);
+                        const targetLobby = paginatedLobbies.find(l => l.id === id);
                         if (targetLobby && (targetLobby.captain1 === guestId || targetLobby.captain2 === guestId || (Array.isArray(targetLobby.spectators) ? targetLobby.spectators : Object.values(targetLobby.spectators || {})).some((s: any) => s.id === guestId))) {
                           setShowJoinModal(false);
                         } else {
@@ -703,6 +726,8 @@ function AppContent() {
                         }
                       }}
                       onClearAll={() => setShowClearConfirm(true)}
+                      onLoadMore={loadMore}
+                      hasMore={hasMore}
                     />
                   </div>
                 </div>

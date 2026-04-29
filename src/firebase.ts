@@ -87,4 +87,11 @@ async function testConnection() {
 }
 
 // Pequeno delay para garantir que o resto do app carregou
-setTimeout(testConnection, 1000);
+setTimeout(() => {
+  const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
+  if (IS_DEV) {
+    console.log("[MOCK] Bypassing firebase.ts connection test in Development Mode");
+    return;
+  }
+  testConnection();
+}, 1000);

@@ -88,14 +88,16 @@ export function useTimer(
       startTime = Date.now();
     }
 
-    const nowServer = getServerTime();
+    const nowServer = await getServerTime();
     const elapsed = Math.max(0, (nowServer - startTime) / 1000);
-    const duration = currentLobby.config.timerDuration || 60;
+    const duration = (typeof currentLobby.config?.timerDuration === 'number' && !isNaN(currentLobby.config.timerDuration)) 
+      ? currentLobby.config.timerDuration 
+      : 60;
     const remaining = Math.max(0, duration - Math.floor(elapsed));
     
     // Protection: if the calculated time is suspiciously large (e.g. > 1 hour),
     // it likely indicates a clock sync issue or a corrupted timestamp.
-    if (remaining > 3600) {
+    if (remaining > 3600 || isNaN(remaining)) {
       setTimeLeft(null);
     } else {
       setTimeLeft(remaining);

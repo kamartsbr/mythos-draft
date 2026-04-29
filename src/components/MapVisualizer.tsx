@@ -260,7 +260,7 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ lobby, isVisible, 
           </h4>
         </div>
 
-        {timeLeft !== null && timeLeft !== undefined && (
+        {timeLeft !== null && timeLeft !== undefined && !isNaN(timeLeft) && (
           <motion.div 
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
@@ -271,7 +271,7 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ lobby, isVisible, 
           >
             <Clock className={cn("w-5 h-5", (timeLeft || 0) <= 5 ? "text-red-500 animate-pulse" : "text-amber-500")} />
             <span className={cn("text-3xl font-black tabular-nums tracking-tight", (timeLeft || 0) <= 5 ? "text-red-500" : "text-white")}>
-              {timeLeft !== null ? timeLeft : '--'}
+              {typeof timeLeft === 'number' && !isNaN(timeLeft) ? timeLeft : '--'}
             </span>
           </motion.div>
         )}

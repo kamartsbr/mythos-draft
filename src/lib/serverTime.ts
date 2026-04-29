@@ -1,37 +1,50 @@
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
+// src/lib/serverTime.ts
+import { db } from '../firebase';
+import { doc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 
-let offset = 0;
+let syncPromise: Promise<number> | null = null;
 
-export async function syncServerTime() {
-  const path = 'system/time_sync';
-  try {
-    const testDoc = doc(db, 'system', 'time_sync');
-    
-    // Set a document with server timestamp to calculate offset
-    await setDoc(testDoc, { timestamp: serverTimestamp() }, { merge: true });
-    
-    return new Promise<void>((resolve) => {
-      const unsub = onSnapshot(testDoc, (snapshot) => {
-        const data = snapshot.data();
-        if (data?.timestamp) {
-          const serverTime = data.timestamp.toMillis();
-          const localTime = Date.now();
-          offset = serverTime - localTime;
-          unsub();
-          resolve();
-        }
-      }, (error) => {
-        handleFirestoreError(error, OperationType.GET, path);
-        unsub();
-        resolve(); // Resolve anyway to avoid blocking the app
-      });
-    });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+/**
+ * Obtém o offset (diferença) entre o relógio local e o do servidor.
+ * Usa um Singleton para evitar múltiplas chamadas simultâneas.
+ */
+export async function getServerTimeOffset(): Promise<number> {
+  const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
+  if (IS_DEV) return 0;
+  
+  if (!syncPromise) {
+    syncPromise = (async () => {
+      try {
+        const userId = "time_sync_user"; // Pode ser um ID fixo ou do usuário atual
+        const testDoc = doc(db, 'system', `sync_${userId}`);
+        
+        // Dispara o timestamp do servidor
+        await setDoc(testDoc, { timestamp: serverTimestamp() }, { merge: true });
+        
+        return new Promise<number>((resolve) => {
+          const unsub = onSnapshot(testDoc, (snapshot) => {
+            const data = snapshot.data();
+            if (data?.timestamp) {
+              unsub(); // Limpa o listener após obter o tempo
+              const serverMs = data.timestamp.toMillis();
+              const localMs = Date.now();
+              resolve(serverMs - localMs);
+            }
+          });
+        });
+      } catch (error) {
+        console.error("Erro ao sincronizar tempo:", error);
+        return 0; // Fallback para tempo local se falhar
+      }
+    })();
   }
+  return syncPromise;
 }
 
-export function getServerTime() {
+/**
+ * Retorna o tempo atualizado baseado no servidor.
+ */
+export async function getServerTime(): Promise<number> {
+  const offset = await getServerTimeOffset();
   return Date.now() + offset;
 }

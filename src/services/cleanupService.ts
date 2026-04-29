@@ -4,6 +4,11 @@ import { Lobby } from '../types';
 
 export const cleanupService = {
   async performCleanup() {
+    const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
+    if (IS_DEV) {
+      console.log('[CleanupService] Skiped in Development Mode');
+      return;
+    }
     console.log('[CleanupService] Iniciando limpeza manual/cliente...');
     const now = new Date();
     const lobbiesSnap = await getDocs(collection(db, 'lobbies'));

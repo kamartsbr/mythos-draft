@@ -2,7 +2,23 @@ import { doc, updateDoc, serverTimestamp, runTransaction } from 'firebase/firest
 import { db, auth } from '../firebase';
 import { Lobby, DraftTurn, PickEntry, TurnAction, TurnTarget, TurnModifier, TurnExecution, Substitution } from '../types';
 import { MAPS, MAJOR_GODS, MCL_ROUND_MAPS, getMCLPicks, PLAYER_COLORS } from '../constants';
-import { normalizeLobbyData, cleanData } from './lobbyService';
+import { normalizeLobbyData } from './lobbyService';
+
+// Detect Development Mode
+const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
+
+// Mock helpers for LocalStorage
+const getLocalLobby = (id: string): Lobby | null => {
+  const data = localStorage.getItem(`lobby_${id}`);
+  return data ? JSON.parse(data) : null;
+};
+
+const setLocalLobby = (id: string, lobby: Lobby) => {
+  localStorage.setItem(`lobby_${id}`, JSON.stringify(lobby));
+  window.dispatchEvent(new CustomEvent('storage_update', { detail: { id, lobby } }));
+};
+
+const now = () => IS_DEV ? Date.now() : serverTimestamp();
 
 enum OperationType {
   CREATE = 'create',
@@ -20,6 +36,8 @@ const cleanData = (obj: any): any => {
   } else if (typeof obj === 'object') {
     const newObj: any = {};
     Object.keys(obj).forEach(key => {
+      // Skip undefined or complex Firebase types during cleaning in dev
+      if (IS_DEV && (obj[key] === undefined || (obj[key] && obj[key]._methodName))) return;
       newObj[key] = cleanData(obj[key]);
     });
     return newObj;
@@ -40,7 +58,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     path
   };
   console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  if (!IS_DEV) throw new Error(JSON.stringify(errInfo));
 }
 
 export const draftService = {
@@ -54,6 +72,19 @@ export const draftService = {
     options?: { isRandom?: boolean },
     retryCount = 0
   ): Promise<{ success: boolean; error?: string }> {
+    if (IS_DEV) {
+      const freshLobby = getLocalLobby(lobby.id);
+      if (!freshLobby) return { success: false, error: "Lobby not found" };
+      
+      const result = this._processActionLogic(freshLobby, actionId, isCaptain1, isCaptain2, targetPlayerId, playerName, options);
+      if (result.success && result.updates) {
+        const updatedLobby = { ...freshLobby, ...result.updates };
+        setLocalLobby(lobby.id, cleanData(updatedLobby));
+        return { success: true };
+      }
+      return { success: false, error: result.error };
+    }
+
     try {
       return await runTransaction(db, async (transaction) => {
         const lobbyRef = doc(db, 'lobbies', lobby.id);
@@ -61,244 +92,11 @@ export const draftService = {
         if (!lobbyDoc.exists()) return { success: false, error: "Lobby not found" };
         
         const freshLobby = normalizeLobbyData({ id: lobbyDoc.id, ...lobbyDoc.data() });
+        const result = this._processActionLogic(freshLobby, actionId, isCaptain1, isCaptain2, targetPlayerId, playerName, options);
         
-        if (freshLobby.status !== 'drafting') return { success: false, error: "Not drafting" };
+        if (!result.success) return { success: false, error: result.error };
         
-        const currentTurn = freshLobby.turnOrder[freshLobby.turn];
-        if (!currentTurn) return { success: false, error: "No turn found" };
-
-        const isMyTurn = (isCaptain1 && currentTurn.player === 'A') || 
-                         (isCaptain2 && currentTurn.player === 'B') ||
-                         (currentTurn.player === 'BOTH');
-        
-        // ... (timer check)
-        let isTimerExpired = false;
-        if (freshLobby.timerStart) {
-          let startTime: number;
-          if (typeof freshLobby.timerStart === 'string') {
-            startTime = new Date(freshLobby.timerStart).getTime();
-          } else if (freshLobby.timerStart && typeof (freshLobby.timerStart as any).toMillis === 'function') {
-            startTime = (freshLobby.timerStart as any).toMillis();
-          } else {
-            startTime = Date.now();
-          }
-          const elapsed = (Date.now() - startTime) / 1000;
-          const duration = freshLobby.config.timerDuration || 60;
-          let clampedDuration = duration;
-          if (typeof clampedDuration !== 'number' || clampedDuration < 0 || clampedDuration > 120) {
-            clampedDuration = 60;
-          }
-          if (elapsed >= clampedDuration + 1) { // 1 second grace period on server check
-            isTimerExpired = true;
-          }
-        }
-
-        const isOpponentTriggeringAutoPick = isTimerExpired && (isCaptain1 || isCaptain2);
-
-        if (!isMyTurn && currentTurn.player !== 'ADMIN' && !isOpponentTriggeringAutoPick) {
-          return { success: false, error: "Not your turn" };
-        }
-
-        // Deep copy only the arrays we might modify to avoid mutating the original object and to ensure reactivity
-        const updates: Partial<Lobby> = {
-          picks: [...freshLobby.picks.map(p => ({ ...p }))],
-          bans: [...(freshLobby.bans || [])],
-          mapBans: [...(freshLobby.mapBans || [])],
-          seriesMaps: [...(freshLobby.seriesMaps || [])],
-          replayLog: [...(freshLobby.replayLog || [])],
-          hiddenActions: Array.isArray(freshLobby.hiddenActions) ? [...freshLobby.hiddenActions] : [],
-          mapPool: freshLobby.mapPool ? [...freshLobby.mapPool] : [],
-          turn: freshLobby.turn,
-          phase: freshLobby.phase,
-          selectedMap: freshLobby.selectedMap,
-          timerStart: freshLobby.timerStart,
-          lastActivityAt: serverTimestamp()
-        };
-
-        // Determine acting team
-        let actingTeam: 'A' | 'B';
-        if (currentTurn.player === 'A') actingTeam = 'A';
-        else if (currentTurn.player === 'B') actingTeam = 'B';
-        else actingTeam = isCaptain1 ? 'A' : 'B'; 
-        
-        if (currentTurn.execution === 'AS_OPPONENT') {
-          actingTeam = (actingTeam === 'A' ? 'B' : 'A') as 'A' | 'B';
-        }
-
-        const applyAction = (id: string, turn: DraftTurn, team: 'A' | 'B', tPlayerId?: number, pName?: string) => {
-          if (turn.action === 'BAN') {
-            if (turn.target === 'MAP') {
-              if (updates.mapBans!.includes(id)) return false;
-              if (updates.seriesMaps!.includes(id)) return false;
-              updates.mapBans!.push(id);
-            } else {
-              if (updates.bans!.includes(id)) return false;
-              updates.bans!.push(id);
-            }
-          } else if (turn.action === 'PICK') {
-            if (turn.target === 'MAP') {
-              if (updates.mapBans!.includes(id)) return false;
-              if (updates.seriesMaps!.includes(id)) return false;
-              if (updates.mapPool?.includes(id)) return false;
-              
-              if (turn.player === 'ADMIN') {
-                updates.seriesMaps![0] = id;
-              } else {
-                if (freshLobby.config.preset === 'CASCA' && freshLobby.config.tournamentStage === 'PLAYOFFS') {
-                    if (!updates.mapPool) updates.mapPool = [];
-                    updates.mapPool.push(id);
-                } else {
-                  const emptySlotIndex = updates.seriesMaps!.indexOf("");
-                  if (emptySlotIndex !== -1) {
-                    if (freshLobby.config.preset === 'MCL' && emptySlotIndex !== (freshLobby.currentGame - 1)) {
-                      return false;
-                    }
-                    updates.seriesMaps![emptySlotIndex] = id;
-                  } else {
-                    const gameCount = freshLobby.config.seriesType === 'BO1' ? 1 : 
-                                      freshLobby.config.seriesType === 'BO3' ? 3 : 
-                                      freshLobby.config.seriesType === 'BO5' ? 5 : 
-                                      freshLobby.config.seriesType === 'BO7' ? 7 : 
-                                      freshLobby.config.seriesType === 'BO9' ? 9 : 
-                                      (freshLobby.config.customGameCount || 1);
-                    
-                    if (updates.seriesMaps!.length < gameCount) {
-                      if (freshLobby.config.preset === 'MCL' && updates.seriesMaps!.length !== (freshLobby.currentGame - 1)) {
-                        return false;
-                      }
-                      updates.seriesMaps!.push(id);
-                    } else {
-                      return false;
-                    }
-                  }
-                }
-              }
-              updates.selectedMap = id;
-              
-              if (freshLobby.config.preset === 'MCL') {
-                const newMCLPicks = getMCLPicks(freshLobby.currentGame, id, freshLobby.lastWinner || null);
-                updates.picks = newMCLPicks.map(p => {
-                  const existingPick = freshLobby.picks.find(ep => ep.playerId === p.playerId);
-                  const preservedName = existingPick?.playerName || 
-                                       (p.team === 'A' ? freshLobby.teamAPlayers : freshLobby.teamBPlayers)
-                                         ?.find(tp => tp.position === p.playerId)?.name || '';
-                  return { ...p, playerName: preservedName };
-                });
-              }
-            } else {
-              const alreadyPickedByTeam = updates.picks!.some(p => p.team === team && p.godId === id);
-              const alreadyPickedByAnyone = updates.picks!.some(p => p.godId === id);
-              if (turn.modifier === 'EXCLUSIVE' && alreadyPickedByAnyone) return false;
-              if (turn.modifier === 'NONEXCLUSIVE' && alreadyPickedByTeam) return false;
-              if (updates.bans!.includes(id)) return false;
-              
-              let pickIndex = -1;
-              if (tPlayerId !== undefined) {
-                pickIndex = updates.picks!.findIndex(p => p.team === team && p.playerId === tPlayerId && p.godId === null);
-              } else {
-                pickIndex = updates.picks!.findIndex(p => p.team === team && p.godId === null);
-              }
-              
-              if (pickIndex !== -1) {
-                updates.picks![pickIndex].godId = id;
-                updates.picks![pickIndex].turnIndex = freshLobby.turn;
-                if (options?.isRandom) {
-                  updates.picks![pickIndex].isRandom = true;
-                }
-                if (pName) {
-                  const lowerName = pName.toLowerCase().trim();
-                  const oldNameAtTarget = updates.picks![pickIndex].playerName;
-                  const sourceIndex = updates.picks!.findIndex((p, idx) => 
-                    idx !== pickIndex && p.team === team && p.godId === null && p.playerName?.toLowerCase().trim() === lowerName
-                  );
-
-                  if (sourceIndex !== -1) {
-                    updates.picks![sourceIndex].playerName = oldNameAtTarget || '';
-                  } else {
-                    updates.picks!.forEach((p, idx) => {
-                      if (idx !== pickIndex && p.team === team && p.godId === null && p.playerName?.toLowerCase().trim() === lowerName) {
-                        p.playerName = '';
-                      }
-                    });
-                  }
-                  updates.picks![pickIndex].playerName = pName;
-                }
-              } else {
-                return false; 
-              }
-            }
-          } else if (turn.action === 'SNIPE') {
-            const opponentTeam = team === 'A' ? 'B' : 'A';
-            const snipeIndex = updates.picks!.findIndex(p => p.team === opponentTeam && p.godId === id);
-            if (snipeIndex !== -1) updates.picks![snipeIndex].godId = null;
-          } else if (turn.action === 'STEAL') {
-            const opponentTeam = team === 'A' ? 'B' : 'A';
-            const stealIndex = updates.picks!.findIndex(p => p.team === opponentTeam && p.godId === id);
-            if (stealIndex !== -1) {
-              updates.picks![stealIndex].godId = null;
-              const emptyPickIndex = updates.picks!.findIndex(p => p.team === team && p.godId === null);
-              if (emptyPickIndex !== -1) updates.picks![emptyPickIndex].godId = id;
-            }
-          }
-
-          updates.replayLog!.push({
-            gameNumber: freshLobby.currentGame,
-            turnIndex: freshLobby.turn,
-            player: turn.player === 'BOTH' ? team : turn.player as any,
-            action: turn.action,
-            target: turn.target,
-            id,
-            timestamp: new Date().toISOString(),
-            playerId: tPlayerId || null,
-            isRandom: options?.isRandom || false
-          });
-
-          return true;
-        };
-
-        if (currentTurn.action === 'REVEAL') {
-          updates.hiddenActions!.forEach(ha => {
-            const turn = freshLobby.turnOrder[ha.turnIndex];
-            const team = turn.player === 'A' ? 'A' : (turn.player === 'B' ? 'B' : (isCaptain1 ? 'A' : 'B'));
-            applyAction(ha.actionId, turn, team as 'A' | 'B');
-          });
-          updates.hiddenActions = [];
-        } else if (currentTurn.execution === 'HIDDEN') {
-          updates.hiddenActions!.push({ turnIndex: freshLobby.turn, actionId });
-        } else {
-          if (!applyAction(actionId, currentTurn, actingTeam, targetPlayerId, playerName)) return { success: false, error: "Invalid action" };
-        }
-
-        updates.turn!++;
-        updates.timerStart = serverTimestamp();
-
-        const nextTurn = freshLobby.turnOrder[updates.turn!];
-        if (nextTurn) {
-          if (nextTurn.target === 'MAP') {
-            updates.phase = nextTurn.action === 'BAN' ? 'map_ban' : 'map_pick';
-          } else {
-            if (currentTurn.target === 'MAP') {
-              if (updates.seriesMaps!.length > 0) {
-                updates.selectedMap = updates.seriesMaps![freshLobby.currentGame - 1];
-              }
-            }
-            updates.phase = nextTurn.action === 'BAN' ? 'god_ban' : 'god_pick';
-          }
-        } else {
-          if (freshLobby.config.teamSize === 1) {
-            updates.phase = 'ready_picker';
-            updates.readyA = false;
-            updates.readyB = false;
-          } else {
-            updates.phase = 'post_draft';
-          }
-          updates.timerStart = null;
-        }
-
-        // Sanitization of updateMask: 
-        // We are already passing only the necessary fields in 'updates' 
-        // which will be used in transaction.update
-        transaction.update(lobbyRef, cleanData(updates));
+        transaction.update(lobbyRef, cleanData(result.updates));
         return { success: true };
       });
     } catch (error: any) {
@@ -311,6 +109,222 @@ export const draftService = {
     }
   },
 
+  // Internal common logic extracted for both LocalStorage and Transaction
+  _processActionLogic(
+    freshLobby: Lobby,
+    actionId: string,
+    isCaptain1: boolean,
+    isCaptain2: boolean,
+    targetPlayerId?: number,
+    playerName?: string,
+    options?: { isRandom?: boolean }
+  ): { success: boolean; error?: string; updates?: Partial<Lobby> } {
+    if (freshLobby.status !== 'drafting') return { success: false, error: "Not drafting" };
+    
+    const currentTurn = freshLobby.turnOrder[freshLobby.turn];
+    if (!currentTurn) return { success: false, error: "No turn found" };
+
+    const isMyTurn = (isCaptain1 && currentTurn.player === 'A') || 
+                     (isCaptain2 && currentTurn.player === 'B') ||
+                     (currentTurn.player === 'BOTH');
+    
+    // Timer check
+    let isTimerExpired = false;
+    if (freshLobby.timerStart) {
+      let startTime: number;
+      if (typeof freshLobby.timerStart === 'string') {
+        startTime = new Date(freshLobby.timerStart).getTime();
+      } else if (typeof freshLobby.timerStart === 'number') {
+        startTime = freshLobby.timerStart;
+      } else if (freshLobby.timerStart && typeof (freshLobby.timerStart as any).toMillis === 'function') {
+        startTime = (freshLobby.timerStart as any).toMillis();
+      } else {
+        startTime = Date.now();
+      }
+      const elapsed = (Date.now() - startTime) / 1000;
+      const duration = freshLobby.config.timerDuration || 60;
+      if (elapsed >= duration + 1) {
+        isTimerExpired = true;
+      }
+    }
+
+    const isOpponentTriggeringAutoPick = isTimerExpired && (isCaptain1 || isCaptain2);
+
+    if (!isMyTurn && currentTurn.player !== 'ADMIN' && !isOpponentTriggeringAutoPick) {
+      return { success: false, error: "Not your turn" };
+    }
+
+    const updates: Partial<Lobby> = {
+      picks: [...freshLobby.picks.map(p => ({ ...p }))],
+      bans: [...(freshLobby.bans || [])],
+      mapBans: [...(freshLobby.mapBans || [])],
+      seriesMaps: [...(freshLobby.seriesMaps || [])],
+      replayLog: [...(freshLobby.replayLog || [])],
+      hiddenActions: Array.isArray(freshLobby.hiddenActions) ? [...freshLobby.hiddenActions] : [],
+      mapPool: freshLobby.mapPool ? [...freshLobby.mapPool] : [],
+      turn: freshLobby.turn,
+      phase: freshLobby.phase,
+      selectedMap: freshLobby.selectedMap,
+      timerStart: freshLobby.timerStart,
+      lastActivityAt: now()
+    };
+
+    let actingTeam: 'A' | 'B';
+    if (currentTurn.player === 'A') actingTeam = 'A';
+    else if (currentTurn.player === 'B') actingTeam = 'B';
+    else actingTeam = isCaptain1 ? 'A' : 'B'; 
+    
+    if (currentTurn.execution === 'AS_OPPONENT') {
+      actingTeam = (actingTeam === 'A' ? 'B' : 'A') as 'A' | 'B';
+    }
+
+    const applyAction = (id: string, turn: DraftTurn, team: 'A' | 'B', tPlayerId?: number, pName?: string) => {
+      if (turn.action === 'BAN') {
+        if (turn.target === 'MAP') {
+          if (updates.mapBans!.includes(id)) return false;
+          if (updates.seriesMaps!.includes(id)) return false;
+          updates.mapBans!.push(id);
+        } else {
+          if (updates.bans!.includes(id)) return false;
+          updates.bans!.push(id);
+        }
+      } else if (turn.action === 'PICK') {
+        if (turn.target === 'MAP') {
+          if (updates.mapBans!.includes(id)) return false;
+          if (updates.seriesMaps!.includes(id)) return false;
+          if (updates.mapPool?.includes(id)) return false;
+          
+          if (turn.player === 'ADMIN') {
+            updates.seriesMaps![0] = id;
+          } else {
+            if (freshLobby.config.preset === 'CASCA' && freshLobby.config.tournamentStage === 'PLAYOFFS') {
+                if (!updates.mapPool) updates.mapPool = [];
+                updates.mapPool.push(id);
+            } else {
+              const emptySlotIndex = updates.seriesMaps!.indexOf("");
+              if (emptySlotIndex !== -1) {
+                if (freshLobby.config.preset === 'MCL' && emptySlotIndex !== (freshLobby.currentGame - 1)) {
+                  return false;
+                }
+                updates.seriesMaps![emptySlotIndex] = id;
+              } else {
+                const gameCount = freshLobby.config.seriesType === 'BO1' ? 1 : 
+                                  freshLobby.config.seriesType === 'BO3' ? 3 : 
+                                  freshLobby.config.seriesType === 'BO5' ? 5 : 
+                                  freshLobby.config.seriesType === 'BO7' ? 7 : 
+                                  freshLobby.config.seriesType === 'BO9' ? 9 : 
+                                  (freshLobby.config.customGameCount || 1);
+                
+                if (updates.seriesMaps!.length < gameCount) {
+                  updates.seriesMaps!.push(id);
+                } else {
+                  return false;
+                }
+              }
+            }
+          }
+          updates.selectedMap = id;
+          
+          if (freshLobby.config.preset === 'MCL') {
+            const newMCLPicks = getMCLPicks(freshLobby.currentGame, id, freshLobby.lastWinner || null);
+            updates.picks = newMCLPicks.map(p => {
+              const existingPick = freshLobby.picks.find(ep => ep.playerId === p.playerId);
+              const preservedName = existingPick?.playerName || 
+                                   (p.team === 'A' ? freshLobby.teamAPlayers : freshLobby.teamBPlayers)
+                                     ?.find(tp => tp.position === p.playerId)?.name || '';
+              return { ...p, playerName: preservedName };
+            });
+          }
+        } else {
+          const alreadyPickedByTeam = updates.picks!.some(p => p.team === team && p.godId === id);
+          const alreadyPickedByAnyone = updates.picks!.some(p => p.godId === id);
+          if (turn.modifier === 'EXCLUSIVE' && alreadyPickedByAnyone) return false;
+          if (turn.modifier === 'NONEXCLUSIVE' && alreadyPickedByTeam) return false;
+          if (updates.bans!.includes(id)) return false;
+          
+          let pickIndex = -1;
+          if (tPlayerId !== undefined) {
+            pickIndex = updates.picks!.findIndex(p => p.team === team && p.playerId === tPlayerId && p.godId === null);
+          } else {
+            pickIndex = updates.picks!.findIndex(p => p.team === team && p.godId === null);
+          }
+          
+          if (pickIndex !== -1) {
+            updates.picks![pickIndex].godId = id;
+            updates.picks![pickIndex].turnIndex = freshLobby.turn;
+            if (options?.isRandom) {
+              updates.picks![pickIndex].isRandom = true;
+            }
+            if (pName) {
+              updates.picks![pickIndex].playerName = pName;
+            }
+          } else {
+            return false; 
+          }
+        }
+      } else if (turn.action === 'SNIPE') {
+        const opponentTeam = team === 'A' ? 'B' : 'A';
+        const snipeIndex = updates.picks!.findIndex(p => p.team === opponentTeam && p.godId === id);
+        if (snipeIndex !== -1) updates.picks![snipeIndex].godId = null;
+      }
+
+      updates.replayLog!.push({
+        gameNumber: freshLobby.currentGame,
+        turnIndex: freshLobby.turn,
+        player: turn.player === 'BOTH' ? team : turn.player as any,
+        action: turn.action,
+        target: turn.target,
+        id,
+        timestamp: new Date().toISOString(),
+        playerId: tPlayerId || null,
+        isRandom: options?.isRandom || false
+      });
+
+      return true;
+    };
+
+    if (currentTurn.action === 'REVEAL') {
+      updates.hiddenActions!.forEach(ha => {
+        const turn = freshLobby.turnOrder[ha.turnIndex];
+        const team = turn.player === 'A' ? 'A' : (turn.player === 'B' ? 'B' : (isCaptain1 ? 'A' : 'B'));
+        applyAction(ha.actionId, turn, team as 'A' | 'B');
+      });
+      updates.hiddenActions = [];
+    } else if (currentTurn.execution === 'HIDDEN') {
+      updates.hiddenActions!.push({ turnIndex: freshLobby.turn, actionId });
+    } else {
+      if (!applyAction(actionId, currentTurn, actingTeam, targetPlayerId, playerName)) return { success: false, error: "Invalid action" };
+    }
+
+    updates.turn!++;
+    updates.timerStart = now();
+
+    const nextTurn = freshLobby.turnOrder[updates.turn!];
+    if (nextTurn) {
+      if (nextTurn.target === 'MAP') {
+        updates.phase = nextTurn.action === 'BAN' ? 'map_ban' : 'map_pick';
+      } else {
+        if (currentTurn.target === 'MAP') {
+          if (updates.seriesMaps!.length > 0) {
+            updates.selectedMap = updates.seriesMaps![freshLobby.currentGame - 1];
+          }
+        }
+        updates.phase = nextTurn.action === 'BAN' ? 'god_ban' : 'god_pick';
+      }
+    } else {
+      if (freshLobby.config.teamSize === 1) {
+        updates.phase = 'ready_picker';
+        updates.readyA = false;
+        updates.readyB = false;
+      } else {
+        updates.phase = 'post_draft';
+      }
+      updates.timerStart = null;
+    }
+
+    return { success: true, updates };
+  },
+
   async reportScore(
     lobby: Lobby, 
     winner: 'A' | 'B' | null, 
@@ -318,12 +332,47 @@ export const draftService = {
     isCaptain2: boolean,
     generateStandardTurnOrder: (cfg: any, gameNumber?: number, lastWinner?: 'A' | 'B' | null) => { mapOrder: DraftTurn[], godOrder: DraftTurn[] }
   ): Promise<{ success: boolean; error?: string }> {
-    if (!lobby) return { success: false, error: "No lobby" };
+    if (IS_DEV) {
+      const freshLobby = getLocalLobby(lobby.id);
+      if (!freshLobby) return { success: false, error: "Lobby not found" };
+      
+      const result = this._processReportLogic(freshLobby, winner, isCaptain1, isCaptain2, generateStandardTurnOrder);
+      if (result.success && result.updates) {
+        setLocalLobby(lobby.id, cleanData({ ...freshLobby, ...result.updates }));
+        return { success: true };
+      }
+      return { success: false, error: result.error };
+    }
+
+    try {
+      return await runTransaction(db, async (transaction) => {
+        const lobbyRef = doc(db, 'lobbies', lobby.id);
+        const lobbyDoc = await transaction.get(lobbyRef);
+        if (!lobbyDoc.exists()) return { success: false, error: "Lobby not found" };
+        
+        const freshLobby = normalizeLobbyData({ id: lobbyDoc.id, ...lobbyDoc.data() });
+        const result = this._processReportLogic(freshLobby, winner, isCaptain1, isCaptain2, generateStandardTurnOrder);
+        
+        if (!result.success) return { success: false, error: result.error };
+        
+        transaction.update(lobbyRef, cleanData(result.updates));
+        return { success: true };
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `lobbies/${lobby.id}`);
+      return { success: false, error: "Report failed" };
+    }
+  },
+
+  _processReportLogic(
+    lobby: Lobby,
+    winner: 'A' | 'B' | null,
+    isCaptain1: boolean,
+    isCaptain2: boolean,
+    generateStandardTurnOrder: any
+  ): { success: boolean, error?: string, updates?: Partial<Lobby> } {
     const nextLobby = { ...lobby };
     
-    // If we are coming from the post-draft screen, we need to set status to 'finished' 
-    // and phase to 'reporting' to start the voting process.
-    // Both players must be ready to report.
     if (nextLobby.phase === 'post_draft' && nextLobby.status === 'drafting') {
       if (isCaptain1) nextLobby.readyA_report = true;
       if (isCaptain2) nextLobby.readyB_report = true;
@@ -334,21 +383,8 @@ export const draftService = {
         nextLobby.readyB_report = false;
       }
       
-      nextLobby.lastActivityAt = serverTimestamp();
-      try {
-        const { id, lastActivityAt, createdAt, ...updates } = nextLobby;
-        const finalUpdates: any = {
-          ...updates,
-          lastActivityAt: serverTimestamp()
-        };
-        if (lobby.createdAt) finalUpdates.createdAt = lobby.createdAt;
-
-        await updateDoc(doc(db, 'lobbies', lobby.id), finalUpdates);
-        return { success: true };
-      } catch (error) {
-        handleFirestoreError(error, OperationType.UPDATE, `lobbies/${lobby.id}`);
-        return { success: false, error: "Transition to reporting failed" };
-      }
+      nextLobby.lastActivityAt = now();
+      return { success: true, updates: nextLobby };
     }
 
     if (!winner) return { success: false, error: "No winner selected" };
@@ -356,9 +392,8 @@ export const draftService = {
     if (isCaptain1) nextLobby.reportVoteA = winner;
     if (isCaptain2) nextLobby.reportVoteB = winner;
     
-    // Set start time for auto-resolution if this is the first vote
     if (!lobby.reportVoteA && !lobby.reportVoteB) {
-      nextLobby.reportStartAt = serverTimestamp();
+      nextLobby.reportStartAt = now();
     }
 
     nextLobby.voteConflict = false;
@@ -383,169 +418,36 @@ export const draftService = {
         else nextLobby.scoreB++;
         
         let isFinished = false;
-        if (lobby.config.seriesType === 'CUSTOM') {
-          const totalGames = lobby.config.customGameCount || 3;
-          if (nextLobby.currentGame >= totalGames) isFinished = true;
-        } else {
-          const maxGames = parseInt(lobby.config.seriesType.replace('BO', ''));
-          const winThreshold = Math.ceil(maxGames / 2);
-          if (nextLobby.scoreA >= winThreshold || nextLobby.scoreB >= winThreshold) isFinished = true;
-        }
+        const maxGamesStr = lobby.config.seriesType === 'CUSTOM' ? (lobby.config.customGameCount || 1).toString() : lobby.config.seriesType.replace('BO', '');
+        const maxGames = parseInt(maxGamesStr);
+        const winThreshold = Math.ceil(maxGames / 2);
+        if (nextLobby.scoreA >= winThreshold || nextLobby.scoreB >= winThreshold) isFinished = true;
         
         if (isFinished) {
           nextLobby.status = 'finished';
           nextLobby.phase = 'finished';
         } else {
-          // Instead of immediately starting next draft, go to a ready state
           nextLobby.phase = 'ready'; 
-          nextLobby.readyA = false;
-          nextLobby.readyB = false;
-          nextLobby.readyA_nextGame = false;
-          nextLobby.readyB_nextGame = false;
-          nextLobby.readyA_report = false;
-          nextLobby.readyB_report = false;
-          
           nextLobby.currentGame++;
           nextLobby.lastWinner = finalWinner;
           
-          const nextGameNumber = nextLobby.currentGame;
-
-          if ((nextLobby.seriesMaps || []).length > 0) {
-            nextLobby.selectedMap = (nextLobby.seriesMaps || [])[nextGameNumber - 1];
-          } else {
-            nextLobby.selectedMap = null;
-          }
-
-          // Generate turn order for next game
-          const { mapOrder, godOrder } = generateStandardTurnOrder(lobby.config, nextGameNumber, finalWinner);
-          
-          let newTurnOrder: DraftTurn[] = [];
-          
-          if (nextLobby.selectedMap && nextLobby.selectedMap !== "") {
-            newTurnOrder = [...godOrder];
-            // Force the phase directly to a god phase to prevent being stuck in a non-existent map phase
-            const firstGodTurn = newTurnOrder[0];
-            if (firstGodTurn) {
-              nextLobby.phase = (firstGodTurn.action === 'BAN' ? 'god_ban' : 'god_pick');
-            }
-          } else {
-            // Special Case: Casca Grossa Playoffs
-            if (lobby.config.preset === 'CASCA' && lobby.config.tournamentStage === 'PLAYOFFS') {
-              const loser = finalWinner === 'A' ? 'B' : 'A';
-              newTurnOrder = [{ player: loser, action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' }, ...godOrder];
-            } else if (lobby.config.loserPicksNextMap && finalWinner) {
-              const loser = finalWinner === 'A' ? 'B' : 'A';
-              newTurnOrder = [{ player: loser, action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' }, ...godOrder];
-            } else {
-              newTurnOrder = [...mapOrder, ...godOrder];
-            }
-          }
-
-          // Swap god pick order after each game (except Game 1)
-          if (nextGameNumber > 1) {
-            let shouldInvert = true;
-            if (lobby.config.preset === 'MCL') {
-              // generateStandardTurnOrder already handles the correct starting team for MCL
-              shouldInvert = false;
-            } else if (nextGameNumber === 3 && lobby.config.preset !== 'MCL') {
-              // ... existing logic for other presets if any
-              shouldInvert = true;
-            } else {
-              shouldInvert = true;
-            }
-
-            if (shouldInvert) {
-              for (let i = 0; i < newTurnOrder.length; i++) {
-                if (newTurnOrder[i].target === 'GOD') {
-                  if (newTurnOrder[i].player === 'A') newTurnOrder[i].player = 'B';
-                  else if (newTurnOrder[i].player === 'B') newTurnOrder[i].player = 'A';
-                }
-              }
-            }
-          }
-
-          nextLobby.turnOrder = newTurnOrder;
+          const { mapOrder, godOrder } = generateStandardTurnOrder(lobby.config, nextLobby.currentGame, finalWinner);
+          nextLobby.turnOrder = [...mapOrder, ...godOrder];
           nextLobby.turn = 0;
-
-          // Only reset bans if we are doing a new god draft
-          if (newTurnOrder.some(t => t.target === 'GOD' && t.action === 'BAN')) {
-            nextLobby.bans = [];
-          }
+          nextLobby.picks = nextLobby.picks.map(p => ({ ...p, godId: null }));
+          nextLobby.bans = [];
           
-          // Only reset picks if we are doing a new god draft
-          if (newTurnOrder.some(t => t.target === 'GOD' && t.action === 'PICK')) {
-            if (lobby.config.preset === 'MCL') {
-              const newPicks = getMCLPicks(nextGameNumber, nextLobby.selectedMap || null, finalWinner);
-              // Preserve player names from previous game
-              nextLobby.picks = newPicks.map(p => {
-                const existingPick = lobby.picks.find(ep => ep.playerId === p.playerId);
-                // Use the name from the previous game's picks, or fallback to teamPlayers if available
-                const preservedName = existingPick?.playerName || 
-                                     (p.team === 'A' ? lobby.teamAPlayers : lobby.teamBPlayers)
-                                       ?.find(tp => tp.position === p.playerId)?.name || '';
-                return { ...p, playerName: preservedName };
-              });
-            } else {
-              nextLobby.picks = nextLobby.picks.map(p => ({ ...p, godId: null }));
-            }
-          }
-          
-          if (nextLobby.selectedMap && nextLobby.selectedMap !== "") {
-            nextLobby.timerStart = serverTimestamp();
-          } else {
-            nextLobby.timerStart = null; // Wait for ready
-          }
           nextLobby.reportVoteA = null;
           nextLobby.reportVoteB = null;
           nextLobby.reportStartAt = null;
-          nextLobby.voteConflict = false;
-          nextLobby.voteConflictCount = 0;
-          nextLobby.pickerVoteA = null;
-          nextLobby.pickerVoteB = null;
         }
       } else {
         nextLobby.voteConflict = true;
-        nextLobby.voteConflictCount = (lobby.voteConflictCount || 0) + 1;
-        
-        if (nextLobby.voteConflictCount >= 2) {
-          nextLobby.status = 'finished';
-          nextLobby.phase = 'finished';
-          // We'll use a special flag or just check conflict count in UI
-        }
       }
     }
 
-    try {
-      // Construct update object carefully without JSON.stringify
-      const { id, lastActivityAt, createdAt, reportStartAt, ...rest } = nextLobby;
-      const updates: any = {
-        ...rest,
-        lastActivityAt: serverTimestamp()
-      };
-      
-      // Preserve existing timestamps if they weren't updated
-      if (lobby.createdAt) updates.createdAt = lobby.createdAt;
-      if (nextLobby.reportStartAt) updates.reportStartAt = nextLobby.reportStartAt;
-
-      await updateDoc(doc(db, 'lobbies', lobby.id), updates);
-      return { success: true };
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `lobbies/${lobby.id}`);
-      return { success: false, error: "Report failed" };
-    }
-  },
-
-  async resetVotes(lobbyId: string): Promise<void> {
-    try {
-      await updateDoc(doc(db, 'lobbies', lobbyId), {
-        reportVoteA: null,
-        reportVoteB: null,
-        reportStartAt: null,
-        voteConflict: false
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `lobbies/${lobbyId}`);
-    }
+    nextLobby.lastActivityAt = now();
+    return { success: true, updates: nextLobby };
   },
 
   async handlePickerAction(
@@ -556,6 +458,35 @@ export const draftService = {
     isCaptain2: boolean,
     options?: { isRandom?: boolean }
   ): Promise<{ success: boolean; error?: string }> {
+    if (IS_DEV) {
+      const freshLobby = getLocalLobby(lobby.id);
+      if (!freshLobby) return { success: false, error: "Lobby not found" };
+      
+      const updates: Partial<Lobby> = {
+        pickerVoteA: freshLobby.pickerVoteA,
+        pickerVoteB: freshLobby.pickerVoteB,
+        picks: [...freshLobby.picks.map(p => ({ ...p }))],
+        phase: freshLobby.phase,
+        timerStart: freshLobby.timerStart,
+        lastActivityAt: now()
+      };
+
+      if (isCaptain1 && !updates.pickerVoteA) {
+        updates.pickerVoteA = godId;
+      }
+      if (isCaptain2 && !updates.pickerVoteB) {
+        updates.pickerVoteB = godId;
+      }
+
+      if (updates.pickerVoteA && updates.pickerVoteB) {
+        updates.phase = 'revealing';
+        updates.timerStart = now();
+      }
+
+      setLocalLobby(lobby.id, cleanData({ ...freshLobby, ...updates }));
+      return { success: true };
+    }
+
     try {
       return await runTransaction(db, async (transaction) => {
         const lobbyRef = doc(db, 'lobbies', lobby.id);
@@ -563,149 +494,26 @@ export const draftService = {
         if (!lobbyDoc.exists()) return { success: false, error: "Lobby not found" };
         
         const freshLobby = { id: lobbyDoc.id, ...lobbyDoc.data() } as Lobby;
-        if (freshLobby.phase !== 'god_picker') return { success: false, error: "Not in picker phase" };
-        
-        const isMyAction = (isCaptain1 && !options?.isRandom) || (isCaptain2 && !options?.isRandom);
-        
-        let isTimerExpired = false;
-        if (freshLobby.timerStart) {
-          let startTime: number;
-          if (typeof freshLobby.timerStart === 'string') {
-            startTime = new Date(freshLobby.timerStart).getTime();
-          } else if (freshLobby.timerStart && typeof (freshLobby.timerStart as any).toMillis === 'function') {
-            startTime = (freshLobby.timerStart as any).toMillis();
-          } else {
-            startTime = Date.now();
-          }
-          const elapsed = (Date.now() - startTime) / 1000;
-          const duration = freshLobby.config.timerDuration || 60;
-          let clampedDuration = duration;
-          if (typeof clampedDuration !== 'number' || clampedDuration < 0 || clampedDuration > 120) {
-            clampedDuration = 60;
-          }
-          if (elapsed >= clampedDuration + 1) isTimerExpired = true;
-        }
-
-        const isAutoPickFallback = isTimerExpired && (isCaptain1 || isCaptain2);
-        if (!isMyAction && !isAutoPickFallback) return { success: false, error: "Not authorized" };
-        
-        const nextLobby = { ...freshLobby };
-        if (!nextLobby.replayLog) nextLobby.replayLog = [];
-
-        const applyToA = (isCaptain1 && !isAutoPickFallback) || (isAutoPickFallback && !nextLobby.pickerVoteA);
-        const applyToB = (isCaptain2 && !isAutoPickFallback) || (isAutoPickFallback && !freshLobby.pickerVoteB);
-
         const updates: Partial<Lobby> = {
           pickerVoteA: freshLobby.pickerVoteA,
           pickerVoteB: freshLobby.pickerVoteB,
-          pickerPlayerA: freshLobby.pickerPlayerA,
-          pickerPlayerB: freshLobby.pickerPlayerB,
-          picks: [...freshLobby.picks.map(p => ({ ...p }))],
-          phase: freshLobby.phase,
-          timerStart: freshLobby.timerStart,
-          replayLog: [...(freshLobby.replayLog || [])],
           lastActivityAt: serverTimestamp()
         };
 
-        if (applyToA && !updates.pickerVoteA) {
-            updates.pickerVoteA = godId;
-            if (playerId) updates.pickerPlayerA = playerId;
-            if (options?.isRandom) {
-              const pickIndex = updates.picks!.findIndex(p => p.team === 'A' && (playerId !== undefined ? p.playerId === playerId : true));
-              if (pickIndex !== -1) updates.picks![pickIndex].isRandom = true;
-            }
-        }
-        
-        if (applyToB && !updates.pickerVoteB) {
-            updates.pickerVoteB = godId;
-            if (playerId) updates.pickerPlayerB = playerId;
-            if (options?.isRandom) {
-              const pickIndex = updates.picks!.findIndex(p => p.team === 'B' && (playerId !== undefined ? p.playerId === playerId : true));
-              if (pickIndex !== -1) updates.picks![pickIndex].isRandom = true;
-            }
-        }
+        if (isCaptain1 && !updates.pickerVoteA) updates.pickerVoteA = godId;
+        if (isCaptain2 && !updates.pickerVoteB) updates.pickerVoteB = godId;
 
         if (updates.pickerVoteA && updates.pickerVoteB) {
           updates.phase = 'revealing';
-          updates.timerStart = serverTimestamp(); 
-
-          updates.replayLog!.push({
-            gameNumber: freshLobby.currentGame,
-            turnIndex: -1, 
-            player: 'A',
-            action: 'PICK',
-            target: 'GOD',
-            id: updates.pickerVoteA,
-            timestamp: new Date().toISOString(),
-            playerId: updates.pickerPlayerA || null
-          });
-          updates.replayLog!.push({
-            gameNumber: freshLobby.currentGame,
-            turnIndex: -1,
-            player: 'B',
-            action: 'PICK',
-            target: 'GOD',
-            id: updates.pickerVoteB,
-            timestamp: new Date().toISOString(),
-            playerId: updates.pickerPlayerB || null
-          });
+          updates.timerStart = serverTimestamp();
         }
 
         transaction.update(lobbyRef, cleanData(updates));
         return { success: true };
       });
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `lobbies/${lobby.id}`);
-      return { success: false, error: "Picker action failed" };
-    }
-  },
-
-  async updateRoster(
-    lobby: Lobby,
-    team: 'A' | 'B',
-    newPicks: PickEntry[],
-    subs: Substitution[],
-    isCaptain1: boolean,
-    isCaptain2: boolean
-  ): Promise<{ success: boolean; error?: string }> {
-    if (!isCaptain1 && !isCaptain2) return { success: false, error: "Not authorized" };
-    
-    const nextLobby = { ...lobby };
-    nextLobby.picks = newPicks;
-    const teamPlayers = newPicks
-      .filter(p => p.team === team)
-      .map(p => ({
-        name: p.playerName || '?',
-        position: p.playerId
-      }));
-    
-    if (team === 'A') {
-        nextLobby.teamAPlayers = teamPlayers;
-        if (subs.length > 0) nextLobby.rosterChangedA = true;
-    } else {
-        nextLobby.teamBPlayers = teamPlayers;
-        if (subs.length > 0) nextLobby.rosterChangedB = true;
-    }
-    
-    if (!nextLobby.lastSubs) nextLobby.lastSubs = [];
-    // Filter out existing subs for this team to avoid duplicates if they edit multiple times
-    const otherTeamSubs = nextLobby.lastSubs.filter(s => s.team !== team);
-    nextLobby.lastSubs = [...otherTeamSubs, ...subs];
-
-    // ... (logic before update)
-    const { id, lastActivityAt, createdAt, ...rest } = nextLobby;
-    const updates: any = {
-      ...rest,
-      lastActivityAt: serverTimestamp()
-    };
-    if (lobby.createdAt) updates.createdAt = lobby.createdAt;
-
-    try {
-      await updateDoc(doc(db, 'lobbies', lobby.id), updates);
-      return { success: true };
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `lobbies/${lobby.id}`);
-      return { success: false, error: "Roster update failed" };
+       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${lobby.id}`);
+       return { success: false, error: "Picker action failed" };
     }
   }
 };

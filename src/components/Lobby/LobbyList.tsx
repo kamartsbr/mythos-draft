@@ -9,9 +9,11 @@ interface LobbyListProps {
   isAdmin?: boolean;
   onJoin: (id: string) => void;
   onClearAll?: () => void;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
 }
 
-export function LobbyList({ lobbies, t, isAdmin, onJoin, onClearAll }: LobbyListProps) {
+export function LobbyList({ lobbies, t, isAdmin, onJoin, onClearAll, onLoadMore, hasMore }: LobbyListProps) {
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredLobbies = useMemo(() => {
@@ -100,24 +102,34 @@ export function LobbyList({ lobbies, t, isAdmin, onJoin, onClearAll }: LobbyList
               <p className="text-slate-500 text-sm">{searchTerm ? t.noResults : t.noDrafts}</p>
             </div>
           ) : (
-            filteredLobbies.map(pub => (
-              <button
-                key={pub.id}
-                onClick={() => onJoin(pub.id)}
-                className="w-full p-4 rounded-2xl bg-slate-900 border border-slate-800 hover:border-blue-500/50 transition-all text-left flex items-center justify-between group"
-              >
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-bold text-slate-200">{pub.name || `${pub.teamSize}v${pub.teamSize} Draft`}</span>
-                    <span className="text-xs bg-slate-800 px-2 py-0.5 rounded text-slate-400 font-mono">{pub.id}</span>
+            <>
+              {filteredLobbies.map(pub => (
+                <button
+                  key={pub.id}
+                  onClick={() => onJoin(pub.id)}
+                  className="w-full p-4 rounded-2xl bg-slate-900 border border-slate-800 hover:border-blue-500/50 transition-all text-left flex items-center justify-between group"
+                >
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-bold text-slate-200">{pub.name || `${pub.teamSize ?? 2}v${pub.teamSize ?? 2} Draft`}</span>
+                      <span className="text-xs bg-slate-800 px-2 py-0.5 rounded text-slate-400 font-mono">{pub.id}</span>
+                    </div>
+                    <p className="text-sm text-slate-500">
+                      {pub.captain1Name || 'Captain 1'} vs {pub.captain2Name || 'Captain 2'} • {getLobbyStatus(pub)}
+                    </p>
                   </div>
-                  <p className="text-sm text-slate-500">
-                    {pub.captain1Name || 'Captain 1'} vs {pub.captain2Name || 'Captain 2'} • {getLobbyStatus(pub)}
-                  </p>
-                </div>
-                <ChevronRight className="w-5 h-5 text-slate-700 group-hover:text-blue-500 transition-colors" />
-              </button>
-            ))
+                  <ChevronRight className="w-5 h-5 text-slate-700 group-hover:text-blue-500 transition-colors" />
+                </button>
+              ))}
+              {hasMore && onLoadMore && (
+                <button
+                  onClick={onLoadMore}
+                  className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all text-sm font-bold uppercase tracking-widest"
+                >
+                  {t.loadMore || "Carregar Mais"}
+                </button>
+              )}
+            </>
           )}
         </div>
 

@@ -12,15 +12,84 @@ import {
   where,
   orderBy,
   limit,
+  startAfter,
   Unsubscribe,
   serverTimestamp,
   runTransaction,
   Timestamp,
-  addDoc
+  addDoc,
+  QueryDocumentSnapshot
 } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { Lobby, LobbyConfig, PickEntry, ChatMessage, LobbySummary, LobbyIndex } from '../types';
 import { PLAYER_COLORS, MCL_ROUND_MAPS } from '../constants';
+
+// --- SHIELDING: MOCK LAYER CONFIG ---
+const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
+const STORAGE_PREFIX = 'mythos_draft_dev_';
+
+const now = () => IS_DEV ? Date.now() : serverTimestamp();
+
+const getLocalLobby = (id: string): Lobby | null => {
+  const data = localStorage.getItem(`${STORAGE_PREFIX}lobby_${id}`);
+  if (!data) return null;
+  return JSON.parse(data);
+};
+
+const setLocalLobby = (id: string, lobby: Lobby) => {
+  localStorage.setItem(`${STORAGE_PREFIX}lobby_${id}`, JSON.stringify(lobby));
+  // In the same tab, 'storage' event doesn't fire. We can manually dispatch if needed, 
+  // but usually users test in multiple tabs.
+  window.dispatchEvent(new Event('storage_update'));
+};
+
+const getLocalIndex = (): LobbySummary[] => {
+  const data = localStorage.getItem(`${STORAGE_PREFIX}index`);
+  if (!data) return [];
+  return JSON.parse(data);
+};
+
+const setLocalIndex = (summaries: LobbySummary[]) => {
+  localStorage.setItem(`${STORAGE_PREFIX}index`, JSON.stringify(summaries));
+};
+
+const MOCK_LOBBY_TEMPLATE: Partial<Lobby> = {
+  status: 'drafting',
+  phase: 'ready',
+  turn: 0,
+  readyA: false,
+  readyB: false,
+  captain1: 'dev-user-a',
+  captain2: 'dev-user-b',
+  captain1Name: 'Development Alpha',
+  captain2Name: 'Development Beta',
+  config: {
+    teamSize: 2,
+    preset: 'Standard',
+    name: 'Dev Draft Match',
+    seriesType: 'BO1',
+    customGameCount: 1,
+    mapBanCount: 1,
+    banCount: 3,
+    isExclusive: true,
+    pickType: 'Global',
+    allowedPantheons: ['Greek', 'Norse', 'Egyptian', 'Atlantean'],
+    allowedMaps: ['Alfheim', 'Elysium', 'Ghost Lake', 'Giza'],
+    timerDuration: 60,
+    mapTurnOrder: [],
+    godTurnOrder: []
+  },
+  picks: [],
+  bans: [],
+  mapBans: [],
+  seriesMaps: [],
+  currentGame: 1,
+  scoreA: 0,
+  scoreB: 0,
+  lastActivityAt: Date.now() as any,
+  createdAt: Date.now() as any
+};
+// --- END SHIELDING ---
 
 export const generateId = () => Math.random().toString(36).substring(2, 9);
 
@@ -97,6 +166,10 @@ export const normalizeLobbyData = (data: any): Lobby => {
     for (const field of configArrayFields) {
       data.config[field] = sanitizeArray(data.config[field]);
     }
+    // Stabilize teamSize
+    if (typeof data.config.teamSize !== 'number' || isNaN(data.config.teamSize)) {
+        data.config.teamSize = 2;
+    }
   }
   
   return data as Lobby;
@@ -104,6 +177,27 @@ export const normalizeLobbyData = (data: any): Lobby => {
 
 export const lobbyService = {
   async createLobby(id: string, lobby: Lobby): Promise<void> {
+    if (IS_DEV) {
+      console.log(`[MOCK] Lobby created locally (LocalStorage): ${id}`);
+      setLocalLobby(id, lobby);
+      if (!lobby.config.isPrivate) {
+        const index = getLocalIndex();
+        const summary: LobbySummary = {
+          id,
+          name: lobby.config.name,
+          teamSize: lobby.config.teamSize,
+          captain1Name: lobby.captain1Name,
+          captain2Name: lobby.captain2Name,
+          status: lobby.status,
+          phase: lobby.phase,
+          preset: lobby.config.preset,
+          lastActivityAt: Date.now() as any,
+          createdAt: Date.now() as any
+        };
+        setLocalIndex([summary, ...index].slice(0, 50));
+      }
+      return;
+    }
     try {
       await setDoc(doc(db, 'lobbies', id), cleanData(lobby));
       if (!lobby.config.isPrivate) {
@@ -114,7 +208,49 @@ export const lobbyService = {
     }
   },
 
+  async getLobbiesPaginated(isFirstPage: boolean = true) {
+    if (IS_DEV) return getLocalIndex();
+    try {
+      // 1. Define a base da query ordenada por atividade recente
+      let lobbyQuery = query(
+        collection(db, 'lobbies'), 
+        orderBy('lastActivityAt', 'desc'), 
+        limit(20) // LOBBIES_PER_PAGE
+      );
+
+      // 2. Se não for a primeira página, começa após o último documento visto
+      if (!isFirstPage && (this as any)._lastVisibleDoc) {
+        lobbyQuery = query(lobbyQuery, startAfter((this as any)._lastVisibleDoc));
+      }
+
+      const snapshot = await getDocs(lobbyQuery);
+      
+      // 3. Guarda o último documento para a próxima página
+      (this as any)._lastVisibleDoc = snapshot.docs[snapshot.docs.length - 1] || null;
+
+      return snapshot.docs.map(doc => {
+        const normalized = normalizeLobbyData(doc.data());
+        return {
+          id: doc.id,
+          name: normalized.config?.name || `${normalized.config?.teamSize ?? 2}v${normalized.config?.teamSize ?? 2} Draft`,
+          teamSize: (typeof normalized.config?.teamSize === 'number' && !isNaN(normalized.config.teamSize)) ? normalized.config.teamSize : 2,
+          captain1Name: normalized.captain1Name || 'Captain 1',
+          captain2Name: normalized.captain2Name || 'Captain 2',
+          status: normalized.status || 'waiting',
+          phase: normalized.phase || 'waiting',
+          preset: normalized.config?.preset ?? null,
+          lastActivityAt: normalized.lastActivityAt ?? null,
+          createdAt: normalized.createdAt ?? null
+        } as LobbySummary;
+      });
+    } catch (error) {
+      console.error("Erro ao carregar lobbies paginados:", error);
+      return [];
+    }
+  },
+
   async refreshLobbyIndex(): Promise<void> {
+    if (IS_DEV) return;
     try {
       // Optimization: Index refresh is heavy. We use a lightweight lock to prevent concurrent refreshes 
       // from the same client session causing UI stutter.
@@ -140,8 +276,8 @@ export const lobbyService = {
 
           return {
             id: d.id,
-            name: data.config.name || `${data.config.teamSize || 2}v${data.config.teamSize || 2} Draft`,
-            teamSize: data.config.teamSize || 2,
+            name: data.config.name || `${(typeof data.config.teamSize === 'number' && !isNaN(data.config.teamSize)) ? data.config.teamSize : 2}v${(typeof data.config.teamSize === 'number' && !isNaN(data.config.teamSize)) ? data.config.teamSize : 2} Draft`,
+            teamSize: (typeof data.config.teamSize === 'number' && !isNaN(data.config.teamSize)) ? data.config.teamSize : 2,
             captain1Name: data.captain1Name || 'Captain 1',
             captain2Name: data.captain2Name || 'Captain 2',
             status: data.status || 'waiting',
@@ -156,7 +292,7 @@ export const lobbyService = {
 
       await setDoc(doc(db, 'metadata', 'lobby_index'), cleanData({
         activeLobbies: summaries,
-        lastUpdated: serverTimestamp(),
+        lastUpdated: now(),
         initialized: true
       }), { merge: true });
 
@@ -168,6 +304,14 @@ export const lobbyService = {
   },
 
   async getLobby(id: string): Promise<Lobby | null> {
+    if (IS_DEV) {
+      const local = getLocalLobby(id);
+      if (local) return local;
+      // Fallback for demo purposes if it doesn't exist
+      const mock = { ...MOCK_LOBBY_TEMPLATE, id } as Lobby;
+      setLocalLobby(id, mock);
+      return mock;
+    }
     try {
       const docSnap = await getDoc(doc(db, 'lobbies', id));
       return docSnap.exists() ? normalizeLobbyData(docSnap.data()) : null;
@@ -178,10 +322,17 @@ export const lobbyService = {
   },
 
   async updateLobby(id: string, updates: Partial<Lobby>): Promise<void> {
+    if (IS_DEV) {
+      const current = getLocalLobby(id) || ({ ...MOCK_LOBBY_TEMPLATE, id } as Lobby);
+      const updated = { ...current, ...updates, lastActivityAt: Date.now() as any };
+      setLocalLobby(id, updated);
+      console.log(`[MOCK] Lobby updated locally: ${id}`);
+      return;
+    }
     try {
       await updateDoc(doc(db, 'lobbies', id), cleanData({
         ...updates,
-        lastActivityAt: serverTimestamp()
+        lastActivityAt: now()
       }));
       
       // Index is primarily for public/waiting lobbies. 
@@ -199,10 +350,17 @@ export const lobbyService = {
   },
 
   async setHoveredGod(id: string, team: 'A' | 'B', godId: string | null): Promise<void> {
+    if (IS_DEV) {
+      const lobby = getLocalLobby(id);
+      if (lobby) {
+        setLocalLobby(id, { ...lobby, [`hoveredGodId${team}`]: godId } as any);
+      }
+      return;
+    }
     try {
       await updateDoc(doc(db, 'lobbies', id), cleanData({
         [`hoveredGodId${team}`]: godId,
-        lastActivityAt: serverTimestamp()
+        lastActivityAt: now()
       }));
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
@@ -210,6 +368,19 @@ export const lobbyService = {
   },
 
   async forceUnpause(id: string): Promise<void> {
+    if (IS_DEV) {
+      const lobby = getLocalLobby(id);
+      if (lobby) {
+        setLocalLobby(id, {
+          ...lobby,
+          isPaused: false,
+          timerStart: Date.now() as any,
+          timerPausedAt: null,
+          lastActivityAt: Date.now() as any
+        });
+      }
+      return;
+    }
     const lobbyRef = doc(db, 'lobbies', id);
     try {
       await runTransaction(db, async (transaction) => {
@@ -223,9 +394,9 @@ export const lobbyService = {
           captain1Active: true,
           captain2Active: true,
           isPaused: false,
-          timerStart: serverTimestamp(),
+          timerStart: now(),
           timerPausedAt: null,
-          lastActivityAt: serverTimestamp()
+          lastActivityAt: now()
         };
 
         transaction.update(lobbyRef, updates);
@@ -236,6 +407,7 @@ export const lobbyService = {
   },
 
   async updatePresence(id: string, captain: 'A' | 'B', active: boolean): Promise<void> {
+    if (IS_DEV) return;
     try {
       const { getServerTime } = await import('../lib/serverTime');
       const docRef = doc(db, 'lobbies', id);
@@ -245,7 +417,7 @@ export const lobbyService = {
         if (!docSnap.exists()) return;
         
         const data = normalizeLobbyData(docSnap.data());
-        const updates: any = { lastActivityAt: serverTimestamp() };
+        const updates: any = { lastActivityAt: now() };
         
         if (captain === 'A') updates.captain1Active = active;
         if (captain === 'B') updates.captain2Active = active;
@@ -263,15 +435,15 @@ export const lobbyService = {
         if (!wasPaused && nowPaused && data.timerStart) {
           let startTime = getMillis(data.timerStart);
           
-          const now = getServerTime();
-          const elapsed = (now - startTime) / 1000;
+          const nowVal = await getServerTime();
+          const elapsed = (nowVal - startTime) / 1000;
           const duration = data.config.timerDuration || 60;
           updates.pausedTimeLeft = Math.max(0, duration - Math.floor(elapsed));
-          updates.timerPausedAt = serverTimestamp();
+          updates.timerPausedAt = now();
         } else if (wasPaused && !nowPaused && data.pausedTimeLeft !== undefined && data.pausedTimeLeft !== null) {
-          const now = getServerTime();
+          const nowVal = await getServerTime();
           const duration = data.config.timerDuration || 60;
-          const newStartTimeMillis = now - (duration - data.pausedTimeLeft) * 1000;
+          const newStartTimeMillis = nowVal - (duration - data.pausedTimeLeft) * 1000;
           updates.timerStart = Timestamp.fromMillis(newStartTimeMillis);
           updates.pausedTimeLeft = null;
           updates.timerPausedAt = null;
@@ -285,6 +457,29 @@ export const lobbyService = {
   },
 
   async forceReset(id: string): Promise<void> {
+    if (IS_DEV) {
+      const lobby = getLocalLobby(id);
+      if (lobby) {
+        setLocalLobby(id, {
+          ...lobby,
+          status: 'waiting',
+          phase: 'waiting',
+          turn: 0,
+          picks: [],
+          bans: [],
+          readyA: false,
+          readyB: false,
+          scoreA: 0,
+          scoreB: 0,
+          currentGame: 1,
+          history: [],
+          replayLog: [],
+          seriesMaps: [],
+          lastActivityAt: Date.now() as any
+        } as any);
+      }
+      return;
+    }
     try {
       await updateDoc(doc(db, 'lobbies', id), cleanData({
         status: 'waiting',
@@ -319,7 +514,7 @@ export const lobbyService = {
         pickerVoteB: null,
         selectedMap: null,
         resetRequest: null,
-        lastActivityAt: serverTimestamp()
+        lastActivityAt: now()
       }));
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
@@ -327,6 +522,19 @@ export const lobbyService = {
   },
 
   async requestReset(id: string, team: 'A' | 'B'): Promise<void> {
+    if (IS_DEV) {
+      const lobby = getLocalLobby(id);
+      if (lobby) {
+        setLocalLobby(id, {
+          ...lobby,
+          resetRequest: { requestedBy: team, status: 'pending', timestamp: Date.now() as any },
+          isPaused: true,
+          timerPausedAt: Date.now() as any,
+          lastActivityAt: Date.now() as any
+        } as any);
+      }
+      return;
+    }
     try {
       const docRef = doc(db, 'lobbies', id);
       await runTransaction(db, async (transaction) => {
@@ -340,11 +548,11 @@ export const lobbyService = {
           resetRequest: {
             requestedBy: team,
             status: 'pending',
-            timestamp: serverTimestamp()
+            timestamp: now()
           },
           isPaused: true,
-          timerPausedAt: serverTimestamp(),
-          lastActivityAt: serverTimestamp()
+          timerPausedAt: now(),
+          lastActivityAt: now()
         };
 
         transaction.update(docRef, updates);
@@ -355,6 +563,17 @@ export const lobbyService = {
   },
 
   async respondReset(id: string, accept: boolean): Promise<void> {
+    if (IS_DEV) {
+      const lobby = getLocalLobby(id);
+      if (lobby && lobby.resetRequest) {
+        if (accept) {
+           setLocalLobby(id, { ...lobby, status: 'drafting', phase: 'ready', turn: 0, resetRequest: null, lastActivityAt: Date.now() as any } as any);
+        } else {
+           setLocalLobby(id, { ...lobby, resetRequest: null, isPaused: false, lastActivityAt: Date.now() as any } as any);
+        }
+      }
+      return;
+    }
     try {
       const docRef = doc(db, 'lobbies', id);
       await runTransaction(db, async (transaction) => {
@@ -397,19 +616,19 @@ export const lobbyService = {
             isPaused: false,
             timerPausedAt: null,
             resetRequest: null,
-            lastActivityAt: serverTimestamp()
+            lastActivityAt: now()
           });
         } else {
           const updates: any = {
             resetRequest: null,
-            lastActivityAt: serverTimestamp()
+            lastActivityAt: now()
           };
 
           // Resume timer logic
           if (data.isPaused && data.timerStart && data.timerPausedAt) {
              const pausedAt = getMillis(data.timerPausedAt);
-             const now = Date.now();
-             const pausedDuration = now - pausedAt;
+             const nowVal = Date.now();
+             const pausedDuration = nowVal - pausedAt;
              const oldStart = getMillis(data.timerStart);
              updates.timerStart = Timestamp.fromMillis(oldStart + pausedDuration);
              updates.timerPausedAt = null;
@@ -425,6 +644,13 @@ export const lobbyService = {
   },
 
   async resetCurrentGame(id: string): Promise<void> {
+    if (IS_DEV) {
+      const lobby = getLocalLobby(id);
+      if (lobby) {
+        setLocalLobby(id, { ...lobby, status: 'drafting', phase: 'ready', turn: 0, picks: (lobby.picks || []).map(p => ({ ...p, godId: null })), lastActivityAt: Date.now() as any } as any);
+      }
+      return;
+    }
     try {
       const docRef = doc(db, 'lobbies', id);
       await runTransaction(db, async (transaction) => {
@@ -463,9 +689,9 @@ export const lobbyService = {
           replayLog: filteredReplayLog,
           seriesMaps: newSeriesMaps,
           selectedMap: restoredMap || null,
-          timerStart: serverTimestamp(),
+          timerStart: now(),
           isPaused: false,
-          lastActivityAt: serverTimestamp()
+          lastActivityAt: now()
         });
       });
     } catch (error) {
@@ -474,11 +700,18 @@ export const lobbyService = {
   },
 
   async forceFinish(id: string): Promise<void> {
+    if (IS_DEV) {
+      const lobby = getLocalLobby(id);
+      if (lobby) {
+        setLocalLobby(id, { ...lobby, status: 'finished', phase: 'finished', lastActivityAt: Date.now() as any } as any);
+      }
+      return;
+    }
     try {
       await updateDoc(doc(db, 'lobbies', id), cleanData({
         status: 'finished',
         phase: 'finished',
-        lastActivityAt: serverTimestamp()
+        lastActivityAt: now()
       }));
       this.refreshLobbyIndex();
     } catch (error) {
@@ -518,6 +751,32 @@ export const lobbyService = {
   },
 
   subscribeToLobby(id: string, onUpdate: (lobby: Lobby) => void, onError: (err: Error) => void): Unsubscribe {
+    if (IS_DEV) {
+      const update = () => {
+        const lobby = getLocalLobby(id);
+        if (lobby) onUpdate(lobby);
+      };
+      
+      update();
+      
+      const storageListener = (e: StorageEvent | Event) => {
+        if (e instanceof StorageEvent) {
+          if (e.key === `${STORAGE_PREFIX}lobby_${id}`) update();
+        } else {
+          // Custom event for same-tab updates
+          update();
+        }
+      };
+      
+      window.addEventListener('storage', storageListener as EventListener);
+      window.addEventListener('storage_update', storageListener as EventListener);
+      
+      return () => {
+        window.removeEventListener('storage', storageListener as EventListener);
+        window.removeEventListener('storage_update', storageListener as EventListener);
+        console.log(`[MOCK] Unsubscribed from ${id} (LocalStorage)`);
+      };
+    }
     return onSnapshot(doc(db, 'lobbies', id), (docSnap) => {
       if (docSnap.exists()) {
         const data = normalizeLobbyData(docSnap.data());
@@ -530,6 +789,27 @@ export const lobbyService = {
   },
 
   subscribeToPublicLobbies(onUpdate: (lobbies: LobbySummary[]) => void): Unsubscribe {
+    if (IS_DEV) {
+      const update = () => onUpdate(getLocalIndex());
+      update();
+      
+      const storageListener = (e: StorageEvent | Event) => {
+        if (e instanceof StorageEvent) {
+          if (e.key === `${STORAGE_PREFIX}index`) update();
+        } else {
+          update();
+        }
+      };
+      
+      window.addEventListener('storage', storageListener as EventListener);
+      window.addEventListener('storage_update', storageListener as EventListener);
+      
+      return () => {
+        window.removeEventListener('storage', storageListener as EventListener);
+        window.removeEventListener('storage_update', storageListener as EventListener);
+        console.log("[MOCK] Unsubscribed from public lobbies (LocalStorage)");
+      };
+    }
     const indexRef = doc(db, 'metadata', 'lobby_index');
     
     // Auto-trigger cleanup check
@@ -578,8 +858,8 @@ export const lobbyService = {
 
           const summary = {
             id: d.id,
-            name: data.config.name || `${data.config.teamSize || 2}v${data.config.teamSize || 2} Draft`,
-            teamSize: data.config.teamSize || 2,
+            name: data.config.name || `${(typeof data.config.teamSize === 'number' && !isNaN(data.config.teamSize)) ? data.config.teamSize : 2}v${(typeof data.config.teamSize === 'number' && !isNaN(data.config.teamSize)) ? data.config.teamSize : 2} Draft`,
+            teamSize: (typeof data.config.teamSize === 'number' && !isNaN(data.config.teamSize)) ? data.config.teamSize : 2,
             captain1Name: data.captain1Name || 'Captain 1',
             captain2Name: data.captain2Name || 'Captain 2',
             status: data.status || 'waiting',
@@ -611,23 +891,24 @@ export const lobbyService = {
   },
 
   async checkAndCleanup(): Promise<void> {
+    if (IS_DEV) return;
     try {
       const metaRef = doc(db, 'meta', 'cleanup');
       const metaSnap = await getDoc(metaRef);
-      const now = Date.now();
+      const nowVal = Date.now();
       const twelveHours = 12 * 60 * 60 * 1000;
 
       if (metaSnap.exists()) {
         const lastVal = metaSnap.data().lastCleanupAt;
         const lastCleanup = getMillis(lastVal);
-        if (now - lastCleanup < twelveHours) return;
+        if (nowVal - lastCleanup < twelveHours) return;
       }
 
       // Update timestamp first to prevent concurrent cleanups from same user session
-      await setDoc(metaRef, cleanData({ lastCleanupAt: serverTimestamp() }), { merge: true });
+      await setDoc(metaRef, cleanData({ lastCleanupAt: now() }), { merge: true });
 
       // Find lobbies older than 12 hours
-      const oldDate = new Date(now - twelveHours);
+      const oldDate = new Date(nowVal - twelveHours);
       const q = query(
         collection(db, 'lobbies'),
         where('createdAt', '<', Timestamp.fromDate(oldDate)),
@@ -664,6 +945,10 @@ export const lobbyService = {
     preferredPosition: 'corner' | 'middle',
     playerNames: Record<number, string>
   ): Promise<{ success: boolean; error?: string }> {
+    if (IS_DEV) {
+      console.log(`[MOCK] Joined lobby: ${id} as ${role}`);
+      return { success: true };
+    }
     try {
       const docRef = doc(db, 'lobbies', id);
       const docSnap = await getDoc(docRef);
@@ -760,13 +1045,14 @@ export const lobbyService = {
   },
 
   async savePreset(name: string, config: LobbyConfig): Promise<string> {
+    if (IS_DEV) return "mock-preset-id";
     try {
       const id = generateId();
       const preset = {
         id,
         name,
         config,
-        createdAt: serverTimestamp()
+        createdAt: now()
       };
       await setDoc(doc(db, 'presets', id), cleanData(preset));
       return id;
@@ -777,6 +1063,7 @@ export const lobbyService = {
   },
 
   async setReady(id: string, team: 'A' | 'B', isReadyArg: any, guestId: string, generateTurnOrder: any): Promise<void> {
+    if (IS_DEV) return;
     const docRef = doc(db, 'lobbies', id);
     const isReady = !!isReadyArg;
 
@@ -810,7 +1097,7 @@ export const lobbyService = {
             if (data.status === 'waiting' || (data.status === 'drafting' && (data.phase === 'ready' || data.phase === 'waiting'))) {
               updates.status = 'drafting';
               updates.turn = 0;
-              updates.timerStart = serverTimestamp();
+              updates.timerStart = now();
               const currentTurn = data.turnOrder[0];
               if (currentTurn) {
                 updates.phase = currentTurn.target === 'MAP' 
@@ -819,7 +1106,7 @@ export const lobbyService = {
               }
             } else if (data.phase === 'ready_picker') {
               updates.phase = 'god_picker';
-              updates.timerStart = serverTimestamp();
+              updates.timerStart = now();
             }
           }
         } else if (data.phase === 'ready') {
@@ -838,7 +1125,7 @@ export const lobbyService = {
           if (isAReady && isBReady) {
             updates.status = 'drafting';
             updates.turn = 0;
-            updates.timerStart = serverTimestamp();
+            updates.timerStart = now();
             const currentTurn = data.turnOrder[0];
             if (currentTurn) {
               updates.phase = currentTurn.target === 'MAP' 
@@ -851,7 +1138,7 @@ export const lobbyService = {
           }
         }
 
-        transaction.update(docRef, cleanData({ ...updates, lastActivityAt: serverTimestamp() }));
+        transaction.update(docRef, cleanData({ ...updates, lastActivityAt: now() }));
       });
 
       const finalSnap = await getDoc(docRef);
@@ -864,6 +1151,13 @@ export const lobbyService = {
   },
 
   async forceStartDraft(id: string): Promise<void> {
+    if (IS_DEV) {
+      const lobby = getLocalLobby(id);
+      if (lobby) {
+        setLocalLobby(id, { ...lobby, status: 'drafting', phase: 'ready', timerStart: Date.now() as any, lastActivityAt: Date.now() as any } as any);
+      }
+      return;
+    }
     try {
       const docRef = doc(db, 'lobbies', id);
       await runTransaction(db, async (transaction) => {
@@ -874,12 +1168,12 @@ export const lobbyService = {
         const updates: any = {
           status: 'drafting',
           turn: 0,
-          timerStart: serverTimestamp(),
+          timerStart: now(),
           readyA: true,
           readyB: true,
           readyA_nextGame: false,
           readyB_nextGame: false,
-          lastActivityAt: serverTimestamp()
+          lastActivityAt: now()
         };
 
         const currentTurn = data.turnOrder[0];
@@ -918,6 +1212,13 @@ export const lobbyService = {
   },
 
   async soloJoin(lobbyId: string, guestId: string, nickname: string): Promise<{ success: boolean; error?: string }> {
+    if (IS_DEV) {
+      const lobby = getLocalLobby(lobbyId);
+      if (lobby) {
+        setLocalLobby(lobbyId, { ...lobby, captain1: guestId, captain2: guestId, status: 'drafting', lastActivityAt: Date.now() as any } as any);
+      }
+      return { success: true };
+    }
     try {
       const docRef = doc(db, 'lobbies', lobbyId);
       const docSnap = await getDoc(docRef);
@@ -929,8 +1230,8 @@ export const lobbyService = {
         captain2: guestId, captain2Name: `${nickname} (B)`,
         readyA: true, readyB: true,
         status: 'drafting', turn: 0,
-        timerStart: serverTimestamp(),
-        lastActivityAt: serverTimestamp(),
+        timerStart: now(),
+        lastActivityAt: now(),
         phase: data.turnOrder[0]?.target === 'MAP' ? 'map_ban' : 'god_ban'
       };
 
@@ -950,10 +1251,21 @@ export const lobbyService = {
   },
 
   async sendChatMessage(lobbyId: string, message: Omit<ChatMessage, 'id' | 'timestamp'>): Promise<void> {
+    if (IS_DEV) {
+      const msgs = JSON.parse(localStorage.getItem(`${STORAGE_PREFIX}messages_${lobbyId}`) || '[]');
+      const newMsg = {
+        ...message,
+        id: Math.random().toString(36).substring(2, 9),
+        timestamp: Date.now()
+      };
+      localStorage.setItem(`${STORAGE_PREFIX}messages_${lobbyId}`, JSON.stringify([...msgs, newMsg]));
+      window.dispatchEvent(new Event(`${STORAGE_PREFIX}messages_update_${lobbyId}`));
+      return;
+    }
     try {
       await addDoc(collection(db, 'lobbies', lobbyId, 'messages'), cleanData({
         ...message,
-        timestamp: serverTimestamp()
+        timestamp: now()
       }));
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `lobbies/${lobbyId}/messages`);
@@ -961,6 +1273,16 @@ export const lobbyService = {
   },
 
   subscribeToMessages(lobbyId: string, onUpdate: (messages: ChatMessage[]) => void): Unsubscribe {
+    if (IS_DEV) {
+      const update = () => {
+        const msgs = JSON.parse(localStorage.getItem(`${STORAGE_PREFIX}messages_${lobbyId}`) || '[]');
+        onUpdate(msgs);
+      };
+      update();
+      const listener = () => update();
+      window.addEventListener(`${STORAGE_PREFIX}messages_update_${lobbyId}`, listener);
+      return () => window.removeEventListener(`${STORAGE_PREFIX}messages_update_${lobbyId}`, listener);
+    }
     const q = query(collection(db, 'lobbies', lobbyId, 'messages'), orderBy('timestamp', 'asc'), limit(100));
     return onSnapshot(q, (snap) => {
       onUpdate(snap.docs.map(d => ({ id: d.id, ...d.data() } as ChatMessage)));

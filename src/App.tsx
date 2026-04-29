@@ -13,7 +13,7 @@ import { ConfirmModal } from './components/UI/ConfirmModal';
 import { BugReportModal } from './components/UI/BugReportModal';
 import { PatchNotesModal } from './components/UI/PatchNotesModal';
 import { TRANSLATIONS, PLAYER_COLORS, MCL_ROUND_MAPS, getMCLPicks } from './constants';
-import { Lobby, PickEntry } from './types';
+import { Lobby, PickEntry, LobbySummary } from './types';
 import { lobbyService } from './services/lobbyService';
 import { cn } from './lib/utils';
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { draftService } from '../services/draftService';
-import { lobbyService } from '../services/lobbyService';
+import { lobbyService, IS_DEV, isSoloAdminLobby } from '../services/lobbyService';
 import { Lobby, LobbyConfig, DraftTurn, TeamSize, PickEntry, SeriesType, Substitution } from '../types';
 import { MAPS, MAJOR_GODS, PLAYER_COLORS, MCL_ROUND_MAPS } from '../constants';
 import { serverTimestamp } from 'firebase/firestore';
@@ -12,9 +12,9 @@ export function useDraft(
   guestId: string, 
   lang: 'en' | 'pt'
 ) {
-  const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT' || (lobby && lobby.captain1 === lobby.captain2);
-  const effectiveIsCaptain1 = IS_DEV ? true : isCaptain1;
-  const effectiveIsCaptain2 = IS_DEV ? true : isCaptain2;
+  const isSoloAdmin = lobby ? isSoloAdminLobby(lobby) : false;
+  const effectiveIsCaptain1 = IS_DEV || isSoloAdmin || isCaptain1;
+  const effectiveIsCaptain2 = IS_DEV || isSoloAdmin || isCaptain2;
   
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);

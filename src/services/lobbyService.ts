@@ -25,8 +25,15 @@ import { Lobby, LobbyConfig, PickEntry, ChatMessage, LobbySummary, LobbyIndex } 
 import { PLAYER_COLORS, MCL_ROUND_MAPS } from '../constants';
 
 // --- SHIELDING: MOCK LAYER CONFIG ---
-const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
+export const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
 const STORAGE_PREFIX = 'mythos_draft_dev_';
+
+/**
+ * Verifica se o lobby está em modo Solo Admin (captain1 === captain2).
+ * Centralizado aqui para evitar que cada serviço implemente a própria heurística.
+ */
+export const isSoloAdminLobby = (lobby: { captain1?: string | null; captain2?: string | null }): boolean =>
+  !!(lobby.captain1 && lobby.captain2 && lobby.captain1 === lobby.captain2);
 
 const now = () => IS_DEV ? Date.now() : serverTimestamp();
 
@@ -180,6 +187,9 @@ export const normalizeLobbyData = (data: any): Lobby => {
   
   return data as Lobby;
 };
+
+/** Mapa de timers para debounce do hover — evita writes/re-renders por pixel movido. */
+const _hoverDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 export const lobbyService = {
   async createLobby(id: string, lobby: Lobby): Promise<void> {
@@ -352,21 +362,32 @@ export const lobbyService = {
   },
 
   async setHoveredGod(id: string, team: 'A' | 'B', godId: string | null): Promise<void> {
+    const key = `${id}_${team}`;
+    const existing = _hoverDebounceTimers.get(key);
+    if (existing) clearTimeout(existing);
+
     if (IS_DEV) {
-      const lobby = getLocalLobby(id);
-      if (lobby) {
-        setLocalLobby(id, { ...lobby, [`hoveredGodId${team}`]: godId } as any);
-      }
+      _hoverDebounceTimers.set(key, setTimeout(() => {
+        const lobby = getLocalLobby(id);
+        if (lobby) {
+          setLocalLobby(id, { ...lobby, [`hoveredGodId${team}`]: godId } as any);
+        }
+        _hoverDebounceTimers.delete(key);
+      }, 80));
       return;
     }
-    try {
-      await updateDoc(doc(db, 'lobbies', id), cleanData({
-        [`hoveredGodId${team}`]: godId,
-        lastActivityAt: now()
-      }));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
-    }
+
+    _hoverDebounceTimers.set(key, setTimeout(async () => {
+      try {
+        await updateDoc(doc(db, 'lobbies', id), cleanData({
+          [`hoveredGodId${team}`]: godId,
+          lastActivityAt: now()
+        }));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
+      }
+      _hoverDebounceTimers.delete(key);
+    }, 80));
   },
 
   async forceUnpause(id: string): Promise<void> {
@@ -481,8 +502,14 @@ export const lobbyService = {
           turn: 0,
           picks: [],
           bans: [],
+          mapBans: [],
+          mapPool: [],
           readyA: false,
           readyB: false,
+          readyA_report: false,
+          readyB_report: false,
+          readyA_nextGame: false,
+          readyB_nextGame: false,
           scoreA: 0,
           scoreB: 0,
           currentGame: 1,
@@ -490,6 +517,16 @@ export const lobbyService = {
           replayLog: [],
           seriesMaps: initialSeriesMaps,
           selectedMap: null,
+          reportVoteA: null,
+          reportVoteB: null,
+          voteConflict: false,
+          voteConflictCount: 0,
+          reportStartAt: null,
+          lastWinner: null,
+          pickerVoteA: null,
+          pickerVoteB: null,
+          pickerPlayerA: null,
+          pickerPlayerB: null,
           isPaused: false,
           timerStart: null,
           timerPausedAt: null,

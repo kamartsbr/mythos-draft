@@ -2,10 +2,7 @@ import { doc, updateDoc, serverTimestamp, runTransaction } from 'firebase/firest
 import { db, auth } from '../firebase';
 import { Lobby, DraftTurn, PickEntry, TurnAction, TurnTarget, TurnModifier, TurnExecution, Substitution } from '../types';
 import { MAPS, MAJOR_GODS, MCL_ROUND_MAPS, getMCLPicks, PLAYER_COLORS } from '../constants';
-import { normalizeLobbyData } from './lobbyService';
-
-// Detect Development Mode
-const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
+import { normalizeLobbyData, IS_DEV, isSoloAdminLobby } from './lobbyService';
 
 // Mock helpers for LocalStorage
 const STORAGE_PREFIX = 'mythos_draft_dev_';
@@ -127,7 +124,7 @@ export const draftService = {
     const currentTurn = freshLobby.turnOrder[freshLobby.turn];
     if (!currentTurn) return { success: false, error: "No turn found" };
 
-    const isMyTurn = IS_DEV || (freshLobby.captain1 === freshLobby.captain2) || 
+    const isMyTurn = IS_DEV || isSoloAdminLobby(freshLobby) || 
                      (isCaptain1 && currentTurn.player === 'A') || 
                      (isCaptain2 && currentTurn.player === 'B') ||
                      (currentTurn.player === 'BOTH');
@@ -438,13 +435,44 @@ export const draftService = {
           const { mapOrder, godOrder } = generateStandardTurnOrder(lobby.config, nextLobby.currentGame, finalWinner);
           nextLobby.turnOrder = [...mapOrder, ...godOrder];
           nextLobby.turn = 0;
-          nextLobby.selectedMap = null; // Clear map for next game's pick/pre-selection
-          nextLobby.picks = nextLobby.picks.map(p => ({ ...p, godId: null }));
           nextLobby.bans = [];
-          
           nextLobby.reportVoteA = null;
           nextLobby.reportVoteB = null;
           nextLobby.reportStartAt = null;
+          // Limpar estados que podem vazar entre games
+          nextLobby.pickerVoteA = null;
+          nextLobby.pickerVoteB = null;
+          nextLobby.pickerPlayerA = null;
+          nextLobby.pickerPlayerB = null;
+          nextLobby.readyA_report = false;
+          nextLobby.readyB_report = false;
+
+          // Para MCL: se o próximo game tem mapa pré-determinado (Game 3 = round map),
+          // reinicializa os picks com as posições corretas para aquele mapa.
+          // Se o mapa ainda não está definido (Game 2), apenas limpa os godIds.
+          if (nextLobby.config.preset === 'MCL') {
+            const nextGameMap = (nextLobby.seriesMaps || [])[nextLobby.currentGame - 1];
+            if (nextGameMap && nextGameMap !== '') {
+              // Game 3: mapa pré-determinado pelo round — recalcula skeleton de posições
+              const newMCLPicks = getMCLPicks(nextLobby.currentGame, nextGameMap, finalWinner);
+              const teamAPlayers = nextLobby.teamAPlayers || [];
+              const teamBPlayers = nextLobby.teamBPlayers || [];
+              nextLobby.picks = newMCLPicks.map(p => {
+                const existingPick = (lobby.picks || []).find(ep => ep.playerId === p.playerId);
+                const teamPlayers = p.team === 'A' ? teamAPlayers : teamBPlayers;
+                const playerAtPos = (teamPlayers as any[]).find((tp: any) => tp.position === p.playerId);
+                return { ...p, playerName: existingPick?.playerName || playerAtPos?.name || '' };
+              });
+              nextLobby.selectedMap = nextGameMap;
+            } else {
+              // Game 2: mapa será escolhido pelo Guest — limpa godIds mas mantém skeleton
+              nextLobby.picks = nextLobby.picks.map(p => ({ ...p, godId: null }));
+              nextLobby.selectedMap = null;
+            }
+          } else {
+            nextLobby.picks = nextLobby.picks.map(p => ({ ...p, godId: null }));
+            nextLobby.selectedMap = null;
+          }
         }
       } else {
         nextLobby.voteConflict = true;

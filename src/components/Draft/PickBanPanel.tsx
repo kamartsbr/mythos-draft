@@ -97,7 +97,9 @@ export function PickBanPanel({
   };
   
   const currentTurn = lobby.turnOrder[lobby.turn];
-  const isMyTurn = (isCaptain1 && currentTurn?.player === 'A') || 
+  const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT' || (lobby.captain1 && lobby.captain1 === lobby.captain2);
+  const isMyTurn = IS_DEV || 
+                   (isCaptain1 && currentTurn?.player === 'A') || 
                    (isCaptain2 && currentTurn?.player === 'B') ||
                    (currentTurn?.player === 'BOTH') ||
                    (isAdmin && currentTurn?.player === 'ADMIN');
@@ -241,7 +243,9 @@ export function PickBanPanel({
   const isGodBanned = (godId: string) => bans.includes(godId) || (optimisticAction?.type === 'ban' && optimisticAction.id === godId);
   const isGodPicked = (godId: string) => picks.some(p => p.godId === godId) || (optimisticAction?.type === 'pick' && optimisticAction.id === godId);
   const isGodPickedByMyTeam = (godId: string) => {
-    const myTeam = isCaptain1 ? 'A' : isCaptain2 ? 'B' : null;
+    const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
+    const currentTurn = lobby.turnOrder[lobby.turn];
+    const myTeam = IS_DEV ? (currentTurn?.player === 'B' ? 'B' : 'A') : (isCaptain1 ? 'A' : isCaptain2 ? 'B' : null);
     if (!myTeam) return false;
     return picks.some(p => p.team === myTeam && p.godId === godId) || (optimisticAction?.type === 'pick' && optimisticAction.id === godId);
   };
@@ -415,7 +419,7 @@ export function PickBanPanel({
   }), [filteredGods, isMyTurn, lobby.bans, lobby.picks, lobby.config.isExclusive, lobby.config.preset, lobby.phase, selectedGodId, optimisticAction, handleAction]);
 
   if (isViewingHistory && historyGame) {
-    const gameMap = MAPS.find(m => m.id === historyGame.mapId);
+    const gameMap = MAPS.find(m => m.id.toLowerCase() === (historyGame.mapId || '').toLowerCase());
     return (
       <div className="flex-1 flex flex-col p-8">
         <div className="flex items-center justify-between mb-8">
@@ -469,7 +473,7 @@ export function PickBanPanel({
   if (lobby.phase === 'post_draft' && lobby.status === 'drafting') {
     const seriesMaps = Array.isArray(lobby.seriesMaps) ? lobby.seriesMaps : [];
     const gameMapId = seriesMaps[lobby.currentGame - 1];
-    const gameMap = MAPS.find(m => m.id === gameMapId);
+    const gameMap = MAPS.find(m => m.id.toLowerCase() === (gameMapId || '').toLowerCase());
 
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8">
@@ -800,51 +804,57 @@ export function PickBanPanel({
       </div>
 
       {/* MCL Player Selection */}
-      {lobby.config.preset === 'MCL' && lobby.phase === 'god_pick' && isMyTurn && (
+      {lobby.config.preset === 'MCL' && currentTurn?.target === 'GOD' && currentTurn?.action === 'PICK' && isMyTurn && (
         <div className="mt-2 p-3 bg-slate-900 border border-slate-800 rounded-2xl">
           <h4 className="text-xs font-bold text-slate-300 mb-2 text-center uppercase tracking-widest">
             {selectedGodId ? t.selectPlayerForGod || "Select a player for this God" : t.selectGodFirst || "Select a God first"}
           </h4>
           <div className="flex items-center justify-center gap-2 sm:gap-4">
-            {(isCaptain1 ? lobby.teamAPlayers : lobby.teamBPlayers).map((tp, idx) => {
-              const lowerTpName = tp.name.toLowerCase().trim();
-              const isAssigned = lobby.picks.some(p => 
-                p.team === (isCaptain1 ? 'A' : 'B') && 
-                p.playerName?.toLowerCase().trim() === lowerTpName && 
-                p.godId !== null
-              );
-              return (
-                <button
-                  key={idx}
-                  disabled={!selectedGodId || isAssigned}
-                  onClick={() => {
-                    if (selectedGodId && !isAssigned) {
-                      // MCL Rule: The player selected always goes to the NEXT available pick slot
-                      // regardless of where their name was "preserved" from the previous game.
-                      const targetPick = lobby.picks.find(p => p.team === (isCaptain1 ? 'A' : 'B') && p.godId === null);
-                      
-                      if (targetPick) {
-                        handleAction(selectedGodId, targetPick.playerId, tp.name);
-                        setSelectedGodId(null);
+            {(() => {
+              const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT' || (lobby.captain1 && lobby.captain1 === lobby.captain2);
+              const turnPlayer = lobby.turnOrder[lobby.turn]?.player;
+              // In Solo (Dev) mode, we want to act for the player whose turn it currently is. 
+              // If turnPlayer is B, we should show Team B names.
+              const activeTeam = (IS_DEV && turnPlayer !== 'BOTH') ? (turnPlayer === 'B' ? 'B' : 'A') : (isCaptain1 ? 'A' : (isCaptain2 ? 'B' : 'A'));
+              const players = activeTeam === 'A' ? (lobby.teamAPlayers || []) : (lobby.teamBPlayers || []);
+              
+              return players.map((tp, idx) => {
+                const lowerTpName = tp.name.toLowerCase().trim();
+                const isAssigned = lobby.picks.some(p => 
+                  p.team === activeTeam && 
+                  p.playerName?.toLowerCase().trim() === lowerTpName && 
+                  p.godId !== null
+                );
+                return (
+                  <button
+                    key={idx}
+                    disabled={!selectedGodId || isAssigned}
+                    onClick={() => {
+                      if (selectedGodId && !isAssigned) {
+                        const targetPick = lobby.picks.find(p => p.team === activeTeam && p.godId === null);
+                        if (targetPick) {
+                          handleAction(selectedGodId, targetPick.playerId, tp.name);
+                          setSelectedGodId(null);
+                        }
                       }
-                    }
-                  }}
-                  className={cn(
-                    "px-4 py-3 sm:px-8 sm:py-4 rounded-xl border-2 transition-all duration-300 flex flex-col items-center gap-1 shadow-lg",
-                    isAssigned ? "border-slate-800 opacity-50 grayscale" :
-                    selectedGodId ? "border-slate-700 hover:border-amber-500 hover:bg-amber-500/20 hover:shadow-amber-500/10 cursor-pointer" :
-                    "border-slate-800 opacity-50 cursor-not-allowed"
-                  )}
-                >
-                  <span className={cn(
-                    "text-xs sm:text-sm font-black uppercase tracking-widest truncate max-w-[100px] sm:max-w-[140px]",
-                    isAssigned ? "text-slate-500" : "text-white"
-                  )}>
-                    {tp.name}
-                  </span>
-                </button>
-              );
-            })}
+                    }}
+                    className={cn(
+                      "px-4 py-3 sm:px-8 sm:py-4 rounded-xl border-2 transition-all duration-300 flex flex-col items-center gap-1 shadow-lg",
+                      isAssigned ? "border-slate-800 opacity-50 grayscale" :
+                      selectedGodId ? "border-slate-700 hover:border-amber-500 hover:bg-amber-500/20 hover:shadow-amber-500/10 cursor-pointer" :
+                      "border-slate-800 opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    <span className={cn(
+                      "text-xs sm:text-sm font-black uppercase tracking-widest truncate max-w-[100px] sm:max-w-[140px]",
+                      isAssigned ? "text-slate-500" : "text-white"
+                    )}>
+                      {tp.name}
+                    </span>
+                  </button>
+                );
+              });
+            })()}
           </div>
         </div>
       )}

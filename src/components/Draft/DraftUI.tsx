@@ -113,7 +113,7 @@ export function DraftUI(props: DraftUIProps) {
   const seriesMapsList = useMemo(() => (Array.isArray(lobby.seriesMaps) ? lobby.seriesMaps : Object.values(lobby.seriesMaps || {})), [lobby.seriesMaps]);
 
   const mapElements = useMemo(() => seriesMapsList.map((mapId, idx) => {
-    const map = MAPS.find(m => m.id === mapId);
+    const map = MAPS.find(m => m.id.toLowerCase() === (mapId || '').toLowerCase());
     const isCurrent = lobby.currentGame === idx + 1;
     const history = Array.isArray(lobby.history) ? lobby.history : [];
     const canView = history && history[idx];

@@ -233,6 +233,18 @@ export function DraftBoard(props: DraftBoardProps) {
               {copied ? <Check className="w-6 h-6" /> : <Copy className="w-6 h-6" />}
               {copied ? t.linkCopied : t.copyInviteLink}
             </motion.button>
+
+            {import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT' && (
+              <motion.button 
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={forceStartDraft}
+                className="w-full py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase tracking-widest transition-all flex items-center justify-center gap-3 shadow-xl mt-4"
+              >
+                <Users className="w-5 h-5" />
+                {props.lang === 'pt' ? 'Iniciar Modo Solo (Dev)' : 'Start Solo Mode (Dev)'}
+              </motion.button>
+            )}
           </div>
 
           <div className="mt-12 flex items-center justify-center gap-4 text-slate-600">

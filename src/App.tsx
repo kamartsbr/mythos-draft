@@ -191,6 +191,12 @@ function AppContent() {
       // Double check against raw lobby data to avoid timing issues
       if (lobby.captain1 === guestId || lobby.captain2 === guestId) return;
       
+      const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
+      if (IS_DEV && !lobby.captain2) {
+          soloJoin(lobbyId, nickname || 'Auto-Joined-Dev');
+          return;
+      }
+      
       setShowJoinModal(true);
     }
   }, [isAuthReady, lobbyId, lobby, isCaptain1, isCaptain2, isSpectator, guestId]);

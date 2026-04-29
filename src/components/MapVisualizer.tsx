@@ -18,7 +18,7 @@ interface MapVisualizerProps {
 
 export const MapVisualizer: React.FC<MapVisualizerProps> = ({ lobby, isVisible, isCaptain1, isCaptain2, game, selectedPositionId, t, timeLeft }) => {
   const mapId = game ? game.mapId : lobby.selectedMap;
-  const selectedMap = MAPS.find(m => m.id === mapId);
+  const selectedMap = MAPS.find(m => m.id.toLowerCase() === (mapId || '').toLowerCase());
   const mapRef = React.useRef<HTMLDivElement>(null);
 
   if (!selectedMap || !selectedMap.positions) {

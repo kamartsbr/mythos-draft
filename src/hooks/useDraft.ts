@@ -12,6 +12,10 @@ export function useDraft(
   guestId: string, 
   lang: 'en' | 'pt'
 ) {
+  const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT' || (lobby && lobby.captain1 === lobby.captain2);
+  const effectiveIsCaptain1 = IS_DEV ? true : isCaptain1;
+  const effectiveIsCaptain2 = IS_DEV ? true : isCaptain2;
+  
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -32,13 +36,13 @@ export function useDraft(
     const isReadyWaitPhase = isGame1Ready || lobby.phase === 'ready_picker';
 
     const currentReady = isReadyWaitPhase
-      ? (isCaptain1 ? lobby.readyA : lobby.readyB)
-      : (isCaptain1 ? lobby.readyA_nextGame : lobby.readyB_nextGame);
+      ? (effectiveIsCaptain1 ? lobby.readyA : lobby.readyB)
+      : (effectiveIsCaptain1 ? lobby.readyA_nextGame : lobby.readyB_nextGame);
 
     if (optimisticReady !== null && currentReady === optimisticReady) {
       setOptimisticReady(null);
     }
-  }, [lobby, isCaptain1, isCaptain2, optimisticReady]);
+  }, [lobby, effectiveIsCaptain1, effectiveIsCaptain2, optimisticReady]);
 
   // Clear optimistic action when lobby updates to match or phase changes
   useEffect(() => {
@@ -280,7 +284,7 @@ export function useDraft(
 
     setIsProcessing(true);
     try {
-      const result = await draftService.handleAction(lobby, actionId, isCaptain1, isCaptain2, playerId, playerName, options);
+      const result = await draftService.handleAction(lobby, actionId, effectiveIsCaptain1, effectiveIsCaptain2, playerId, playerName, options);
       if (!result.success) {
         if (result.error !== "Not your turn") {
           setError(result.error || "Action failed");
@@ -293,24 +297,24 @@ export function useDraft(
     } finally {
       setIsProcessing(false);
     }
-  }, [lobby, isCaptain1, isCaptain2, isProcessing]);
+  }, [lobby, effectiveIsCaptain1, effectiveIsCaptain2, isProcessing]);
 
   const reportScore = useCallback(async (winner: 'A' | 'B' | null) => {
     if (!lobby) return;
-    const result = await draftService.reportScore(lobby, winner, isCaptain1, isCaptain2, (cfg, gn, lw) => generateStandardTurnOrder(cfg, gn, lw));
+    const result = await draftService.reportScore(lobby, winner, effectiveIsCaptain1, effectiveIsCaptain2, (cfg, gn, lw) => generateStandardTurnOrder(cfg, gn, lw));
     if (!result.success) {
       setError(result.error || "Report failed");
     }
-  }, [lobby, isCaptain1, isCaptain2, generateStandardTurnOrder]);
+  }, [lobby, effectiveIsCaptain1, effectiveIsCaptain2, generateStandardTurnOrder]);
 
   const resetVotes = useCallback(async () => {
-    if (!lobby || (!isCaptain1 && !isCaptain2)) return;
+    if (!lobby || (!effectiveIsCaptain1 && !effectiveIsCaptain2)) return;
     await draftService.resetVotes(lobby.id);
-  }, [lobby, isCaptain1, isCaptain2]);
+  }, [lobby, effectiveIsCaptain1, effectiveIsCaptain2]);
 
   const handleReady = useCallback(async (isReadyArg?: any) => {
     if (!lobby || isProcessing) return;
-    if (!isCaptain1 && !isCaptain2) return; // Spectators cannot set ready
+    if (!effectiveIsCaptain1 && !effectiveIsCaptain2) return; // Spectators cannot set ready
     
     // Force boolean. If it's an event or undefined, default to true.
     // If it's explicitly false, keep it false (for unready).
@@ -319,7 +323,7 @@ export function useDraft(
     setOptimisticReady(isReady);
     setIsProcessing(true);
     try {
-      const team = isCaptain1 ? 'A' : 'B';
+      const team = effectiveIsCaptain1 ? 'A' : 'B';
       await lobbyService.setReady(lobby.id, team, isReady, guestId, generateStandardTurnOrder);
     } catch (err: any) {
       console.error("Ready action failed:", err);
@@ -328,7 +332,7 @@ export function useDraft(
     } finally {
       setIsProcessing(false);
     }
-  }, [lobby, isCaptain1, isCaptain2, guestId, generateStandardTurnOrder, isProcessing]);
+  }, [lobby, effectiveIsCaptain1, effectiveIsCaptain2, guestId, generateStandardTurnOrder, isProcessing]);
 
   const handlePickerAction = useCallback(async (godIdArg: any, playerId?: number, playerName?: string, options?: { isRandom?: boolean }) => {
     if (!lobby || isProcessing) return;
@@ -340,7 +344,7 @@ export function useDraft(
     setOptimisticAction({ id: godId, type: 'pick', playerId, playerName });
     setIsProcessing(true);
     try {
-      const result = await draftService.handlePickerAction(lobby, godId, playerId, isCaptain1, isCaptain2, options);
+      const result = await draftService.handlePickerAction(lobby, godId, playerId, effectiveIsCaptain1, effectiveIsCaptain2, options);
       if (!result.success) {
         if (result.error !== "Not your turn") {
           setError(result.error || "Picker action failed");
@@ -353,23 +357,23 @@ export function useDraft(
     } finally {
       setIsProcessing(false);
     }
-  }, [lobby, isCaptain1, isCaptain2, isProcessing]);
+  }, [lobby, effectiveIsCaptain1, effectiveIsCaptain2, isProcessing]);
 
   const updateRoster = useCallback(async (newPicks: PickEntry[], subs: Substitution[]) => {
     if (!lobby) return;
-    if (!isCaptain1 && !isCaptain2) return; // Spectators cannot update roster
-    const team = isCaptain1 ? 'A' : 'B';
-    const result = await draftService.updateRoster(lobby, team, newPicks, subs, isCaptain1, isCaptain2);
+    if (!effectiveIsCaptain1 && !effectiveIsCaptain2) return; // Spectators cannot update roster
+    const team = effectiveIsCaptain1 ? 'A' : 'B';
+    const result = await draftService.updateRoster(lobby, team, newPicks, subs, effectiveIsCaptain1, effectiveIsCaptain2);
     if (!result.success) {
       setError(result.error || "Roster update failed");
     }
-  }, [lobby, isCaptain1]);
+  }, [lobby, effectiveIsCaptain1, effectiveIsCaptain2]);
 
   const requestReset = useCallback(async () => {
     if (!lobby) return;
-    const team = isCaptain1 ? 'A' : 'B';
+    const team = effectiveIsCaptain1 ? 'A' : 'B';
     await lobbyService.requestReset(lobby.id, team);
-  }, [lobby, isCaptain1]);
+  }, [lobby, effectiveIsCaptain1]);
 
   const respondReset = useCallback(async (accept: boolean) => {
     if (!lobby) return;

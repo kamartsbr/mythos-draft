@@ -97,7 +97,8 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
   const teamMapPicks = optimisticBans
     .filter(step => step.action === 'PICK' && step.target === 'MAP' && step.player === team && step.gameNumber === lobby.currentGame);
   
-  const isMyTeam = (team === 'A' && isCaptain1) || (team === 'B' && isCaptain2);
+  const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT' || (lobby.captain1 && lobby.captain1 === lobby.captain2);
+  const isMyTeam = IS_DEV || (team === 'A' && isCaptain1) || (team === 'B' && isCaptain2);
   const captainName = team === 'A' ? lobby.captain1Name : lobby.captain2Name;
   const teamName = captainName || (team === 'A' ? 'Host' : 'Guest');
 

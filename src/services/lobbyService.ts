@@ -38,9 +38,8 @@ const getLocalLobby = (id: string): Lobby | null => {
 
 const setLocalLobby = (id: string, lobby: Lobby) => {
   localStorage.setItem(`${STORAGE_PREFIX}lobby_${id}`, JSON.stringify(lobby));
-  // In the same tab, 'storage' event doesn't fire. We can manually dispatch if needed, 
-  // but usually users test in multiple tabs.
-  window.dispatchEvent(new Event('storage_update'));
+  window.dispatchEvent(new Event('storage'));
+  window.dispatchEvent(new CustomEvent('storage_update', { detail: lobby }));
 };
 
 const getLocalIndex = (): LobbySummary[] => {
@@ -51,6 +50,7 @@ const getLocalIndex = (): LobbySummary[] => {
 
 const setLocalIndex = (summaries: LobbySummary[]) => {
   localStorage.setItem(`${STORAGE_PREFIX}index`, JSON.stringify(summaries));
+  window.dispatchEvent(new Event('storage_update'));
 };
 
 const MOCK_LOBBY_TEMPLATE: Partial<Lobby> = {
@@ -72,12 +72,18 @@ const MOCK_LOBBY_TEMPLATE: Partial<Lobby> = {
     mapBanCount: 1,
     banCount: 3,
     isExclusive: true,
-    pickType: 'Global',
+    pickType: 'alternated',
     allowedPantheons: ['Greek', 'Norse', 'Egyptian', 'Atlantean'],
     allowedMaps: ['Alfheim', 'Elysium', 'Ghost Lake', 'Giza'],
     timerDuration: 60,
     mapTurnOrder: [],
-    godTurnOrder: []
+    godTurnOrder: [],
+    hasBans: true,
+    isPrivate: false,
+    firstMapRandom: false,
+    acePick: false,
+    acePickHidden: false,
+    loserPicksNextMap: false
   },
   picks: [],
   bans: [],
@@ -306,11 +312,7 @@ export const lobbyService = {
   async getLobby(id: string): Promise<Lobby | null> {
     if (IS_DEV) {
       const local = getLocalLobby(id);
-      if (local) return local;
-      // Fallback for demo purposes if it doesn't exist
-      const mock = { ...MOCK_LOBBY_TEMPLATE, id } as Lobby;
-      setLocalLobby(id, mock);
-      return mock;
+      return local;
     }
     try {
       const docSnap = await getDoc(doc(db, 'lobbies', id));
@@ -752,28 +754,24 @@ export const lobbyService = {
 
   subscribeToLobby(id: string, onUpdate: (lobby: Lobby) => void, onError: (err: Error) => void): Unsubscribe {
     if (IS_DEV) {
-      const update = () => {
+      const handler = () => {
         const lobby = getLocalLobby(id);
-        if (lobby) onUpdate(lobby);
-      };
-      
-      update();
-      
-      const storageListener = (e: StorageEvent | Event) => {
-        if (e instanceof StorageEvent) {
-          if (e.key === `${STORAGE_PREFIX}lobby_${id}`) update();
-        } else {
-          // Custom event for same-tab updates
-          update();
+        if (lobby) {
+          onUpdate(lobby);
         }
       };
-      
-      window.addEventListener('storage', storageListener as EventListener);
-      window.addEventListener('storage_update', storageListener as EventListener);
-      
+
+      // Tenta carregar imediatamente
+      handler();
+
+      // Escuta mudanças de OUTRAS abas (evento nativo)
+      window.addEventListener('storage', handler);
+      // Escuta mudanças da PRÓPRIA aba (seu evento customizado)
+      window.addEventListener('storage_update', handler);
+
       return () => {
-        window.removeEventListener('storage', storageListener as EventListener);
-        window.removeEventListener('storage_update', storageListener as EventListener);
+        window.removeEventListener('storage', handler);
+        window.removeEventListener('storage_update', handler);
         console.log(`[MOCK] Unsubscribed from ${id} (LocalStorage)`);
       };
     }
@@ -790,23 +788,15 @@ export const lobbyService = {
 
   subscribeToPublicLobbies(onUpdate: (lobbies: LobbySummary[]) => void): Unsubscribe {
     if (IS_DEV) {
-      const update = () => onUpdate(getLocalIndex());
-      update();
+      const handler = () => onUpdate(getLocalIndex());
+      handler();
       
-      const storageListener = (e: StorageEvent | Event) => {
-        if (e instanceof StorageEvent) {
-          if (e.key === `${STORAGE_PREFIX}index`) update();
-        } else {
-          update();
-        }
-      };
-      
-      window.addEventListener('storage', storageListener as EventListener);
-      window.addEventListener('storage_update', storageListener as EventListener);
+      window.addEventListener('storage', handler);
+      window.addEventListener('storage_update', handler);
       
       return () => {
-        window.removeEventListener('storage', storageListener as EventListener);
-        window.removeEventListener('storage_update', storageListener as EventListener);
+        window.removeEventListener('storage', handler);
+        window.removeEventListener('storage_update', handler);
         console.log("[MOCK] Unsubscribed from public lobbies (LocalStorage)");
       };
     }
@@ -1063,9 +1053,128 @@ export const lobbyService = {
   },
 
   async setReady(id: string, team: 'A' | 'B', isReadyArg: any, guestId: string, generateTurnOrder: any): Promise<void> {
-    if (IS_DEV) return;
-    const docRef = doc(db, 'lobbies', id);
     const isReady = !!isReadyArg;
+
+    if (IS_DEV) {
+      const data = getLocalLobby(id);
+      if (!data) return;
+
+      const updates: any = {};
+      const isGame1Ready = data.currentGame === 1 && (data.status === 'waiting' || data.phase === 'ready' || data.phase === 'waiting');
+      const isReadyWaitPhase = isGame1Ready || data.phase === 'ready_picker';
+      
+      if (isReadyWaitPhase) {
+        // Solo Dev Mode: auto-ready both sides
+        updates.readyA = isReady;
+        updates.readyB = isReady;
+        
+        // Ensure we have a captain 2 for solo testing
+        if (!data.captain2) {
+            updates.captain2 = 'dev-bot-b';
+            updates.captain2Name = 'Bot B';
+        }
+
+        // Initialize players for MCL/Team presets in Solo Mode if missing
+        if (!data.teamAPlayers || data.teamAPlayers.length === 0) {
+          if (data.config.preset === 'MCL' || data.config.teamSize === 3) {
+            updates.teamAPlayers = [
+              { name: (data.captain1Name || 'Host') + ' (P1)', position: 1 },
+              { name: (data.captain1Name || 'Host') + ' (P2)', position: 4 },
+              { name: (data.captain1Name || 'Host') + ' (P3)', position: 5 }
+            ];
+          } else if (data.config.teamSize === 2) {
+            updates.teamAPlayers = [
+              { name: (data.captain1Name || 'Host') + ' (C)', position: 1 },
+              { name: (data.captain1Name || 'Host') + ' (M)', position: 4 }
+            ];
+          } else {
+            updates.teamAPlayers = [{ name: (data.captain1Name || 'Host'), position: 5 }];
+          }
+        }
+
+        if (!data.teamBPlayers || data.teamBPlayers.length === 0) {
+          if (data.config.preset === 'MCL' || data.config.teamSize === 3) {
+            updates.teamBPlayers = [
+              { name: 'Bot B (P1)', position: 3 },
+              { name: 'Bot B (P2)', position: 2 },
+              { name: 'Bot B (P3)', position: 6 }
+            ];
+          } else if (data.config.teamSize === 2) {
+            updates.teamBPlayers = [
+              { name: 'Bot B (C)', position: 3 },
+              { name: 'Bot B (M)', position: 2 }
+            ];
+          } else {
+            updates.teamBPlayers = [{ name: 'Bot B', position: 6 }];
+          }
+        }
+        
+        if (isReady) {
+          if (data.status === 'waiting' || (data.status === 'drafting' && (data.phase === 'ready' || data.phase === 'waiting'))) {
+            updates.status = 'drafting';
+            updates.turn = 0;
+            updates.timerStart = Date.now() as any;
+            const currentTurn = data.turnOrder?.[0];
+            if (currentTurn) {
+              updates.phase = currentTurn.target === 'MAP' 
+                ? (currentTurn.action === 'BAN' ? 'map_ban' : 'map_pick') 
+                : (currentTurn.action === 'BAN' ? 'god_ban' : 'god_pick');
+            }
+          } else if (data.phase === 'ready_picker') {
+            updates.phase = 'god_picker';
+            updates.timerStart = Date.now() as any;
+          }
+        }
+      } else if (data.phase === 'ready') {
+        updates.readyA_nextGame = isReady;
+        updates.readyB_nextGame = isReady;
+
+        if (isReady) {
+          updates.status = 'drafting';
+          let startingTurn = 0;
+          updates.timerStart = Date.now() as any;
+          
+          let preSelectedMap = data.seriesMaps?.[data.currentGame - 1];
+
+          // Ensure map is set if it's pre-determined for this game (e.g. MCL R3 maps)
+          if (preSelectedMap) {
+            updates.selectedMap = preSelectedMap;
+            
+            // If the first turn is a map pick, and we already have a map, skip that turn
+            if (data.turnOrder?.[0]?.target === 'MAP' && data.turnOrder?.[0]?.action === 'PICK') {
+              startingTurn = 1;
+            }
+
+            // If it's MCL, we must also initialize the picks based on the pre-determined map
+            if (data.config.preset === 'MCL') {
+              const { getMCLPicks } = await import('../constants');
+              const newMCLPicks = getMCLPicks(data.currentGame, updates.selectedMap, data.lastWinner || null);
+              
+              // Map names/ids from the config roster if available
+              updates.picks = newMCLPicks.map(p => {
+                const teamPlayers = p.team === 'A' ? data.teamAPlayers : data.teamBPlayers;
+                const playerAtPos = teamPlayers?.find(tp => tp.position === p.playerId);
+                return { ...p, playerName: playerAtPos?.name || '' };
+              });
+            }
+          }
+
+          updates.turn = startingTurn;
+          const currentTurn = data.turnOrder?.[startingTurn];
+          if (currentTurn) {
+            updates.phase = currentTurn.target === 'MAP' 
+              ? (currentTurn.action === 'BAN' ? 'map_ban' : 'map_pick') 
+              : (currentTurn.action === 'BAN' ? 'god_ban' : 'god_pick');
+          }
+          updates.readyA_nextGame = false;
+          updates.readyB_nextGame = false;
+        }
+      }
+
+      setLocalLobby(id, cleanData({ ...data, ...updates, lastActivityAt: Date.now() as any }));
+      return;
+    }
+    const docRef = doc(db, 'lobbies', id);
 
     try {
       await runTransaction(db, async (transaction) => {
@@ -1154,7 +1263,51 @@ export const lobbyService = {
     if (IS_DEV) {
       const lobby = getLocalLobby(id);
       if (lobby) {
-        setLocalLobby(id, { ...lobby, status: 'drafting', phase: 'ready', timerStart: Date.now() as any, lastActivityAt: Date.now() as any } as any);
+        const turnOrder = lobby.turnOrder || [];
+        const currentTurn = turnOrder[0];
+        let initialPhase = 'god_ban';
+        if (currentTurn) {
+          initialPhase = currentTurn.target === 'MAP' 
+            ? (currentTurn.action === 'BAN' ? 'map_ban' : 'map_pick') 
+            : (currentTurn.action === 'BAN' ? 'god_ban' : 'god_pick');
+        }
+
+        const mockPlayersA = lobby.teamAPlayers || (
+          (lobby.config.preset === 'MCL' || lobby.config.teamSize === 3) ? [
+            { name: (lobby.captain1Name || 'Host') + ' (P1)', position: 1 },
+            { name: (lobby.captain1Name || 'Host') + ' (P2)', position: 4 },
+            { name: (lobby.captain1Name || 'Host') + ' (P3)', position: 5 }
+          ] : (lobby.config.teamSize === 2 ? [
+            { name: (lobby.captain1Name || 'Host') + ' (C)', position: 1 },
+            { name: (lobby.captain1Name || 'Host') + ' (M)', position: 4 }
+          ] : [{ name: (lobby.captain1Name || 'Host'), position: 5 }])
+        );
+
+        const mockPlayersB = lobby.teamBPlayers || (
+          (lobby.config.preset === 'MCL' || lobby.config.teamSize === 3) ? [
+            { name: 'Bot B (P1)', position: 3 },
+            { name: 'Bot B (P2)', position: 2 },
+            { name: 'Bot B (P3)', position: 6 }
+          ] : (lobby.config.teamSize === 2 ? [
+            { name: 'Bot B (C)', position: 3 },
+            { name: 'Bot B (M)', position: 2 }
+          ] : [{ name: 'Bot B', position: 6 }])
+        );
+
+        setLocalLobby(id, { 
+            ...lobby, 
+            status: 'drafting', 
+            phase: initialPhase, 
+            turn: 0,
+            readyA: true,
+            readyB: true,
+            timerStart: Date.now() as any, 
+            lastActivityAt: Date.now() as any,
+            captain2: lobby.captain2 || 'dev-bot-b',
+            captain2Name: lobby.captain2Name || 'Bot B',
+            teamAPlayers: mockPlayersA,
+            teamBPlayers: mockPlayersB
+        } as any);
       }
       return;
     }
@@ -1215,7 +1368,52 @@ export const lobbyService = {
     if (IS_DEV) {
       const lobby = getLocalLobby(lobbyId);
       if (lobby) {
-        setLocalLobby(lobbyId, { ...lobby, captain1: guestId, captain2: guestId, status: 'drafting', lastActivityAt: Date.now() as any } as any);
+        const turnOrder = lobby.turnOrder || [];
+        const currentTurn = turnOrder[0];
+        let initialPhase = 'god_ban';
+        if (currentTurn) {
+          initialPhase = currentTurn.target === 'MAP' 
+            ? (currentTurn.action === 'BAN' ? 'map_ban' : 'map_pick') 
+            : (currentTurn.action === 'BAN' ? 'god_ban' : 'god_pick');
+        }
+
+        const mockPlayersA = lobby.teamAPlayers || (
+          (lobby.config.preset === 'MCL' || lobby.config.teamSize === 3) ? [
+            { name: `${nickname} (A1)`, position: 1 },
+            { name: `${nickname} (A2)`, position: 4 },
+            { name: `${nickname} (A3)`, position: 5 }
+          ] : (lobby.config.teamSize === 2 ? [
+            { name: `${nickname} (AC)`, position: 1 },
+            { name: `${nickname} (AM)`, position: 4 }
+          ] : [{ name: nickname, position: 5 }])
+        );
+        const mockPlayersB = lobby.teamBPlayers || (
+          (lobby.config.preset === 'MCL' || lobby.config.teamSize === 3) ? [
+            { name: `${nickname} (B1)`, position: 3 },
+            { name: `${nickname} (B2)`, position: 2 },
+            { name: `${nickname} (B3)`, position: 6 }
+          ] : (lobby.config.teamSize === 2 ? [
+            { name: `${nickname} (BC)`, position: 3 },
+            { name: `${nickname} (BM)`, position: 2 }
+          ] : [{ name: `${nickname} (B)`, position: 6 }])
+        );
+
+        setLocalLobby(lobbyId, { 
+          ...lobby, 
+          captain1: guestId, 
+          captain2: guestId, 
+          captain1Name: `${nickname} (A)`,
+          captain2Name: `${nickname} (B)`,
+          teamAPlayers: mockPlayersA,
+          teamBPlayers: mockPlayersB,
+          readyA: true,
+          readyB: true,
+          status: 'drafting', 
+          phase: initialPhase,
+          turn: 0,
+          timerStart: Date.now() as any,
+          lastActivityAt: Date.now() as any 
+        } as any);
       }
       return { success: true };
     }
@@ -1259,7 +1457,7 @@ export const lobbyService = {
         timestamp: Date.now()
       };
       localStorage.setItem(`${STORAGE_PREFIX}messages_${lobbyId}`, JSON.stringify([...msgs, newMsg]));
-      window.dispatchEvent(new Event(`${STORAGE_PREFIX}messages_update_${lobbyId}`));
+      window.dispatchEvent(new Event('storage_update'));
       return;
     }
     try {
@@ -1274,14 +1472,19 @@ export const lobbyService = {
 
   subscribeToMessages(lobbyId: string, onUpdate: (messages: ChatMessage[]) => void): Unsubscribe {
     if (IS_DEV) {
-      const update = () => {
+      const handler = () => {
         const msgs = JSON.parse(localStorage.getItem(`${STORAGE_PREFIX}messages_${lobbyId}`) || '[]');
         onUpdate(msgs);
       };
-      update();
-      const listener = () => update();
-      window.addEventListener(`${STORAGE_PREFIX}messages_update_${lobbyId}`, listener);
-      return () => window.removeEventListener(`${STORAGE_PREFIX}messages_update_${lobbyId}`, listener);
+      handler();
+      
+      window.addEventListener('storage', handler);
+      window.addEventListener('storage_update', handler);
+      
+      return () => {
+        window.removeEventListener('storage', handler);
+        window.removeEventListener('storage_update', handler);
+      };
     }
     const q = query(collection(db, 'lobbies', lobbyId, 'messages'), orderBy('timestamp', 'asc'), limit(100));
     return onSnapshot(q, (snap) => {

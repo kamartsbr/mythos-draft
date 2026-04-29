@@ -8,14 +8,17 @@ import { normalizeLobbyData } from './lobbyService';
 const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
 
 // Mock helpers for LocalStorage
+const STORAGE_PREFIX = 'mythos_draft_dev_';
+
 const getLocalLobby = (id: string): Lobby | null => {
-  const data = localStorage.getItem(`lobby_${id}`);
+  const data = localStorage.getItem(`${STORAGE_PREFIX}lobby_${id}`);
   return data ? JSON.parse(data) : null;
 };
 
 const setLocalLobby = (id: string, lobby: Lobby) => {
-  localStorage.setItem(`lobby_${id}`, JSON.stringify(lobby));
-  window.dispatchEvent(new CustomEvent('storage_update', { detail: { id, lobby } }));
+  localStorage.setItem(`${STORAGE_PREFIX}lobby_${id}`, JSON.stringify(lobby));
+  window.dispatchEvent(new Event('storage'));
+  window.dispatchEvent(new CustomEvent('storage_update', { detail: lobby }));
 };
 
 const now = () => IS_DEV ? Date.now() : serverTimestamp();
@@ -124,7 +127,8 @@ export const draftService = {
     const currentTurn = freshLobby.turnOrder[freshLobby.turn];
     if (!currentTurn) return { success: false, error: "No turn found" };
 
-    const isMyTurn = (isCaptain1 && currentTurn.player === 'A') || 
+    const isMyTurn = IS_DEV || 
+                     (isCaptain1 && currentTurn.player === 'A') || 
                      (isCaptain2 && currentTurn.player === 'B') ||
                      (currentTurn.player === 'BOTH');
     
@@ -514,6 +518,88 @@ export const draftService = {
     } catch (error) {
        handleFirestoreError(error, OperationType.UPDATE, `lobbies/${lobby.id}`);
        return { success: false, error: "Picker action failed" };
+    }
+  },
+
+  async resetVotes(id: string): Promise<void> {
+    if (IS_DEV) {
+      const freshLobby = getLocalLobby(id);
+      if (freshLobby) {
+        setLocalLobby(id, cleanData({ ...freshLobby, reportVoteA: null, reportVoteB: null, voteConflict: false, reportStartAt: null, lastActivityAt: now() }));
+      }
+      return;
+    }
+    try {
+      await updateDoc(doc(db, 'lobbies', id), cleanData({
+        reportVoteA: null,
+        reportVoteB: null,
+        voteConflict: false,
+        reportStartAt: null,
+        lastActivityAt: serverTimestamp()
+      }));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
+    }
+  },
+
+  async updateRoster(
+    lobby: Lobby, 
+    team: 'A' | 'B', 
+    newPicks: PickEntry[], 
+    subs: Substitution[], 
+    isCaptain1: boolean, 
+    isCaptain2: boolean
+  ): Promise<{ success: boolean; error?: string }> {
+    if (IS_DEV) {
+      const freshLobby = getLocalLobby(lobby.id);
+      if (!freshLobby) return { success: false, error: "Lobby not found" };
+      
+      const newHistoryPicks = [...(freshLobby.picks || [])];
+      newPicks.forEach(np => {
+        const index = newHistoryPicks.findIndex(hp => hp.playerId === np.playerId && hp.team === np.team);
+        if (index !== -1) {
+          newHistoryPicks[index] = np;
+        } else {
+          newHistoryPicks.push(np);
+        }
+      });
+      const addedSubs = [...(freshLobby.lastSubs || []), ...subs];
+
+      setLocalLobby(lobby.id, cleanData({ 
+        ...freshLobby, 
+        picks: newHistoryPicks,
+        lastSubs: addedSubs,
+        lastActivityAt: now() 
+      }));
+      return { success: true };
+    }
+    try {
+      return await runTransaction(db, async (transaction) => {
+        const lobbyRef = doc(db, 'lobbies', lobby.id);
+        const lobbyDoc = await transaction.get(lobbyRef);
+        if (!lobbyDoc.exists()) return { success: false, error: "Lobby not found" };
+        
+        const freshLobby = normalizeLobbyData({ id: lobbyDoc.id, ...lobbyDoc.data() });
+        const updates: Partial<Lobby> = { lastActivityAt: serverTimestamp() };
+        
+        const newHistoryPicks = [...(freshLobby.picks || [])];
+        newPicks.forEach(np => {
+          const index = newHistoryPicks.findIndex(hp => hp.playerId === np.playerId && hp.team === np.team);
+          if (index !== -1) {
+            newHistoryPicks[index] = np;
+          } else {
+            newHistoryPicks.push(np);
+          }
+        });
+        updates.picks = newHistoryPicks;
+        updates.lastSubs = [...(freshLobby.lastSubs || []), ...subs];
+        
+        transaction.update(lobbyRef, cleanData(updates));
+        return { success: true };
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `lobbies/${lobby.id}`);
+      return { success: false, error: "Roster update failed" };
     }
   }
 };

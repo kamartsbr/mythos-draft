@@ -19,8 +19,10 @@ interface GodPickerProps {
 export function GodPicker({ lobby, isCaptain1, isCaptain2, handlePickerAction, timeLeft, t, optimisticAction }: GodPickerProps) {
   const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null);
   const [selectedGodId, setSelectedGodId] = useState<string | null>(null);
-  const myTeam = isCaptain1 ? 'A' : isCaptain2 ? 'B' : null;
-  const myVote = isCaptain1 ? lobby.pickerVoteA : lobby.pickerVoteB;
+  const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
+  const currentTurn = lobby.turnOrder[lobby.turn];
+  const myTeam = IS_DEV ? (currentTurn?.player === 'B' ? 'B' : 'A') : (isCaptain1 ? 'A' : isCaptain2 ? 'B' : null);
+  const myVote = IS_DEV ? (myTeam === 'A' ? lobby.pickerVoteA : lobby.pickerVoteB) : (isCaptain1 ? lobby.pickerVoteA : lobby.pickerVoteB);
   const optimisticVote = (optimisticAction?.type === 'pick') ? optimisticAction.id : null;
   const effectiveVote = myVote || optimisticVote;
   

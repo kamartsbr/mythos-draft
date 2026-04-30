@@ -1216,34 +1216,13 @@ export const lobbyService = {
           
           let preSelectedMap = data.seriesMaps?.[data.currentGame - 1];
 
-          // Ensure map is set if it's pre-determined for this game (e.g. MCL R3 maps)
-          if (preSelectedMap) {
-            // MCL Rule: Game 1 (Host Pick), Game 2 (Guest Pick), Game 3 (Auto Pick)
-            // If it's Game 2, we want to pick, NOT use a pre-determined map (unless it was somehow there already, but MCL G2 should be empty)
-            if (data.config.preset === 'MCL' && data.currentGame === 2) {
-                // Game 2 MCL: Captain 2 picks map. Do not skip turn 0.
-                startingTurn = 0;
-            } else if (preSelectedMap && preSelectedMap !== "") {
-              updates.selectedMap = preSelectedMap;
-              
-              // If the first turn is a map pick, and we already have a map, skip that turn
-              if (data.turnOrder?.[0]?.target === 'MAP' && data.turnOrder?.[0]?.action === 'PICK') {
-                startingTurn = 1;
-              }
-            }
+          // Ensure map is set if it's pre-determined for this game
+          if (preSelectedMap && preSelectedMap !== "") {
+            updates.selectedMap = preSelectedMap;
             
-            // If it's MCL, we must also initialize the picks based on the pre-determined map
-            // Only if a map is actually selected!
-            if (data.config.preset === 'MCL' && (updates.selectedMap || (preSelectedMap && data.currentGame !== 2))) {
-              const { getMCLPicks } = await import('../constants');
-              const newMCLPicks = getMCLPicks(data.currentGame, updates.selectedMap || preSelectedMap, data.lastWinner || null);
-              
-              // Map names/ids from the config roster if available
-              updates.picks = newMCLPicks.map(p => {
-                const teamPlayers = p.team === 'A' ? data.teamAPlayers : data.teamBPlayers;
-                const playerAtPos = teamPlayers?.find(tp => tp.position === p.playerId);
-                return { ...p, playerName: playerAtPos?.name || '' };
-              });
+            // If the first turn is a map pick, and we already have a map, skip that turn
+            if (data.turnOrder?.[0]?.target === 'MAP' && data.turnOrder?.[0]?.action === 'PICK') {
+              startingTurn = 1;
             }
           }
 

@@ -118,7 +118,9 @@ function AppContent() {
     updateRoster,
     clearSubs,
     requestReset,
-    respondReset
+    respondReset,
+    isMyTurn,
+    myTeam
   } = useDraft(lobby, isCaptain1, isCaptain2, guestId || '', lang);
 
   const {
@@ -833,6 +835,8 @@ function AppContent() {
               isProcessing={isProcessing}
               optimisticReady={optimisticReady}
               optimisticAction={optimisticAction}
+              isMyTurn={isMyTurn}
+              myTeam={myTeam}
               reportScore={reportScore}
               resetVotes={resetVotes}
               nickname={nickname}

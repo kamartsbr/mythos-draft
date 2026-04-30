@@ -31,6 +31,8 @@ interface DraftUIProps {
   isProcessing: boolean;
   optimisticReady: boolean | null;
   optimisticAction: { id: string, type: 'pick' | 'ban' | 'map_pick' | 'map_ban' } | null;
+  isMyTurn: boolean;
+  myTeam: 'A' | 'B' | 'BOTH' | null;
   handlePickerAction: (id: string, playerId?: number) => void;
   reportScore: (winner: 'A' | 'B') => void;
   resetVotes: () => void;
@@ -263,6 +265,8 @@ export function DraftUI(props: DraftUIProps) {
             viewGameIndex={viewGameIndex}
             setViewGameIndex={setViewGameIndex}
             onShowReplay={() => setShowReplay(true)}
+            isMyTurn={props.isMyTurn}
+            myTeam={props.myTeam}
           />
         )}
       </main>

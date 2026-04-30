@@ -44,6 +44,8 @@ interface DraftBoardProps {
   clearSubs: () => void;
   requestReset: () => void;
   respondReset: (accept: boolean) => void;
+  isMyTurn?: boolean;
+  myTeam?: 'A' | 'B' | 'BOTH' | null;
 }
 
 export function DraftBoard(props: DraftBoardProps) {
@@ -169,6 +171,8 @@ export function DraftBoard(props: DraftBoardProps) {
             requestReset={requestReset}
             timeLeft={props.timeLeft}
             optimisticAction={optimisticAction}
+            isMyTurn={props.isMyTurn || false}
+            myTeam={props.myTeam || null}
           />
         </div>
         <div className="order-3 col-span-12 md:col-span-3 border-t md:border-t-0 md:border-l border-slate-900">
@@ -716,6 +720,8 @@ export function DraftBoard(props: DraftBoardProps) {
             timeLeft={props.timeLeft}
             t={t}
             optimisticAction={optimisticAction}
+            isMyTurn={props.isMyTurn || false}
+            myTeam={props.myTeam || null}
           />
         </div>
 
@@ -822,6 +828,8 @@ export function DraftBoard(props: DraftBoardProps) {
           requestReset={requestReset}
           timeLeft={props.timeLeft}
           optimisticAction={optimisticAction}
+          isMyTurn={props.isMyTurn || false}
+          myTeam={props.myTeam || null}
         />
 
         {/* Reset Request Overlay */}

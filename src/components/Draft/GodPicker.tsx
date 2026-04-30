@@ -14,15 +14,15 @@ interface GodPickerProps {
   timeLeft: number | null;
   t: any;
   optimisticAction: { id: string, type: 'pick' | 'ban' | 'map_pick' | 'map_ban' } | null;
+  isMyTurn?: boolean;
+  myTeam?: 'A' | 'B' | 'BOTH' | null;
 }
 
-export function GodPicker({ lobby, isCaptain1, isCaptain2, handlePickerAction, timeLeft, t, optimisticAction }: GodPickerProps) {
+export function GodPicker({ lobby, isCaptain1, isCaptain2, handlePickerAction, timeLeft, t, optimisticAction, isMyTurn, myTeam }: GodPickerProps) {
   const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null);
   const [selectedGodId, setSelectedGodId] = useState<string | null>(null);
-  const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
-  const currentTurn = lobby.turnOrder[lobby.turn];
-  const myTeam = IS_DEV ? (currentTurn?.player === 'B' ? 'B' : 'A') : (isCaptain1 ? 'A' : isCaptain2 ? 'B' : null);
-  const myVote = IS_DEV ? (myTeam === 'A' ? lobby.pickerVoteA : lobby.pickerVoteB) : (isCaptain1 ? lobby.pickerVoteA : lobby.pickerVoteB);
+  
+  const myVote = myTeam === 'A' ? lobby.pickerVoteA : (myTeam === 'B' ? lobby.pickerVoteB : null);
   const optimisticVote = (optimisticAction?.type === 'pick') ? optimisticAction.id : null;
   const effectiveVote = myVote || optimisticVote;
   

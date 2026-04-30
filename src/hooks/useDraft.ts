@@ -22,6 +22,28 @@ export function useDraft(
   const [optimisticReady, setOptimisticReady] = useState<boolean | null>(null);
   const [optimisticAction, setOptimisticAction] = useState<{ id: string, type: 'pick' | 'ban' | 'map_pick' | 'map_ban', playerId?: number, playerName?: string } | null>(null);
 
+  const currentTurn = lobby?.turnOrder?.[lobby?.turn || 0];
+
+  const myTeam = useMemo(() => {
+    if (!lobby || !currentTurn) return null;
+    // In DEV Solo mode, assume the team is whichever is active, or default to 'A'
+    if (IS_DEV && currentTurn.player !== 'BOTH') {
+      return currentTurn.player === 'B' ? 'B' : 'A';
+    }
+    if (effectiveIsCaptain1) return 'A';
+    if (effectiveIsCaptain2) return 'B';
+    return null;
+  }, [lobby, currentTurn, effectiveIsCaptain1, effectiveIsCaptain2]);
+
+  const isMyTurn = useMemo(() => {
+    if (!lobby || !currentTurn) return false;
+    if (IS_DEV || isSoloAdmin) return true;
+    if (currentTurn.player === 'BOTH') return true;
+    if (effectiveIsCaptain1 && currentTurn.player === 'A') return true;
+    if (effectiveIsCaptain2 && currentTurn.player === 'B') return true;
+    return false;
+  }, [lobby, currentTurn, effectiveIsCaptain1, effectiveIsCaptain2, isSoloAdmin]);
+
   // Sync optimistic state with lobby
   useEffect(() => {
     if (!lobby) return;
@@ -488,6 +510,8 @@ export function useDraft(
     updateRoster,
     requestReset,
     respondReset,
-    clearSubs
+    clearSubs,
+    isMyTurn,
+    myTeam
   };
 }

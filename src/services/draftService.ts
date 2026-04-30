@@ -419,10 +419,14 @@ export const draftService = {
         else nextLobby.scoreB++;
         
         let isFinished = false;
-        const maxGamesStr = lobby.config.seriesType === 'CUSTOM' ? (lobby.config.customGameCount || 1).toString() : lobby.config.seriesType.replace('BO', '');
-        const maxGames = parseInt(maxGamesStr);
-        const winThreshold = Math.ceil(maxGames / 2);
-        if (nextLobby.scoreA >= winThreshold || nextLobby.scoreB >= winThreshold) isFinished = true;
+        if (lobby.config.preset === 'MCL') {
+          isFinished = lobby.currentGame === 3 && Boolean(nextLobby.reportVoteA && nextLobby.reportVoteB);
+        } else {
+          const maxGamesStr = lobby.config.seriesType === 'CUSTOM' ? (lobby.config.customGameCount || 1).toString() : lobby.config.seriesType.replace('BO', '');
+          const maxGames = parseInt(maxGamesStr);
+          const winThreshold = Math.ceil(maxGames / 2);
+          if (nextLobby.scoreA >= winThreshold || nextLobby.scoreB >= winThreshold) isFinished = true;
+        }
         
         if (isFinished) {
           nextLobby.status = 'finished';

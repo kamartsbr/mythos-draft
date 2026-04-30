@@ -208,11 +208,13 @@ export function DraftUI(props: DraftUIProps) {
           t={t} 
         />
 
-        {props.isSpectator && (
+        {(props.isSpectator || props.isAdmin || lobby.status === 'finished') && (
           <div className="px-6 py-2 bg-slate-900/50 border-b border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.spectatorMode || 'SPECTATOR MODE'}</span>
+              <div className={cn("w-2 h-2 rounded-full animate-pulse", props.isSpectator ? "bg-amber-500" : "bg-indigo-500")} />
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                {props.isSpectator ? (t.spectatorMode || 'SPECTATOR MODE') : props.isAdmin ? 'ADMIN MODE' : 'POST-MATCH'}
+              </span>
             </div>
                 <div className="flex items-center gap-2">
                   <button

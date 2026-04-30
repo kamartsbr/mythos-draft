@@ -50,9 +50,37 @@ const setLocalLobby = (id: string, lobby: Lobby) => {
 };
 
 const getLocalIndex = (): LobbySummary[] => {
-  const data = localStorage.getItem(`${STORAGE_PREFIX}index`);
-  if (!data) return [];
-  return JSON.parse(data);
+  const lobbies: LobbySummary[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith(`${STORAGE_PREFIX}lobby_`)) {
+      const data = localStorage.getItem(key);
+      if (data) {
+        try {
+          const lobby: Lobby = JSON.parse(data);
+          if (lobby.config && !lobby.config.isPrivate && !lobby.isHidden) {
+             lobbies.push({
+                id: lobby.id,
+                name: lobby.config.name || `${lobby.config.teamSize ?? 2}v${lobby.config.teamSize ?? 2} Draft`,
+                teamSize: lobby.config.teamSize ?? 2,
+                captain1Name: lobby.captain1Name || 'Captain 1',
+                captain2Name: lobby.captain2Name || 'Captain 2',
+                status: lobby.status || 'waiting',
+                phase: lobby.phase || 'waiting',
+                preset: lobby.config.preset ?? null,
+                lastActivityAt: lobby.lastActivityAt ?? null,
+                createdAt: lobby.createdAt ?? null
+             } as LobbySummary);
+          }
+        } catch(e) {}
+      }
+    }
+  }
+  return lobbies.sort((a, b) => {
+     const tA = (a.lastActivityAt as any)?.toMillis?.() || (typeof a.lastActivityAt === 'number' ? a.lastActivityAt : 0);
+     const tB = (b.lastActivityAt as any)?.toMillis?.() || (typeof b.lastActivityAt === 'number' ? b.lastActivityAt : 0);
+     return tB - tA;
+  });
 };
 
 const setLocalIndex = (summaries: LobbySummary[]) => {

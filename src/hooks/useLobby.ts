@@ -241,7 +241,9 @@ export function useLobby(initialNickname: string) {
   const leave = useCallback(() => {
     setLobbyId(null);
     setLobby(null);
-    window.history.pushState({}, '', '/');
+    const url = new URL(window.location.href);
+    url.searchParams.delete('lobby');
+    window.history.replaceState({}, '', url.pathname + url.search);
   }, []);
 
   const forceReset = useCallback(async () => {

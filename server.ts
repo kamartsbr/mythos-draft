@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import { createServer as createViteServer } from 'vite';
+// REMOVIDO: import { createServer as createViteServer } from 'vite'; <--- Isso causava o erro
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { initializeApp } from 'firebase/app';
@@ -19,21 +19,22 @@ import fs from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const isDev = process.env.VITE_VIBE_MODE === 'DEVELOPMENT';
+// Identifica produção ou Cloud Run
+const isProd = process.env.NODE_ENV === 'production' || !!process.env.CLOUD_RUN_JOB;
+const isDev = !isProd;
 
 async function startServer() {
   const app = express();
   
-  // 1. AJUSTE DE PORTA: Cloud Run exige escutar na porta definida pelo sistema (geralmente 8080)
+  // Porta 8080 é obrigatória para o Cloud Run
   const PORT = process.env.PORT || 8080;
 
   app.get('/api/health', (req: Request, res: Response) => {
-    res.json({ status: 'ok', mode: isDev ? 'development' : 'production' });
+    res.json({ status: 'ok', mode: isProd ? 'production' : 'development' });
   });
 
   let db: Firestore | null = null;
   try {
-    // 2. CAMINHO ROBUSTO: Procura o JSON na raiz do projeto independente de onde o script rode
     const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
     
     if (fs.existsSync(configPath)) {
@@ -48,6 +49,7 @@ async function startServer() {
     console.error('[Firebase] Initialization error:', error);
   }
 
+  // Lógica de Limpeza (Mantida conforme seu código original)
   async function performCleanup() {
     if (!db || isDev) return;
     const now = new Date();
@@ -80,14 +82,11 @@ async function startServer() {
     setInterval(performCleanup, 12 * 60 * 60 * 1000);
   }
 
-  // 3. PRIORIDADE DE ROTEAMENTO: Garante que o Express encontre a pasta dist
-  if (process.env.NODE_ENV === 'production' || process.env.CLOUD_RUN_JOB) {
+  // Roteamento Inteligente
+  if (isProd) {
     const distPath = path.resolve(process.cwd(), 'dist');
-    
-    // Serve arquivos estáticos (JS, CSS, Imagens)
     app.use(express.static(distPath));
 
-    // Qualquer outra rota entrega o index.html (SPA mode)
     app.get('*', (req: Request, res: Response) => {
       const indexPath = path.join(distPath, 'index.html');
       if (fs.existsSync(indexPath)) {
@@ -97,6 +96,8 @@ async function startServer() {
       }
     });
   } else {
+    // IMPORT DINÂMICO: O Node só vai tentar ler o 'vite' se for modo dev
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -104,7 +105,6 @@ async function startServer() {
     app.use(vite.middlewares);
   }
 
-  // O Cloud Run precisa que o '0.0.0.0' esteja explícito
   app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`[Server] Mythos Draft v1.0.3 online on port ${PORT}`);
   });
@@ -112,5 +112,5 @@ async function startServer() {
 
 startServer().catch(err => {
   console.error('CRITICAL: Server failed to start:', err);
-  process.exit(1); // Força o container a encerrar para o Cloud Run tentar reiniciar
+  process.exit(1);
 });

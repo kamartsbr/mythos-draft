@@ -1,9 +1,10 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { initializeApp } from 'firebase/app';
 import { 
+  Firestore,
   getFirestore, 
   collection, 
   getDocs, 
@@ -18,24 +19,25 @@ import fs from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Identifica se estamos em ambiente de desenvolvimento (AI Studio / Local)
+// Identifica se estamos em ambiente de desenvolvimento
 const isDev = process.env.VITE_VIBE_MODE === 'DEVELOPMENT';
 
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
-  // Health check
-  app.get('/api/health', (req, res) => {
+  // Health check com tipagem explícita
+  app.get('/api/health', (req: Request, res: Response) => {
     res.json({ status: 'ok', mode: isDev ? 'development' : 'production' });
   });
 
-  let db: any;
+  let db: Firestore | null = null;
   try {
     const configPath = path.join(__dirname, 'firebase-applet-config.json');
     if (fs.existsSync(configPath)) {
       const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       const appFirebase = initializeApp(firebaseConfig);
+      // Inicializa o Firestore com o ID do banco vindo da config
       db = getFirestore(appFirebase, firebaseConfig.firestoreDatabaseId);
       console.log('[Firebase] Initialized successfully with database:', firebaseConfig.firestoreDatabaseId);
     } else {
@@ -62,7 +64,6 @@ async function startServer() {
     
     try {
       // 🎯 OTIMIZAÇÃO: Filtramos no servidor do Firebase o que deve ser lido.
-      // Isso impede que leiamos 1000 documentos para deletar apenas 2.
       const q = query(
         collection(db, 'lobbies'),
         where('isPermanent', '==', false),
@@ -78,7 +79,7 @@ async function startServer() {
         // Regra de negócio: Mantemos rascunhos finalizados
         if (isFinished) return;
 
-        // Agenda deleção atômica
+        // Agenda deleção atômica no batch
         batch.delete(d.ref);
         batch.update(indexRef, {
           [d.id]: deleteField()
@@ -100,12 +101,9 @@ async function startServer() {
 
   if (db) {
     const TWELVE_HOURS = 12 * 60 * 60 * 1000;
-    
     // Agenda a limpeza periódica para instâncias de longa duração
     setInterval(performCleanup, TWELVE_HOURS);
     
-    // 🚀 MUDANÇA CRÍTICA: Removido o setTimeout que rodava no boot.
-    // Agora o cleanup só roda via intervalo se o servidor ficar online por muito tempo.
     if (isDev) {
       console.log('[Firebase] Mode: DEVELOPMENT. Cleanup is disabled to save reads.');
     }
@@ -119,9 +117,10 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
+    // Modo Produção: Serve a pasta dist gerada pelo build
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('*', (req: Request, res: Response) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

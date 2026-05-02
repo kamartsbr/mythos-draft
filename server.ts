@@ -1,9 +1,9 @@
-import express from 'express';
-import { createServer as createViteServer } from 'vite';
+import express from 'express'; // Importação padrão corrigida
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { initializeApp } from 'firebase/app';
 import { 
+  Firestore,
   getFirestore, 
   collection, 
   getDocs, 
@@ -18,119 +18,99 @@ import fs from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Identifica se estamos em ambiente de desenvolvimento (AI Studio / Local)
-const isDev = process.env.VITE_VIBE_MODE === 'DEVELOPMENT';
+// Identifica produção ou Cloud Run
+const isProd = process.env.NODE_ENV === 'production' || !!process.env.CLOUD_RUN_JOB;
+const isDev = !isProd;
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+  
+  // Porta 8080 obrigatória para Google Cloud Run
+  const PORT = process.env.PORT || 8080;
 
-  // Health check
+  // Health check simples sem tipos nomeados para evitar erro de import
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', mode: isDev ? 'development' : 'production' });
+    res.json({ status: 'ok', mode: isProd ? 'production' : 'development' });
   });
 
-  let db: any;
+  let db: Firestore | null = null;
   try {
-    const configPath = path.join(__dirname, 'firebase-applet-config.json');
+    const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
     if (fs.existsSync(configPath)) {
       const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       const appFirebase = initializeApp(firebaseConfig);
       db = getFirestore(appFirebase, firebaseConfig.firestoreDatabaseId);
-      console.log('[Firebase] Initialized successfully with database:', firebaseConfig.firestoreDatabaseId);
-    } else {
-      console.warn('[Firebase] Config file not found, skipping background tasks');
+      console.log('[Firebase] Initialized with database:', firebaseConfig.firestoreDatabaseId);
     }
   } catch (error) {
     console.error('[Firebase] Initialization error:', error);
   }
 
+  // Lógica de Limpeza Periódica
   async function performCleanup() {
-    // 🛡️ TRAVA DE SEGURANÇA: Se for dev ou não houver DB, não faz nada.
-    if (!db || isDev) {
-      if (isDev) console.log('[Cleanup] Skipped: Development mode active.');
-      return;
-    }
-
-    console.log('[Cleanup] Starting optimized atomic cleanup...');
+    if (!db || isDev) return;
     const now = new Date();
     const twelveHoursAgo = new Date(now.getTime() - (12 * 60 * 60 * 1000));
-    
     const batch = writeBatch(db);
     const indexRef = doc(db, 'metadata', 'lobby_index');
     let deleteCount = 0;
     
     try {
-      // 🎯 OTIMIZAÇÃO: Filtramos no servidor do Firebase o que deve ser lido.
-      // Isso impede que leiamos 1000 documentos para deletar apenas 2.
       const q = query(
         collection(db, 'lobbies'),
         where('isPermanent', '==', false),
         where('createdAt', '<', twelveHoursAgo)
       );
-
       const lobbiesSnap = await getDocs(q);
-      
       lobbiesSnap.forEach((d) => {
         const lobby = d.data();
-        const isFinished = lobby.status === 'finished' || lobby.phase === 'finished';
-
-        // Regra de negócio: Mantemos rascunhos finalizados
-        if (isFinished) return;
-
-        // Agenda deleção atômica
+        if (lobby.status === 'finished' || lobby.phase === 'finished') return;
         batch.delete(d.ref);
-        batch.update(indexRef, {
-          [d.id]: deleteField()
-        });
+        batch.update(indexRef, { [d.id]: deleteField() });
         deleteCount++;
       });
-      
-      if (deleteCount > 0) {
-        await batch.commit();
-        console.log(`[Cleanup] Finished. Atomically deleted: ${deleteCount} lobbies.`);
-      } else {
-        console.log('[Cleanup] No inactive lobbies to remove.');
-      }
-
+      if (deleteCount > 0) await batch.commit();
     } catch (error) {
-      console.error('[Cleanup] Error during atomic cleanup:', error);
+      console.error('[Cleanup] Error:', error);
     }
   }
 
-  if (db) {
-    const TWELVE_HOURS = 12 * 60 * 60 * 1000;
-    
-    // Agenda a limpeza periódica para instâncias de longa duração
-    setInterval(performCleanup, TWELVE_HOURS);
-    
-    // 🚀 MUDANÇA CRÍTICA: Removido o setTimeout que rodava no boot.
-    // Agora o cleanup só roda via intervalo se o servidor ficar online por muito tempo.
-    if (isDev) {
-      console.log('[Firebase] Mode: DEVELOPMENT. Cleanup is disabled to save reads.');
-    }
+  if (db && !isDev) {
+    setInterval(performCleanup, 12 * 60 * 60 * 1000);
   }
 
-  // Configuração do Vite / Arquivos Estáticos
-  if (process.env.NODE_ENV !== 'production' && !process.env.CLOUD_RUN_JOB) {
+  // Roteamento de Produção vs Desenvolvimento
+  if (isProd) {
+    console.log('[Server] Mode: PRODUCTION');
+    const distPath = path.resolve(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+
+    app.get('*', (req, res) => {
+      const indexPath = path.join(distPath, 'index.html');
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        res.status(404).send('Build files not found.');
+      }
+    });
+  } else {
+    console.log('[Server] Mode: DEVELOPMENT');
+    // Import dinâmico do Vite (Apenas em DEV)
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on port ${PORT} | Mode: ${isDev ? 'DEV' : 'PROD'}`);
+  // Escutando em 0.0.0.0 para o tráfego externo do Cloud Run
+  app.listen(Number(PORT), '0.0.0.0', () => {
+    console.log(`[Server] Mythos Draft v1.0.3 online on port ${PORT}`);
   });
 }
 
 startServer().catch(err => {
-  console.error('Failed to start server:', err);
+  console.error('CRITICAL: Server failed to start:', err);
+  process.exit(1);
 });

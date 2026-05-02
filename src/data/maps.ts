@@ -59,11 +59,11 @@ export const MAPS: MapInfo[] = [
   { id: 'valley_of_kings', name: 'Valley of Kings', image: 'https://static.wikia.nocookie.net/ageofempires/images/0/01/AoMR_Valley_of_Kings_map_icon.png/revision/latest?cb=20240920075341', isRanked: true, positions: DEFAULT_POSITIONS },
   { id: 'watering_hole', name: 'Watering Hole', image: 'https://static.wikia.nocookie.net/ageofempires/images/0/01/AoMR_Watering_Hole_map_icon.png/revision/latest?cb=20240920075345', isRanked: true, positions: DEFAULT_POSITIONS },
   { id: 'yellow_river', name: 'Yellow River', image: 'https://static.wikia.nocookie.net/ageofempires/images/5/58/AoMR_Yellow_River.png/revision/latest?cb=20250303105325', isRanked: true, positions: DEFAULT_POSITIONS },
-  { id: 'obsidian_ridge', name: 'Obsidian Ridge', image: '/Obsidian_Ridge.webp', isRanked: true, positions: DEFAULT_POSITIONS },
+{ id: 'obsidian_ridge', name: 'Obsidian Ridge', image: '/Obsidian_Ridge.webp', isRanked: true, positions: DEFAULT_POSITIONS },
   { id: 'cloud_forest', name: 'Cloud Forest', image: '/Cloud_Forest.webp', isRanked: true, positions: DEFAULT_POSITIONS },
-  { id: 'blood_river_crossing', name: 'Blood River Crossing', image: '/Blood_River_Crossing_minimap_48989y94-396x396.webp', isRanked: true, positions: DEFAULT_POSITIONS },
-  { id: 'valley_of_the_sun_serpent', name: 'Valley of the Sun Serpent', image: '/Valley_of_the_sun_serpent_minimap_357357-396x396.webp', isRanked: true, positions: DEFAULT_POSITIONS },
-  { id: 'temple_of_the_jaguar_moon', name: 'Temple of the Jaguar Moon', image: '/Temple_of_the_Jaguar_Moon_minimap_89237-396x396.webp', isRanked: true, positions: DEFAULT_POSITIONS },
+  { id: 'blood_river_crossing', name: 'Blood River Crossing', image: '/Blood_River_Crossing.webp', isRanked: true, positions: DEFAULT_POSITIONS },
+  { id: 'valley_of_the_sun_serpent', name: 'Valley of The Sun Serpent', image: '/Valley_of_The_Sun_Serpent.webp', isRanked: true, positions: DEFAULT_POSITIONS },
+  { id: 'temple_of_the_jaguar_moon', name: 'Temple of the Jaguar Moon', image: '/Temple_of_the_Jaguar_Moon.webp', isRanked: true, positions: DEFAULT_POSITIONS },
 ];
 
 export const RANKED_MAP_POOL = [

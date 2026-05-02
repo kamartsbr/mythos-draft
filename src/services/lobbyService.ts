@@ -905,78 +905,53 @@ export const lobbyService = {
       return () => {
         window.removeEventListener('storage', handler);
         window.removeEventListener('storage_update', handler);
-        console.log("[MOCK] Unsubscribed from public lobbies (LocalStorage)");
       };
     }
+
     const indexRef = doc(db, 'metadata', 'lobby_index');
     
-    // Auto-trigger cleanup check
-    this.checkAndCleanup();
+    // O gatilho checkAndCleanup foi removido para evitar leituras excessivas no frontend
 
     return onSnapshot(indexRef, (snap) => {
-      console.log(`[Lobby Index] Snap received, exists: ${snap.exists()}`);
       if (snap.exists()) {
-        const data = snap.data() as LobbyIndex;
+        const data = snap.data() as any;
         const lobbiesArray = Array.isArray(data.activeLobbies) ? data.activeLobbies : [];
         onUpdate(lobbiesArray);
       } else {
-        // Fallback to direct query if index doesn't exist yet
+        // Fallback para query direta se o índice não existir
         this.fallbackToDirectQuery(onUpdate);
       }
     }, (error) => {
-      console.warn("[Lobby Index] Subscription failed (likely permissions), falling back to query:", error.message);
+      console.warn("[Lobby Index] Subscription failed, falling back to query:", error.message);
       this.fallbackToDirectQuery(onUpdate);
     });
   },
 
   async fallbackToDirectQuery(onUpdate: (lobbies: LobbySummary[]) => void): Promise<void> {
     try {
-      console.log("[Lobby Index] Falling back to direct query on 'lobbies' collection...");
-      // We use 'lastActivityAt' instead of 'createdAt' for ordering. 
-      // This is crucial because Firestore's query engine automatically excludes any documents 
-      // from the result set if they are missing the field specified in an 'orderBy' or 'where' clause. 
-      // By using a field that is consistently updated during the lifecycle of a draft, 
-      // we ensure older, but still relevant drafts are not dropped from the index queries.
       const q = query(
         collection(db, 'lobbies'),
         orderBy('lastActivityAt', 'desc'),
         limit(50)
       );
-      const s = await getDocs(q);
-      console.log(`[Lobby Index] Fallback found ${s.size} total lobbies`);
       
+      const s = await getDocs(q);
       const summaries = s.docs
         .map(d => {
           const data = d.data() as Lobby;
-          if (!data.config) {
-            console.warn(`Lobby ${d.id} is missing config`, data);
-            return null;
-          }
-          if (data.config.isPrivate || data.isHidden === true) return null;
+          if (!data.config || data.config.isPrivate || data.isHidden === true) return null;
 
-          const summary = {
+          return {
             id: d.id,
-            name: data.config.name || `${(typeof data.config.teamSize === 'number' && !isNaN(data.config.teamSize)) ? data.config.teamSize : 2}v${(typeof data.config.teamSize === 'number' && !isNaN(data.config.teamSize)) ? data.config.teamSize : 2} Draft`,
-            teamSize: (typeof data.config.teamSize === 'number' && !isNaN(data.config.teamSize)) ? data.config.teamSize : 2,
+            name: data.config.name || "Draft",
+            teamSize: data.config.teamSize || 2,
             captain1Name: data.captain1Name || 'Captain 1',
             captain2Name: data.captain2Name || 'Captain 2',
             status: data.status || 'waiting',
             phase: data.phase || 'waiting',
-            preset: data.config.preset ?? null,
-            mclRound: data.config.mclRound ?? null,
-            tournamentStage: data.config.tournamentStage ?? null,
-            lastActivityAt: data.lastActivityAt ?? null,
-            createdAt: data.createdAt ?? null
+            lastActivityAt: data.lastActivityAt,
+            createdAt: data.createdAt
           } as LobbySummary;
-
-          // Remove strictly undefined fields
-          Object.keys(summary).forEach(key => {
-            if ((summary as any)[key] === undefined) {
-              delete (summary as any)[key];
-            }
-          });
-
-          return summary;
         })
         .filter((l): l is LobbySummary => l !== null)
         .slice(0, 20);
@@ -988,52 +963,8 @@ export const lobbyService = {
     }
   },
 
-  async checkAndCleanup(): Promise<void> {
-    if (IS_DEV) return;
-    try {
-      const metaRef = doc(db, 'meta', 'cleanup');
-      const metaSnap = await getDoc(metaRef);
-      const nowVal = Date.now();
-      const twelveHours = 12 * 60 * 60 * 1000;
-
-      if (metaSnap.exists()) {
-        const lastVal = metaSnap.data().lastCleanupAt;
-        const lastCleanup = getMillis(lastVal);
-        if (nowVal - lastCleanup < twelveHours) return;
-      }
-
-      // Update timestamp first to prevent concurrent cleanups from same user session
-      await setDoc(metaRef, cleanData({ lastCleanupAt: now() }), { merge: true });
-
-      // Find lobbies older than 12 hours
-      const oldDate = new Date(nowVal - twelveHours);
-      const q = query(
-        collection(db, 'lobbies'),
-        where('createdAt', '<', Timestamp.fromDate(oldDate)),
-        limit(100)
-      );
-
-      const snap = await getDocs(q);
-      if (snap.empty) return;
-
-      const batch = writeBatch(db);
-      let count = 0;
-      snap.docs.forEach(d => {
-        const data = d.data() as Lobby;
-        const isFinished = data.status === 'finished' || data.phase === 'finished';
-        
-        // Never hide finished drafts or permanent ones, and ignore already hidden
-        if (!data.isPermanent && !isFinished && data.isHidden !== true) {
-          batch.update(d.ref, { isHidden: true });
-          count++;
-        }
-      });
-      if (count > 0) await batch.commit();
-      console.log(`Cleaned up ${count} old lobbies.`);
-    } catch (error) {
-      console.error("Cleanup failed:", error);
-    }
-  },
+  // A função checkAndCleanup() foi totalmente removida para economizar cota do Firebase.
+  // A limpeza agora é responsabilidade exclusiva do servidor (server.ts).
 
   async joinLobby(
     id: string, 

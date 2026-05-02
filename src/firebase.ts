@@ -8,14 +8,14 @@ const app = initializeApp(firebaseConfig);
 
 /**
  * ATENÇÃO JOÃO ALEXANDRE: 
- * Forçamos o ID "ai-studio-0195b9ca-2f50-4fe1-a432-8f33bb22a396" 
+ * Forçamos o ID "mythosdraft-production" 
  * pois o seu projeto não utiliza o banco de dados "(default)".
  */
-export const db = getFirestore(app, "ai-studio-0195b9ca-2f50-4fe1-a432-8f33bb22a396");
+export const db = getFirestore(app, "mythosdraft-production");
 
 export const auth = getAuth(app);
 
-console.log("[Firebase] Initialized with Database ID: ai-studio-0195b9ca-2f50-4fe1-a432-8f33bb22a396");
+console.log("[Firebase] Initialized with Database ID: mythosdraft-production");
 console.log("[Firebase] Project ID:", firebaseConfig.projectId);
 
 export enum OperationType {
@@ -48,7 +48,7 @@ export interface FirestoreErrorInfo {
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
-    databaseId: "ai-studio-0195b9ca-2f50-4fe1-a432-8f33bb22a396",
+    databaseId: "mythosdraft-production",
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -70,7 +70,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 // Teste de conexão automático
 async function testConnection() {
   try {
-    console.log("Testing Firestore connection to database: ai-studio-0195b9ca-2f50-4fe1-a432-8f33bb22a396");
+    console.log("Testing Firestore connection to database: mythosdraft-production");
     // Tenta ler um documento de teste para validar o acesso
     const docRef = doc(db, 'test', 'connection');
     await getDocFromServer(docRef);

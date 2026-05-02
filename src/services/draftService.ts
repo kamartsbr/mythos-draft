@@ -31,13 +31,13 @@ enum OperationType {
 
 const cleanData = (obj: any): any => {
   if (obj === null || obj === undefined) return obj;
+  if (typeof obj === 'object' && obj !== null && '_methodName' in obj) return obj;
   if (Array.isArray(obj)) {
     return obj.map(item => cleanData(item));
   } else if (typeof obj === 'object') {
     const newObj: any = {};
     Object.keys(obj).forEach(key => {
-      // Skip undefined or complex Firebase types during cleaning in dev
-      if (IS_DEV && (obj[key] === undefined || (obj[key] && obj[key]._methodName))) return;
+      if (obj[key] === undefined) return;
       newObj[key] = cleanData(obj[key]);
     });
     return newObj;
@@ -229,10 +229,10 @@ export const draftService = {
           if (freshLobby.config.preset === 'MCL') {
             const newMCLPicks = getMCLPicks(freshLobby.currentGame, id, freshLobby.lastWinner || null);
             updates.picks = newMCLPicks.map(p => {
+              const teamPlayers = p.team === 'A' ? freshLobby.teamAPlayers : freshLobby.teamBPlayers;
+              const playerAtPos = teamPlayers?.find(tp => tp.position === p.playerId);
               const existingPick = freshLobby.picks.find(ep => ep.playerId === p.playerId);
-              const preservedName = existingPick?.playerName || 
-                                   (p.team === 'A' ? freshLobby.teamAPlayers : freshLobby.teamBPlayers)
-                                     ?.find(tp => tp.position === p.playerId)?.name || '';
+              const preservedName = playerAtPos?.name || existingPick?.playerName || '';
               return { ...p, playerName: preservedName };
             });
           }
@@ -465,7 +465,7 @@ export const draftService = {
                 const existingPick = (lobby.picks || []).find(ep => ep.playerId === p.playerId);
                 const teamPlayers = p.team === 'A' ? teamAPlayers : teamBPlayers;
                 const playerAtPos = (teamPlayers as any[]).find((tp: any) => tp.position === p.playerId);
-                return { ...p, playerName: existingPick?.playerName || playerAtPos?.name || '' };
+                return { ...p, playerName: playerAtPos?.name || existingPick?.playerName || '' };
               });
               nextLobby.selectedMap = nextGameMap;
             } else {
@@ -626,6 +626,23 @@ export const draftService = {
         });
         updates.picks = newHistoryPicks;
         updates.lastSubs = [...(freshLobby.lastSubs || []), ...subs];
+
+        const teamKey = team === 'A' ? 'teamAPlayers' : 'teamBPlayers';
+        const existingTeamPlayers = (team === 'A' ? (freshLobby.teamAPlayers || []) : (freshLobby.teamBPlayers || []))
+          .reduce((acc, player) => {
+            acc[player.position] = player.name;
+            return acc;
+          }, {} as Record<number, string>);
+
+        newPicks
+          .filter(p => p.team === team)
+          .forEach(p => {
+            existingTeamPlayers[p.playerId] = p.playerName?.trim() || existingTeamPlayers[p.playerId] || '';
+          });
+
+        (updates as any)[teamKey] = Object.entries(existingTeamPlayers)
+          .map(([position, name]) => ({ position: Number(position), name }))
+          .sort((a, b) => a.position - b.position);
         
         transaction.update(lobbyRef, cleanData(updates));
         return { success: true };

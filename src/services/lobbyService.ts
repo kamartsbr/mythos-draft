@@ -157,6 +157,7 @@ const getMillis = (val: any): number => {
 
 export const cleanData = (obj: any): any => {
   if (obj === null || obj === undefined) return obj;
+  if (typeof obj === 'object' && obj !== null && '_methodName' in obj) return obj;
   if (Array.isArray(obj)) {
     return obj.map(item => cleanData(item));
   }
@@ -939,7 +940,11 @@ export const lobbyService = {
       const summaries = s.docs
         .map(d => {
           const data = d.data() as Lobby;
-          if (!data.config || data.config.isPrivate || data.isHidden === true) return null;
+          if (!data.config) {
+            console.warn(`Lobby ${d.id} is missing config`, data);
+            return null;
+          }
+          if (data.config.isPrivate || data.isHidden === true) return null;
 
           return {
             id: d.id,

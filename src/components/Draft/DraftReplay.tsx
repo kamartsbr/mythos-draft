@@ -79,6 +79,11 @@ export function DraftReplay({ lobby, onClose, t, lang }: DraftReplayProps) {
 
   const gameForVisualizer = useMemo(() => {
     const mapId = state.seriesMaps[state.currentGameNumber - 1] || (lobby.seriesMaps || [])[state.currentGameNumber - 1] || lobby.selectedMap;
+    const gameHistory = lobby.history.find(h => h.gameNumber === state.currentGameNumber);
+    const fallbackRosterA = lobby.picks.filter(p => p.team === 'A');
+    const fallbackRosterB = lobby.picks.filter(p => p.team === 'B');
+    const baseRosterA = (gameHistory?.rosterA && gameHistory.rosterA.length > 0) ? gameHistory.rosterA : fallbackRosterA;
+    const baseRosterB = (gameHistory?.rosterB && gameHistory.rosterB.length > 0) ? gameHistory.rosterB : fallbackRosterB;
     
     return {
       gameNumber: state.currentGameNumber,
@@ -86,12 +91,12 @@ export function DraftReplay({ lobby, onClose, t, lang }: DraftReplayProps) {
       winner: 'A' as const,
       picksA: state.picksA,
       picksB: state.picksB,
-      rosterA: lobby.picks.filter(p => p.team === 'A').map((p, idx) => {
+      rosterA: baseRosterA.map((p, idx) => {
         const pickByPlayerId = state.picksWithSlots.find(ps => ps.team === 'A' && ps.playerId === p.playerId);
         if (pickByPlayerId) return { ...p, godId: pickByPlayerId.godId };
         return { ...p, godId: state.picksA[idx] || null };
       }),
-      rosterB: lobby.picks.filter(p => p.team === 'B').map((p, idx) => {
+      rosterB: baseRosterB.map((p, idx) => {
         const pickByPlayerId = state.picksWithSlots.find(ps => ps.team === 'B' && ps.playerId === p.playerId);
         if (pickByPlayerId) return { ...p, godId: pickByPlayerId.godId };
         return { ...p, godId: state.picksB[idx] || null };

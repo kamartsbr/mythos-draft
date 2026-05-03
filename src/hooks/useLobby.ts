@@ -175,17 +175,16 @@ useEffect(() => {
       setIsCaptain1(isC1);
       setIsCaptain2(isC2);
 
-      // Lógica de Espectador corrigida para não travar o popup
+      // Lógica de Espectador CORRIGIDA
+      // Só força espectador se as vagas de capitão estão PREENCHIDAS
+      const slotAvailable = !data.captain1 || !data.captain2;
       const isFull = data.captain1 && data.captain2;
       const isFinished = data.status === 'finished';
-      const lastActivity = data.lastActivityAt?.toMillis?.() || Date.now();
-      const isActive = (Date.now() - lastActivity) < 7200000;
-
-      if (!isC1 && !isC2) {
-        setIsSpectator(true);
-      } else {
-        setIsSpectator(false);
-      }
+      
+      // Se não é capitão E não há slots disponíveis E o lobby está cheio ou finido
+      const shouldBeSpectator = !isC1 && !isC2 && !slotAvailable && (isFull || isFinished);
+      
+      setIsSpectator(shouldBeSpectator);
     },
     (err) => setError("Erro no Lobby: " + err.message)
   );

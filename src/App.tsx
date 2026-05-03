@@ -728,13 +728,11 @@ function AppContent() {
                         setLobbyId(id);
                         const targetLobby = paginatedLobbies.find(l => l.id === id);
                         if (targetLobby && (targetLobby.captain1 === guestId || targetLobby.captain2 === guestId)) {
-                          if (targetLobby && (targetLobby.captain1 === guestId || targetLobby.captain2 === guestId)) {
-                            setShowJoinModal(false);
-                          } else {
-                            setShowJoinModal(true);
-                          }
+                          setShowJoinModal(false);
+                        } else {
+                          setShowJoinModal(true);
                         }
-                      }
+                      }}
                       onClearAll={() => setShowClearConfirm(true)}
                       onLoadMore={loadMore}
                       hasMore={hasMore}

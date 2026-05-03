@@ -545,7 +545,7 @@ export const draftService = {
         const updates: Partial<Lobby> = {
           pickerVoteA: freshLobby.pickerVoteA,
           pickerVoteB: freshLobby.pickerVoteB,
-          lastActivityAt: serverTimestamp()
+          lastActivityAt: now()
         };
 
         if (isCaptain1 && !updates.pickerVoteA) updates.pickerVoteA = godId;
@@ -553,7 +553,7 @@ export const draftService = {
 
         if (updates.pickerVoteA && updates.pickerVoteB) {
           updates.phase = 'revealing';
-          updates.timerStart = serverTimestamp();
+          updates.timerStart = now();
         }
 
         transaction.update(lobbyRef, cleanData(updates));
@@ -582,7 +582,7 @@ export const draftService = {
         reportVoteB: null,
         voteConflict: false,
         reportStartAt: null,
-        lastActivityAt: serverTimestamp()
+        lastActivityAt: now()
       }));
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
@@ -619,7 +619,12 @@ export const draftService = {
       setLocalLobby(lobby.id, cleanData({
         ...freshLobby,
         picks: newHistoryPicks,
-        lastSubs: addedSubs,
+        ...(subs.length > 0 ? { lastSubs: [...(freshLobby.lastSubs || []), ...subs] } : {}),
+        ...(notifyOpponent
+          ? team === 'A'
+            ? { rosterChangedA: true }
+            : { rosterChangedB: true }
+          : {}),
         lastActivityAt: now()
       }));
       return { success: true };
@@ -631,7 +636,7 @@ export const draftService = {
         if (!lobbyDoc.exists()) return { success: false, error: "Lobby not found" };
 
         const freshLobby = normalizeLobbyData({ id: lobbyDoc.id, ...lobbyDoc.data() });
-        const updates: Partial<Lobby> = { lastActivityAt: serverTimestamp() };
+        const updates: Partial<Lobby> = { lastActivityAt: now() };
 
         const newHistoryPicks = [...(freshLobby.picks || [])];
         newPicks.forEach(np => {

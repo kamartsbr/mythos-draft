@@ -12,6 +12,9 @@ interface DraftResultCardProps {
 
 const getProxyUrl = (url: string | undefined) => {
   if (!url) return null;
+  if (url.startsWith('/')) {
+    return window.location.origin + url;
+  }
   return `https://images.weserv.nl/?url=${encodeURIComponent(url)}&default=${encodeURIComponent(url)}`;
 };
 

@@ -32,7 +32,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
   const [showSnakeWarning, setShowSnakeWarning] = useState(false);
   const [hudScale, setHudScale] = useState(0.75);
   const [copiedObs, setCopiedObs] = useState(false);
-  const [persistentSubs, setPersistentSubs] = useState<Substitution[]>([]);
+
   const manualModeRef = useRef(manualMode);
   manualModeRef.current = manualMode;
 
@@ -97,17 +97,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
     return () => unsubscribe();
   }, [lobbyId]);
 
-  useEffect(() => {
-    if (lobby?.lastSubs && lobby.lastSubs.length > 0) {
-      setPersistentSubs(prev => {
-        // Only add subs that aren't already in the persistent list (unique check by player names and team)
-        const newSubs = lobby.lastSubs!.filter(s => 
-          !prev.some(p => p.playerIn === s.playerIn && p.playerOut === s.playerOut && p.team === s.team)
-        );
-        return [...prev, ...newSubs];
-      });
-    }
-  }, [lobby?.lastSubs]);
+
 
   const copyObsUrl = () => {
     const url = new URL(window.location.origin + window.location.pathname);
@@ -715,90 +705,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
           )}
         </AnimatePresence>
 
-        {/* Persistent Subs for Streamer (Persistent until dismissed) */}
-        <div className="fixed inset-y-0 left-0 w-[280px] md:w-[340px] flex flex-col justify-center pointer-events-none p-6 md:p-8 z-[45] gap-4">
-          <AnimatePresence mode="popLayout">
-            {persistentSubs.filter(s => s.team === 'A').map((sub, idx) => (
-              <motion.div
-                key={`sub-a-${idx}`}
-                initial={{ opacity: 0, x: -50 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                className="bg-slate-900/95 border-2 border-amber-500 rounded-3xl p-5 shadow-2xl shadow-amber-500/30 pointer-events-auto relative group translate-y-4 md:translate-y-6"
-              >
-                <button 
-                  onClick={() => setPersistentSubs(prev => prev.filter(p => p !== sub))}
-                  className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-10"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center">
-                    <RefreshCw className="w-5 h-5 text-slate-950 animate-spin-slow" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-black text-white uppercase tracking-tight">{t.substitutions || 'SUBSTITUTIONS'}</h4>
-                    <p className="text-[9px] font-bold text-amber-500 uppercase tracking-widest">{t.rosterUpdated || 'ROSTER UPDATED'}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 p-3 bg-slate-950 rounded-xl border border-slate-800">
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-2">
-                      <UserMinus className="w-3 h-3 text-red-500" />
-                      <span className="text-xs font-bold text-slate-500 line-through">{sub.playerOut}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <UserPlus className="w-3 h-3 text-green-500" />
-                      <span className="text-sm font-black text-white">{sub.playerIn}</span>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
 
-        <div className="fixed inset-y-0 right-0 w-[280px] md:w-[340px] flex flex-col justify-center pointer-events-none p-6 md:p-8 z-[45] gap-4">
-          <AnimatePresence mode="popLayout">
-            {persistentSubs.filter(s => s.team === 'B').map((sub, idx) => (
-              <motion.div
-                key={`sub-b-${idx}`}
-                initial={{ opacity: 0, x: 50 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                className="bg-slate-900/95 border-2 border-amber-500 rounded-3xl p-5 shadow-2xl shadow-amber-500/30 pointer-events-auto relative group text-right translate-y-4 md:translate-y-6"
-              >
-                <button 
-                  onClick={() => setPersistentSubs(prev => prev.filter(p => p !== sub))}
-                  className="absolute -top-2 -left-2 w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-10"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-                <div className="flex items-center gap-4 mb-4 flex-row-reverse">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center">
-                    <RefreshCw className="w-5 h-5 text-slate-950 animate-spin-slow" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-black text-white uppercase tracking-tight">{t.substitutions || 'SUBSTITUTIONS'}</h4>
-                    <p className="text-[9px] font-bold text-amber-500 uppercase tracking-widest">{t.rosterUpdated || 'ROSTER UPDATED'}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 p-3 bg-slate-950 rounded-xl border border-slate-800 flex-row-reverse">
-                  <div className="flex flex-col text-right">
-                    <div className="flex items-center gap-2 flex-row-reverse">
-                      <UserMinus className="w-3 h-3 text-red-500" />
-                      <span className="text-xs font-bold text-slate-500 line-through">{sub.playerOut}</span>
-                    </div>
-                    <div className="flex items-center gap-2 flex-row-reverse">
-                      <UserPlus className="w-3 h-3 text-green-500" />
-                      <span className="text-sm font-black text-white">{sub.playerIn}</span>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
 
         {/* BOTTOM: Maps */}
         <AnimatePresence>

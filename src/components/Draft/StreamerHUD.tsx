@@ -230,7 +230,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
         className="absolute inset-0 w-full h-full object-cover opacity-50 pointer-events-none"
         style={{ filter: 'brightness(0.7) contrast(1.1)' }}
       >
-        <source src="/mythosdraftstreamerhudbackground.mp4" type="video/mp4" />
+        <source src="/mythosdraftstreamerhudbackgroundv1.mp4" type="video/mp4" />
       </video>
 
       {/* Watermark Cover Logo */}

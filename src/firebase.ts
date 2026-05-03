@@ -8,14 +8,14 @@ const app = initializeApp(firebaseConfig);
 
 /**
  * ATENÇÃO JOÃO ALEXANDRE: 
- * Forçamos o ID "mythosdraft-production" 
+ * Forçamos o ID "mythosdraft-prod" 
  * pois o seu projeto não utiliza o banco de dados "(default)".
  */
-export const db = getFirestore(app, "mythosdraft-production");
+export const db = getFirestore(app, "mythosdraft-prod");
 
 export const auth = getAuth(app);
 
-console.log("[Firebase] Initialized with Database ID: mythosdraft-production");
+console.log("[Firebase] Initialized with Database ID: mythosdraft-prod");
 console.log("[Firebase] Project ID:", firebaseConfig.projectId);
 
 export enum OperationType {
@@ -48,7 +48,7 @@ export interface FirestoreErrorInfo {
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
-    databaseId: "mythosdraft-production",
+    databaseId: "mythosdraft-prod",
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -70,7 +70,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 // Teste de conexão automático
 async function testConnection() {
   try {
-    console.log("Testing Firestore connection to database: mythosdraft-production");
+    console.log("Testing Firestore connection to database: mythosdraft-prod");
     // Tenta ler um documento de teste para validar o acesso
     const docRef = doc(db, 'test', 'connection');
     await getDocFromServer(docRef);

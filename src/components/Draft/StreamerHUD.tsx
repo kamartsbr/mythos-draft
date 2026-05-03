@@ -533,8 +533,8 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                 className="px-6 py-2 bg-slate-950/80 border border-cyan-500/30 rounded-full backdrop-blur-md shadow-[0_0_20px_rgba(6,182,212,0.2)] flex items-center justify-center"
               >
                 <span className="text-xs font-black text-cyan-400 uppercase tracking-[0.4em] animate-pulse ml-[0.4em]">
-                  {t[lobby.phase.replace(/_([a-z])/g, (g) => g[1].toUpperCase()) + 'Phase' as keyof typeof t] || 
-                   (lobby.phase === 'finished' ? t.finished : lobby.phase.replace('_', ' ').toUpperCase())}
+                  {String(t[lobby.phase.replace(/_([a-z])/g, (g) => g[1].toUpperCase()) + 'Phase' as keyof typeof t] || 
+                   (lobby.phase === 'finished' ? t.finished : lobby.phase.replace('_', ' ').toUpperCase()))}
                 </span>
               </motion.div>
             </motion.div>

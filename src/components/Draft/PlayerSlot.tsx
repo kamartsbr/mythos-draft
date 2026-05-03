@@ -103,7 +103,7 @@ export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, ho
             god && !isHovered ? "text-amber-500" : "text-slate-600"
           )}>
             {god ? god.name : t.selecting}
-            {pick.isRandom && <Dices className="w-3 h-3 text-amber-500" title="Randomly selected" />}
+            {pick.isRandom && <span title="Randomly selected"><Dices className="w-3 h-3 text-amber-500" /></span>}
           </p>
         </div>
 

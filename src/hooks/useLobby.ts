@@ -178,7 +178,7 @@ useEffect(() => {
       // Lógica de Espectador CORRIGIDA
       // Só força espectador se as vagas de capitão estão PREENCHIDAS
       const slotAvailable = !data.captain1 || !data.captain2;
-      const isFull = data.captain1 && data.captain2;
+      const isFull = !!(data.captain1 && data.captain2);
       const isFinished = data.status === 'finished';
       
       // Se não é capitão E não há slots disponíveis E o lobby está cheio ou finido

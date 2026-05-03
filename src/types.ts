@@ -121,6 +121,8 @@ export type ResetRequest = {
 
 export type LobbySummary = {
   id: string;
+  captain1?: string | null;
+  captain2?: string | null;
   name: string;
   teamSize: number;
   captain1Name: string;

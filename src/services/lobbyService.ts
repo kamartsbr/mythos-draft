@@ -28,6 +28,43 @@ import { PLAYER_COLORS, MCL_ROUND_MAPS } from '../constants';
 export const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
 const STORAGE_PREFIX = 'mythos_draft_dev_';
 
+/** Max lobbies shown in the public list (21st and beyond are hidden). */
+export const PUBLIC_LOBBIES_PAGE_SIZE = 20;
+
+/** Public list: non-private, visible, and both captain slots filled. */
+export function isLobbyEligibleForPublicList(data: {
+  captain1?: string | null;
+  captain2?: string | null;
+  config?: { isPrivate?: boolean };
+  isHidden?: boolean;
+}): boolean {
+  if (!data.config || data.config.isPrivate || data.isHidden === true) return false;
+  return !!(data.captain1 && data.captain2);
+}
+
+export function lobbyDocToSummary(id: string, normalized: Lobby): LobbySummary {
+  return {
+    id,
+    captain1: normalized.captain1 ?? null,
+    captain2: normalized.captain2 ?? null,
+    name: normalized.config?.name || `${normalized.config?.teamSize ?? 2}v${normalized.config?.teamSize ?? 2} Draft`,
+    teamSize: (typeof normalized.config?.teamSize === 'number' && !isNaN(normalized.config.teamSize)) ? normalized.config.teamSize : 2,
+    captain1Name: normalized.captain1Name || 'Captain 1',
+    captain2Name: normalized.captain2Name || 'Captain 2',
+    status: normalized.status || 'waiting',
+    phase: normalized.phase || 'waiting',
+    preset: normalized.config?.preset ?? null,
+    lastActivityAt: normalized.lastActivityAt ?? null,
+    createdAt: normalized.createdAt ?? null
+  };
+}
+
+export function filterPublicSummaries(summaries: LobbySummary[]): LobbySummary[] {
+  return summaries
+    .filter((s) => !!(s.captain1 && s.captain2))
+    .slice(0, PUBLIC_LOBBIES_PAGE_SIZE);
+}
+
 /**
  * Verifica se o lobby está em modo Solo Admin (captain1 === captain2).
  * Centralizado aqui para evitar que cada serviço implemente a própria heurística.
@@ -58,9 +95,11 @@ const getLocalIndex = (): LobbySummary[] => {
       if (data) {
         try {
           const lobby: Lobby = JSON.parse(data);
-          if (lobby.config && !lobby.config.isPrivate && !lobby.isHidden) {
+          if (isLobbyEligibleForPublicList(lobby)) {
              lobbies.push({
                 id: lobby.id,
+                captain1: lobby.captain1 ?? null,
+                captain2: lobby.captain2 ?? null,
                 name: lobby.config.name || `${lobby.config.teamSize ?? 2}v${lobby.config.teamSize ?? 2} Draft`,
                 teamSize: lobby.config.teamSize ?? 2,
                 captain1Name: lobby.captain1Name || 'Captain 1',
@@ -259,7 +298,7 @@ export const lobbyService = {
       // 1. Define a base da query ordenada por atividade recente
       let lobbyQuery = query(
         collection(db, 'lobbies'), 
-        orderBy('lastActivityAt', 'desc'), 
+        orderBy('createdAt', 'desc'), 
         limit(20) // LOBBIES_PER_PAGE
       );
 
@@ -309,7 +348,7 @@ export const lobbyService = {
       // we ensure older, but still relevant drafts are not dropped from the index queries.
       const q = query(
         collection(db, 'lobbies'),
-        orderBy('lastActivityAt', 'desc'),
+        orderBy('createdAt', 'desc'),
         limit(50)
       );
 
@@ -402,21 +441,20 @@ export const lobbyService = {
           setLocalLobby(id, { ...lobby, [`hoveredGodId${team}`]: godId } as any);
         }
         _hoverDebounceTimers.delete(key);
-      }, 80));
+      }, 500));
       return;
     }
 
     _hoverDebounceTimers.set(key, setTimeout(async () => {
       try {
         await updateDoc(doc(db, 'lobbies', id), cleanData({
-          [`hoveredGodId${team}`]: godId,
-          lastActivityAt: now()
+          [`hoveredGodId${team}`]: godId
         }));
       } catch (error) {
         handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
       }
       _hoverDebounceTimers.delete(key);
-    }, 80));
+    }, 500));
   },
 
   async forceUnpause(id: string): Promise<void> {
@@ -939,27 +977,12 @@ export const lobbyService = {
       const s = await getDocs(q);
       const summaries = s.docs
         .map(d => {
-          const data = d.data() as Lobby;
-          if (!data.config) {
-            console.warn(`Lobby ${d.id} is missing config`, data);
-            return null;
-          }
-          if (data.config.isPrivate || data.isHidden === true) return null;
-
-          return {
-            id: d.id,
-            name: data.config.name || "Draft",
-            teamSize: data.config.teamSize || 2,
-            captain1Name: data.captain1Name || 'Captain 1',
-            captain2Name: data.captain2Name || 'Captain 2',
-            status: data.status || 'waiting',
-            phase: data.phase || 'waiting',
-            lastActivityAt: data.lastActivityAt,
-            createdAt: data.createdAt
-          } as LobbySummary;
+          const data = normalizeLobbyData({ ...d.data(), id: d.id } as Lobby);
+          if (!isLobbyEligibleForPublicList(data)) return null;
+          return lobbyDocToSummary(d.id, data);
         })
         .filter((l): l is LobbySummary => l !== null)
-        .slice(0, 20);
+        .slice(0, PUBLIC_LOBBIES_PAGE_SIZE);
       
       onUpdate(summaries);
     } catch (err) {
@@ -1534,6 +1557,8 @@ export const lobbyService = {
     const q = query(collection(db, 'lobbies', lobbyId, 'messages'), orderBy('timestamp', 'asc'), limit(100));
     return onSnapshot(q, (snap) => {
       onUpdate(snap.docs.map(d => ({ id: d.id, ...d.data() } as ChatMessage)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `lobbies/${lobbyId}/messages`);
     });
   }
 }; // FIM DO OBJETO lobbyService

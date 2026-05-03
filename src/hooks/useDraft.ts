@@ -10,7 +10,7 @@ export function useDraft(
   isCaptain1: boolean, 
   isCaptain2: boolean, 
   guestId: string, 
-  lang: 'en' | 'pt'
+  lang: string
 ) {
   const isSoloAdmin = lobby ? isSoloAdminLobby(lobby) : false;
   const effectiveIsCaptain1 = IS_DEV || isSoloAdmin || isCaptain1;

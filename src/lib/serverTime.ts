@@ -22,13 +22,34 @@ export async function getServerTimeOffset(): Promise<number> {
         await setDoc(testDoc, { timestamp: serverTimestamp() }, { merge: true });
         
         return new Promise<number>((resolve) => {
+          let isResolved = false;
+          
+          const timeout = setTimeout(() => {
+            if (!isResolved) {
+              console.warn("Timeout ao sincronizar tempo, caindo para tempo local");
+              isResolved = true;
+              unsub();
+              resolve(0);
+            }
+          }, 12000);
+
           const unsub = onSnapshot(testDoc, (snapshot) => {
             const data = snapshot.data();
-            if (data?.timestamp) {
+            if (data?.timestamp && !isResolved) {
+              isResolved = true;
+              clearTimeout(timeout);
               unsub(); // Limpa o listener após obter o tempo
               const serverMs = data.timestamp.toMillis();
               const localMs = Date.now();
               resolve(serverMs - localMs);
+            }
+          }, (error) => {
+            if (!isResolved) {
+              console.error("Erro no onSnapshot do tempo:", error);
+              isResolved = true;
+              clearTimeout(timeout);
+              unsub();
+              resolve(0);
             }
           });
         });

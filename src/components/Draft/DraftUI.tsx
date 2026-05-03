@@ -112,7 +112,7 @@ export function DraftUI(props: DraftUIProps) {
     prevBansCount.current = bans.length;
   }, [picks.length, bans.length]);
 
-  const seriesMapsList = useMemo(() => (Array.isArray(lobby.seriesMaps) ? lobby.seriesMaps : Object.values(lobby.seriesMaps || {})), [lobby.seriesMaps]);
+  const seriesMapsList = useMemo(() => (Array.isArray(lobby.seriesMaps) ? lobby.seriesMaps : Object.values(lobby.seriesMaps || {})) as string[], [lobby.seriesMaps]);
 
   const mapElements = useMemo(() => seriesMapsList.map((mapId, idx) => {
     const map = MAPS.find(m => m.id.toLowerCase() === (mapId || '').toLowerCase());
@@ -176,7 +176,10 @@ export function DraftUI(props: DraftUIProps) {
         spectatorCount={lobby.spectators?.length || 0}
         setShowSpectatorModal={props.setShowSpectatorModal}
         copyUrl={props.copyUrl}
-        leave={() => setLobbyId(null)}
+        leave={() => {
+          setLobbyId(null);
+          window.history.replaceState({}, '', window.location.pathname);
+        }}
         leaveSlot={props.leaveSlot}
         isCaptain={props.isCaptain1 || props.isCaptain2}
         setLang={props.setLang}

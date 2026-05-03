@@ -45,7 +45,7 @@ function AppContent() {
         const { signInAnonymously, onAuthStateChanged } = await import('firebase/auth');
         const { auth } = await import('./firebase');
         const { getServerTimeOffset } = await import('./lib/serverTime');
-        
+
         onAuthStateChanged(auth, async (user) => {
           if (user) {
             getServerTimeOffset();
@@ -159,21 +159,21 @@ function AppContent() {
   const [isEditingNick, setIsEditingNick] = useState(false);
   const [isPermanent, setIsPermanent] = useState(false);
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState('');
-  
+
   const [paginatedLobbies, setPaginatedLobbies] = useState<LobbySummary[]>([]);
   const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
-     lobbyService.getLobbiesPaginated(true).then((lbs) => {
-        setPaginatedLobbies(lbs);
-        setHasMore(lbs.length >= 20);
-     });
+    lobbyService.getLobbiesPaginated(true).then((lbs) => {
+      setPaginatedLobbies(lbs);
+      setHasMore(lbs.length >= 20);
+    });
   }, []);
 
   const loadMore = async () => {
-      const next = await lobbyService.getLobbiesPaginated(false);
-      setPaginatedLobbies(prev => [...prev, ...next]);
-      setHasMore(next.length >= 20);
+    const next = await lobbyService.getLobbiesPaginated(false);
+    setPaginatedLobbies(prev => [...prev, ...next]);
+    setHasMore(next.length >= 20);
   };
 
   useEffect(() => {
@@ -192,13 +192,13 @@ function AppContent() {
     if (isAuthReady && lobbyId && lobby && !isCaptain1 && !isCaptain2 && !isSpectator) {
       // Double check against raw lobby data to avoid timing issues
       if (lobby.captain1 === guestId || lobby.captain2 === guestId) return;
-      
+
       const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
       if (IS_DEV && !lobby.captain2) {
-          soloJoin(lobbyId, nickname || 'Auto-Joined-Dev');
-          return;
+        soloJoin(lobbyId, nickname || 'Auto-Joined-Dev');
+        return;
       }
-      
+
       setShowJoinModal(true);
     }
   }, [isAuthReady, lobbyId, lobby, isCaptain1, isCaptain2, isSpectator, guestId]);
@@ -235,13 +235,13 @@ function AppContent() {
 
     const picks: PickEntry[] = [];
     const teamSize = config.teamSize;
-    
-    const gameCount = config.seriesType === 'BO1' ? 1 : 
-                      config.seriesType === 'BO3' ? 3 : 
-                      config.seriesType === 'BO5' ? 5 : 
-                      config.seriesType === 'BO7' ? 7 : 
-                      config.seriesType === 'BO9' ? 9 : 
-                      (config.customGameCount || 1);
+
+    const gameCount = config.seriesType === 'BO1' ? 1 :
+      config.seriesType === 'BO3' ? 3 :
+        config.seriesType === 'BO5' ? 5 :
+          config.seriesType === 'BO7' ? 7 :
+            config.seriesType === 'BO9' ? 9 :
+              (config.customGameCount || 1);
 
     const initialSeriesMaps: string[] = [];
 
@@ -251,11 +251,11 @@ function AppContent() {
     } else {
       let picksPerTeam = teamSize;
       if (teamSize === 1) {
-        const gameCount = config.seriesType === 'BO3' ? 3 : 
-                          config.seriesType === 'BO5' ? 5 : 
-                          config.seriesType === 'BO7' ? 7 : 
-                          config.seriesType === 'BO9' ? 9 : 
-                          (config.customGameCount || 1);
+        const gameCount = config.seriesType === 'BO3' ? 3 :
+          config.seriesType === 'BO5' ? 5 :
+            config.seriesType === 'BO7' ? 7 :
+              config.seriesType === 'BO9' ? 9 :
+                (config.customGameCount || 1);
         if (gameCount > 1) {
           picksPerTeam = gameCount + 1;
         }
@@ -265,21 +265,21 @@ function AppContent() {
         if (teamSize === 1) {
           // 1v1 Scenario: Host (Blue) vs Guest (Red)
           // We use P5 and P6 colors as requested for 1v1
-          picks.push({ 
-            playerId: 5, 
-            godId: null, 
-            team: 'A', 
-            color: PLAYER_COLORS[5], 
-            position: 'middle', 
-            playerName: 'Host' 
+          picks.push({
+            playerId: 5,
+            godId: null,
+            team: 'A',
+            color: PLAYER_COLORS[5],
+            position: 'middle',
+            playerName: 'Host'
           });
-          picks.push({ 
-            playerId: 6, 
-            godId: null, 
-            team: 'B', 
-            color: PLAYER_COLORS[6], 
-            position: 'middle', 
-            playerName: 'Guest' 
+          picks.push({
+            playerId: 6,
+            godId: null,
+            team: 'B',
+            color: PLAYER_COLORS[6],
+            position: 'middle',
+            playerName: 'Guest'
           });
         } else if (teamSize === 2) {
           if (i === 0) {
@@ -381,7 +381,7 @@ function AppContent() {
       } catch (e: any) {
         console.error("App-level connection test fail:", e);
         setConnStatus('fail');
-        
+
         // Detailed error reporting for users
         if (e.message?.includes('offline') || e.message?.includes('backend')) {
           console.warn("Retrying with background knowledge: Network restriction detected.");
@@ -416,25 +416,25 @@ function AppContent() {
           {(!lobbyId || (authError === 'anonymous_disabled' && !guestId)) && (
             <div className="fixed top-4 right-4 z-[100] flex items-center gap-2">
               {/* Discreet Admin Login Button */}
-              <button 
+              <button
                 onClick={() => {
                   if (isAdmin) {
-                     if (window.confirm('Do you want to exit Admin mode?')) {
-                        logoutAdmin();
-                     }
-                     return;
+                    if (window.confirm('Do you want to exit Admin mode?')) {
+                      logoutAdmin();
+                    }
+                    return;
                   }
                   const pass = window.prompt('Admin password:');
                   if (pass) {
-                     const ok = authenticateAdmin(pass);
-                     if (ok) alert('Admin mode enabled.');
-                     else alert('Incorrect password.');
+                    const ok = authenticateAdmin(pass);
+                    if (ok) alert('Admin mode enabled.');
+                    else alert('Incorrect password.');
                   }
                 }}
                 className={cn(
                   "p-2 rounded-xl backdrop-blur-md transition-all duration-300 h-10 flex items-center justify-center",
-                  isAdmin 
-                    ? "bg-amber-500/20 text-amber-400 border border-amber-500/50" 
+                  isAdmin
+                    ? "bg-amber-500/20 text-amber-400 border border-amber-500/50"
                     : "bg-slate-900/80 text-slate-500 hover:text-amber-500 border border-slate-800 hover:border-amber-500/50"
                 )}
                 title={isAdmin ? "Admin Active" : "Admin Login"}
@@ -446,7 +446,7 @@ function AppContent() {
               <div className="flex items-center gap-2 bg-slate-900/80 backdrop-blur-md border border-slate-800 px-3 py-1.5 rounded-xl h-10">
                 {isEditingNick ? (
                   <div className="flex items-center gap-2">
-                    <input 
+                    <input
                       type="text"
                       className="bg-transparent border-none text-[10px] font-black text-white uppercase tracking-wider outline-none w-24 sm:w-32 focus:ring-0 p-0"
                       value={tempNickname}
@@ -455,13 +455,13 @@ function AppContent() {
                       autoFocus
                       maxLength={20}
                     />
-                    <button 
+                    <button
                       onClick={handleUpdateNickname}
                       className="p-1 hover:text-green-400 transition-colors"
                     >
                       <Sword className="w-3.5 h-3.5" />
                     </button>
-                    <button 
+                    <button
                       onClick={() => {
                         setIsEditingNick(false);
                         setTempNickname(nickname);
@@ -472,7 +472,7 @@ function AppContent() {
                     </button>
                   </div>
                 ) : (
-                  <button 
+                  <button
                     onClick={() => setIsEditingNick(true)}
                     className="flex items-center gap-2 group whitespace-nowrap"
                   >
@@ -530,12 +530,12 @@ function AppContent() {
               {/* Background Decorative Elements */}
               <div className="mythic-glow top-[-10%] left-[-10%] w-[50%] h-[50%]" />
               <div className="mythic-glow bottom-[-10%] right-[-10%] w-[50%] h-[50%] opacity-10" />
-              
+
               {/* Hero Background Image */}
               <div className="absolute top-0 left-0 right-0 h-[800px] opacity-40 pointer-events-none z-0">
-                <img 
-                  src="https://static.wikia.nocookie.net/ageofempires/images/2/2f/AoMR_IP_HS_triptych.jpeg/revision/latest" 
-                  alt="" 
+                <img
+                  src="https://static.wikia.nocookie.net/ageofempires/images/2/2f/AoMR_IP_HS_triptych.jpeg/revision/latest"
+                  alt=""
                   className="w-full h-full object-cover object-top filter brightness-125 contrast-110 saturate-125"
                   referrerPolicy="no-referrer"
                   loading="lazy"
@@ -554,12 +554,12 @@ function AppContent() {
                   "https://static.wikia.nocookie.net/ageofempires/images/3/3e/Amaterasu_artwork_new_AoMR.png/revision/latest/scale-to-width-down/1000?cb=20250730190329",
                   "https://static.wikia.nocookie.net/ageofempires/images/e/e7/AoMRT_Atlantean_Kronos.webp/revision/latest/scale-to-width-down/1000?cb=20250701110454"
                 ].map((url, i) => (
-                        <div key={i} className="relative h-[450px] w-full shrink-0">
-                          {url && (
-                            <img src={url} alt="" className="w-full h-full object-cover filter brightness-125 saturate-150 contrast-110" referrerPolicy="no-referrer" loading="lazy" />
-                          )}
-                          <div className="absolute inset-0 bg-gradient-to-r from-transparent to-slate-950" />
-                        </div>
+                  <div key={i} className="relative h-[450px] w-full shrink-0">
+                    {url && (
+                      <img src={url} alt="" className="w-full h-full object-cover filter brightness-125 saturate-150 contrast-110" referrerPolicy="no-referrer" loading="lazy" />
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent to-slate-950" />
+                  </div>
                 ))}
               </div>
 
@@ -573,27 +573,27 @@ function AppContent() {
                   "https://static.wikia.nocookie.net/ageofempires/images/5/56/Tsukuyomi_artwork_new_AoMR.png/revision/latest/scale-to-width-down/1000?cb=20250730190333",
                   "https://static.wikia.nocookie.net/ageofempires/images/4/45/Nuwa_artwork_AoMR.png/revision/latest/scale-to-width-down/1000?cb=20250204185423"
                 ].map((url, i) => (
-                        <div key={i} className="relative h-[450px] w-full shrink-0">
-                          {url && (
-                            <img src={url} alt="" className="w-full h-full object-cover filter brightness-125 saturate-150 contrast-110" referrerPolicy="no-referrer" loading="lazy" />
-                          )}
-                          <div className="absolute inset-0 bg-gradient-to-l from-transparent to-slate-950" />
-                        </div>
+                  <div key={i} className="relative h-[450px] w-full shrink-0">
+                    {url && (
+                      <img src={url} alt="" className="w-full h-full object-cover filter brightness-125 saturate-150 contrast-110" referrerPolicy="no-referrer" loading="lazy" />
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-l from-transparent to-slate-950" />
+                  </div>
                 ))}
               </div>
 
               {/* Bottom Banner Image */}
               <div className="absolute bottom-0 left-0 right-0 h-[400px] opacity-20 pointer-events-none z-0">
-                <img 
-                  src="https://static.wikia.nocookie.net/ageofempires/images/3/3e/AoMR_WHM_2026_Wallpaper.webp/revision/latest" 
-                  alt="" 
+                <img
+                  src="https://static.wikia.nocookie.net/ageofempires/images/3/3e/AoMR_WHM_2026_Wallpaper.webp/revision/latest"
+                  alt=""
                   className="w-full h-full object-cover filter brightness-110 saturate-125"
                   referrerPolicy="no-referrer"
                   loading="lazy"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
               </div>
-              
+
               {/* WIP Banner */}
               <div className="bg-amber-500/10 border-b border-amber-500/20 py-2 px-4 flex items-center justify-center gap-3">
                 <AlertTriangle className="w-4 h-4 text-amber-500" />
@@ -603,27 +603,27 @@ function AppContent() {
               </div>
 
               <div className="max-w-6xl mx-auto px-6 py-12 relative z-10">
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="text-center mb-24 relative"
                 >
                   {/* Decorative Crest */}
                   <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] -z-10 opacity-5 pointer-events-none">
-                    <img 
-                      src="https://static.wikia.nocookie.net/ageofempires/images/8/89/AoMR_Hades_icon.png" 
-                      alt="" 
+                    <img
+                      src="https://static.wikia.nocookie.net/ageofempires/images/8/89/AoMR_Hades_icon.png"
+                      alt=""
                       className="w-full h-full object-contain blur-3xl"
                     />
                   </div>
 
                   <div className="relative mb-8">
-                    <motion.img 
+                    <motion.img
                       initial={{ opacity: 0, scale: 0.8 }}
                       animate={{ opacity: 1, scale: 1 }}
                       transition={{ duration: 1, ease: "easeOut" }}
-                      src="https://static.wikia.nocookie.net/ageofempires/images/e/e0/Logo_AoMR.png/revision/latest" 
-                      alt="Age of Mythology: Retold" 
+                      src="https://static.wikia.nocookie.net/ageofempires/images/e/e0/Logo_AoMR.png/revision/latest"
+                      alt="Age of Mythology: Retold"
                       className="h-40 md:h-64 mx-auto drop-shadow-[0_0_50px_rgba(245,158,11,0.4)] filter brightness-110 saturate-110"
                       referrerPolicy="no-referrer"
                     />
@@ -647,9 +647,9 @@ function AppContent() {
                       transition={{ delay: 0.5 }}
                       className="relative rounded-2xl overflow-hidden border-2 border-amber-500/30 group hover:border-amber-500/60 transition-all shadow-[0_0_50px_-12px_rgba(245,158,11,0.3)]"
                     >
-                      <img 
-                        src="https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExdjJrdzE4a3htbHZkbThxMmxsM2pwcGFnOXpycWdmcjNtcWVlbzRuMCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/el0mymYI09FZhdWNT8/giphy.gif" 
-                        alt="Atlantean Pantheon" 
+                      <img
+                        src="https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExdjJrdzE4a3htbHZkbThxMmxsM2pwcGFnOXpycWdmcjNtcWVlbzRuMCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/el0mymYI09FZhdWNT8/giphy.gif"
+                        alt="Atlantean Pantheon"
                         className="w-full h-auto max-w-[600px] opacity-90 group-hover:opacity-100 transition-all duration-700"
                         referrerPolicy="no-referrer"
                         loading="lazy"
@@ -672,9 +672,9 @@ function AppContent() {
                           className="relative rounded-xl overflow-hidden border border-amber-500/20 group hover:border-amber-500/40 transition-all shadow-xl"
                         >
                           {url && (
-                            <img 
-                              src={url} 
-                              alt="Mythic Pantheon" 
+                            <img
+                              src={url}
+                              alt="Mythic Pantheon"
                               className="w-full h-auto opacity-80 group-hover:opacity-100 transition-all duration-500"
                               referrerPolicy="no-referrer"
                               loading="lazy"
@@ -700,7 +700,7 @@ function AppContent() {
 
                 <div className="grid lg:grid-cols-12 gap-12">
                   <div className="lg:col-span-7 space-y-8">
-                    <LobbyCreation 
+                    <LobbyCreation
                       t={t}
                       lang={lang as any}
                       lobbyName={lobbyName}
@@ -720,14 +720,14 @@ function AppContent() {
                   </div>
 
                   <div className="lg:col-span-5 space-y-6">
-                    <LobbyList 
+                    <LobbyList
                       lobbies={paginatedLobbies}
                       t={t}
                       isAdmin={isAdmin}
                       onJoin={(id) => {
                         setLobbyId(id);
                         const targetLobby = paginatedLobbies.find(l => l.id === id);
-                        if (targetLobby && (targetLobby.captain1 === guestId || targetLobby.captain2 === guestId || (Array.isArray(targetLobby.spectators) ? targetLobby.spectators : Object.values(targetLobby.spectators || {})).some((s: any) => s.id === guestId))) {
+                        if (targetLobby && (targetLobby.captain1 === guestId || targetLobby.captain2 === guestId)) {
                           setShowJoinModal(false);
                         } else {
                           setShowJoinModal(true);
@@ -740,7 +740,7 @@ function AppContent() {
                   </div>
                 </div>
 
-                <ConfirmModal 
+                <ConfirmModal
                   isOpen={showClearConfirm}
                   onClose={() => setShowClearConfirm(false)}
                   onConfirm={async () => {
@@ -758,7 +758,7 @@ function AppContent() {
                 />
 
                 {(error || draftError) && (
-                  <motion.div 
+                  <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     className="mt-8 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center"
@@ -781,9 +781,9 @@ function AppContent() {
 
                   <div className="flex items-center gap-6">
                     <div className="flex flex-col items-center gap-0">
-                      <img 
-                        src="https://upload.wikimedia.org/wikipedia/en/thumb/9/98/Discord_logo.svg/1920px-Discord_logo.svg.png" 
-                        alt="Discord" 
+                      <img
+                        src="https://upload.wikimedia.org/wikipedia/en/thumb/9/98/Discord_logo.svg/1920px-Discord_logo.svg.png"
+                        alt="Discord"
                         className="w-20 h-10 object-contain"
                         referrerPolicy="no-referrer"
                         loading="lazy"
@@ -791,7 +791,7 @@ function AppContent() {
                       <span className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] -mt-1">omoradin</span>
                     </div>
                     <div className="h-4 w-px bg-slate-800" />
-                    <button 
+                    <button
                       onClick={() => setShowPatchNotes(true)}
                       className="text-[10px] font-bold text-slate-500 hover:text-amber-500 uppercase tracking-widest transition-colors"
                     >
@@ -811,11 +811,11 @@ function AppContent() {
               <p className="text-xl font-medium">{t.loading}</p>
             </div>
           ) : (
-            <DraftUI 
-              lobby={lobby!} 
-              guestId={guestId} 
-              isCaptain1={isCaptain1} 
-              isCaptain2={isCaptain2} 
+            <DraftUI
+              lobby={lobby!}
+              guestId={guestId}
+              isCaptain1={isCaptain1}
+              isCaptain2={isCaptain2}
               isAdmin={isAdmin}
               authenticateAdmin={authenticateAdmin}
               logoutAdmin={logoutAdmin}
@@ -836,7 +836,7 @@ function AppContent() {
               optimisticReady={optimisticReady}
               optimisticAction={optimisticAction}
               isMyTurn={isMyTurn}
-              myTeam={myTeam}
+              myTeam={myTeam as "A" | "B" | "BOTH" | null}
               reportScore={reportScore}
               resetVotes={resetVotes}
               nickname={nickname}
@@ -869,14 +869,14 @@ function AppContent() {
             />
           )}
 
-          <BugReportModal 
-            isOpen={showBugModal} 
-            onClose={() => setShowBugModal(false)} 
-            t={t} 
-            lobbyId={lobbyId || ''} 
+          <BugReportModal
+            isOpen={showBugModal}
+            onClose={() => setShowBugModal(false)}
+            t={t}
+            lobbyId={lobbyId || ''}
           />
 
-          <PatchNotesModal 
+          <PatchNotesModal
             isOpen={showPatchNotes}
             onClose={() => setShowPatchNotes(false)}
             t={t}

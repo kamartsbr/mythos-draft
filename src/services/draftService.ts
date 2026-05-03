@@ -63,9 +63,9 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 
 export const draftService = {
   async handleAction(
-    lobby: Lobby, 
-    actionId: string, 
-    isCaptain1: boolean, 
+    lobby: Lobby,
+    actionId: string,
+    isCaptain1: boolean,
     isCaptain2: boolean,
     targetPlayerId?: number,
     playerName?: string,
@@ -75,7 +75,7 @@ export const draftService = {
     if (IS_DEV) {
       const freshLobby = getLocalLobby(lobby.id);
       if (!freshLobby) return { success: false, error: "Lobby not found" };
-      
+
       const result = this._processActionLogic(freshLobby, actionId, isCaptain1, isCaptain2, targetPlayerId, playerName, options);
       if (result.success && result.updates) {
         const updatedLobby = { ...freshLobby, ...result.updates };
@@ -90,19 +90,22 @@ export const draftService = {
         const lobbyRef = doc(db, 'lobbies', lobby.id);
         const lobbyDoc = await transaction.get(lobbyRef);
         if (!lobbyDoc.exists()) return { success: false, error: "Lobby not found" };
-        
+
         const freshLobby = normalizeLobbyData({ id: lobbyDoc.id, ...lobbyDoc.data() });
         const result = this._processActionLogic(freshLobby, actionId, isCaptain1, isCaptain2, targetPlayerId, playerName, options);
-        
+
         if (!result.success) return { success: false, error: result.error };
-        
+
         transaction.update(lobbyRef, cleanData(result.updates));
         return { success: true };
       });
     } catch (error: any) {
-      if (error.message.includes('failed-precondition') && retryCount < 3) {
-        await new Promise(r => setTimeout(r, 500));
-        return this.handleAction(lobby, actionId, isCaptain1, isCaptain2, targetPlayerId, playerName, options, retryCount + 1);
+      if (error.message?.includes('failed-precondition')) {
+        if (retryCount < 3) {
+          await new Promise(r => setTimeout(r, 500));
+          return this.handleAction(lobby, actionId, isCaptain1, isCaptain2, targetPlayerId, playerName, options, retryCount + 1);
+        }
+        return { success: false, error: "O banco de dados está sincronizando os índices. Tente novamente em alguns segundos." };
       }
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${lobby.id}`);
       return { success: false, error: "Update failed" };
@@ -120,15 +123,15 @@ export const draftService = {
     options?: { isRandom?: boolean }
   ): { success: boolean; error?: string; updates?: Partial<Lobby> } {
     if (freshLobby.status !== 'drafting') return { success: false, error: "Not drafting" };
-    
+
     const currentTurn = freshLobby.turnOrder[freshLobby.turn];
     if (!currentTurn) return { success: false, error: "No turn found" };
 
-    const isMyTurn = IS_DEV || isSoloAdminLobby(freshLobby) || 
-                     (isCaptain1 && currentTurn.player === 'A') || 
-                     (isCaptain2 && currentTurn.player === 'B') ||
-                     (currentTurn.player === 'BOTH');
-    
+    const isMyTurn = IS_DEV || isSoloAdminLobby(freshLobby) ||
+      (isCaptain1 && currentTurn.player === 'A') ||
+      (isCaptain2 && currentTurn.player === 'B') ||
+      (currentTurn.player === 'BOTH');
+
     // Timer check
     let isTimerExpired = false;
     if (freshLobby.timerStart) {
@@ -173,8 +176,8 @@ export const draftService = {
     let actingTeam: 'A' | 'B';
     if (currentTurn.player === 'A') actingTeam = 'A';
     else if (currentTurn.player === 'B') actingTeam = 'B';
-    else actingTeam = isCaptain1 ? 'A' : 'B'; 
-    
+    else actingTeam = isCaptain1 ? 'A' : 'B';
+
     if (currentTurn.execution === 'AS_OPPONENT') {
       actingTeam = (actingTeam === 'A' ? 'B' : 'A') as 'A' | 'B';
     }
@@ -194,13 +197,13 @@ export const draftService = {
           if (updates.mapBans!.includes(id)) return false;
           if (updates.seriesMaps!.includes(id)) return false;
           if (updates.mapPool?.includes(id)) return false;
-          
+
           if (turn.player === 'ADMIN') {
             updates.seriesMaps![0] = id;
           } else {
             if (freshLobby.config.preset === 'CASCA' && freshLobby.config.tournamentStage === 'PLAYOFFS') {
-                if (!updates.mapPool) updates.mapPool = [];
-                updates.mapPool.push(id);
+              if (!updates.mapPool) updates.mapPool = [];
+              updates.mapPool.push(id);
             } else {
               const emptySlotIndex = updates.seriesMaps!.indexOf("");
               if (emptySlotIndex !== -1) {
@@ -209,13 +212,13 @@ export const draftService = {
                 }
                 updates.seriesMaps![emptySlotIndex] = id;
               } else {
-                const gameCount = freshLobby.config.seriesType === 'BO1' ? 1 : 
-                                  freshLobby.config.seriesType === 'BO3' ? 3 : 
-                                  freshLobby.config.seriesType === 'BO5' ? 5 : 
-                                  freshLobby.config.seriesType === 'BO7' ? 7 : 
-                                  freshLobby.config.seriesType === 'BO9' ? 9 : 
-                                  (freshLobby.config.customGameCount || 1);
-                
+                const gameCount = freshLobby.config.seriesType === 'BO1' ? 1 :
+                  freshLobby.config.seriesType === 'BO3' ? 3 :
+                    freshLobby.config.seriesType === 'BO5' ? 5 :
+                      freshLobby.config.seriesType === 'BO7' ? 7 :
+                        freshLobby.config.seriesType === 'BO9' ? 9 :
+                          (freshLobby.config.customGameCount || 1);
+
                 if (updates.seriesMaps!.length < gameCount) {
                   updates.seriesMaps!.push(id);
                 } else {
@@ -225,7 +228,7 @@ export const draftService = {
             }
           }
           updates.selectedMap = id;
-          
+
           if (freshLobby.config.preset === 'MCL') {
             const newMCLPicks = getMCLPicks(freshLobby.currentGame, id, freshLobby.lastWinner || null);
             updates.picks = newMCLPicks.map(p => {
@@ -242,14 +245,14 @@ export const draftService = {
           if (turn.modifier === 'EXCLUSIVE' && alreadyPickedByAnyone) return false;
           if (turn.modifier === 'NONEXCLUSIVE' && alreadyPickedByTeam) return false;
           if (updates.bans!.includes(id)) return false;
-          
+
           let pickIndex = -1;
           if (tPlayerId !== undefined) {
             pickIndex = updates.picks!.findIndex(p => p.team === team && p.playerId === tPlayerId && p.godId === null);
           } else {
             pickIndex = updates.picks!.findIndex(p => p.team === team && p.godId === null);
           }
-          
+
           if (pickIndex !== -1) {
             updates.picks![pickIndex].godId = id;
             updates.picks![pickIndex].turnIndex = freshLobby.turn;
@@ -260,7 +263,7 @@ export const draftService = {
               updates.picks![pickIndex].playerName = pName;
             }
           } else {
-            return false; 
+            return false;
           }
         }
       } else if (turn.action === 'SNIPE') {
@@ -327,16 +330,16 @@ export const draftService = {
   },
 
   async reportScore(
-    lobby: Lobby, 
-    winner: 'A' | 'B' | null, 
-    isCaptain1: boolean, 
+    lobby: Lobby,
+    winner: 'A' | 'B' | null,
+    isCaptain1: boolean,
     isCaptain2: boolean,
     generateStandardTurnOrder: (cfg: any, gameNumber?: number, lastWinner?: 'A' | 'B' | null) => { mapOrder: DraftTurn[], godOrder: DraftTurn[] }
   ): Promise<{ success: boolean; error?: string }> {
     if (IS_DEV) {
       const freshLobby = getLocalLobby(lobby.id);
       if (!freshLobby) return { success: false, error: "Lobby not found" };
-      
+
       const result = this._processReportLogic(freshLobby, winner, isCaptain1, isCaptain2, generateStandardTurnOrder);
       if (result.success && result.updates) {
         setLocalLobby(lobby.id, cleanData({ ...freshLobby, ...result.updates }));
@@ -350,16 +353,19 @@ export const draftService = {
         const lobbyRef = doc(db, 'lobbies', lobby.id);
         const lobbyDoc = await transaction.get(lobbyRef);
         if (!lobbyDoc.exists()) return { success: false, error: "Lobby not found" };
-        
+
         const freshLobby = normalizeLobbyData({ id: lobbyDoc.id, ...lobbyDoc.data() });
         const result = this._processReportLogic(freshLobby, winner, isCaptain1, isCaptain2, generateStandardTurnOrder);
-        
+
         if (!result.success) return { success: false, error: result.error };
-        
+
         transaction.update(lobbyRef, cleanData(result.updates));
         return { success: true };
       });
-    } catch (error) {
+    } catch (error: any) {
+      if (error.message?.includes('failed-precondition')) {
+        return { success: false, error: "O banco de dados está sincronizando os índices. Tente novamente em alguns segundos." };
+      }
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${lobby.id}`);
       return { success: false, error: "Report failed" };
     }
@@ -373,7 +379,7 @@ export const draftService = {
     generateStandardTurnOrder: any
   ): { success: boolean, error?: string, updates?: Partial<Lobby> } {
     const nextLobby = { ...lobby };
-    
+
     if (nextLobby.phase === 'post_draft' && nextLobby.status === 'drafting') {
       if (isCaptain1) nextLobby.readyA_report = true;
       if (isCaptain2) nextLobby.readyB_report = true;
@@ -383,7 +389,7 @@ export const draftService = {
         nextLobby.readyA_report = false;
         nextLobby.readyB_report = false;
       }
-      
+
       nextLobby.lastActivityAt = now();
       return { success: true, updates: nextLobby };
     }
@@ -392,7 +398,7 @@ export const draftService = {
 
     if (isCaptain1) nextLobby.reportVoteA = winner;
     if (isCaptain2) nextLobby.reportVoteB = winner;
-    
+
     if (!lobby.reportVoteA && !lobby.reportVoteB) {
       nextLobby.reportStartAt = now();
     }
@@ -402,7 +408,7 @@ export const draftService = {
     if (nextLobby.reportVoteA && nextLobby.reportVoteB) {
       if (nextLobby.reportVoteA === nextLobby.reportVoteB) {
         const finalWinner = nextLobby.reportVoteA;
-        
+
         nextLobby.history.push({
           gameNumber: lobby.currentGame,
           mapId: lobby.selectedMap!,
@@ -414,10 +420,10 @@ export const draftService = {
           rosterA: lobby.picks.filter(p => p.team === 'A'),
           rosterB: lobby.picks.filter(p => p.team === 'B')
         });
-        
+
         if (finalWinner === 'A') nextLobby.scoreA++;
         else nextLobby.scoreB++;
-        
+
         let isFinished = false;
         if (lobby.config.preset === 'MCL') {
           isFinished = lobby.currentGame === 3 && Boolean(nextLobby.reportVoteA && nextLobby.reportVoteB);
@@ -427,15 +433,15 @@ export const draftService = {
           const winThreshold = Math.ceil(maxGames / 2);
           if (nextLobby.scoreA >= winThreshold || nextLobby.scoreB >= winThreshold) isFinished = true;
         }
-        
+
         if (isFinished) {
           nextLobby.status = 'finished';
           nextLobby.phase = 'finished';
         } else {
-          nextLobby.phase = 'ready'; 
+          nextLobby.phase = 'ready';
           nextLobby.currentGame++;
           nextLobby.lastWinner = finalWinner;
-          
+
           const { mapOrder, godOrder } = generateStandardTurnOrder(lobby.config, nextLobby.currentGame, finalWinner);
           nextLobby.turnOrder = [...mapOrder, ...godOrder];
           nextLobby.turn = 0;
@@ -450,6 +456,7 @@ export const draftService = {
           nextLobby.pickerPlayerB = null;
           nextLobby.readyA_report = false;
           nextLobby.readyB_report = false;
+          nextLobby.lastSubs = [];
 
           // Para MCL: se o próximo game tem mapa pré-determinado (Game 3 = round map),
           // reinicializa os picks com as posições corretas para aquele mapa.
@@ -498,7 +505,7 @@ export const draftService = {
     if (IS_DEV) {
       const freshLobby = getLocalLobby(lobby.id);
       if (!freshLobby) return { success: false, error: "Lobby not found" };
-      
+
       const updates: Partial<Lobby> = {
         pickerVoteA: freshLobby.pickerVoteA,
         pickerVoteB: freshLobby.pickerVoteB,
@@ -529,7 +536,7 @@ export const draftService = {
         const lobbyRef = doc(db, 'lobbies', lobby.id);
         const lobbyDoc = await transaction.get(lobbyRef);
         if (!lobbyDoc.exists()) return { success: false, error: "Lobby not found" };
-        
+
         const freshLobby = { id: lobbyDoc.id, ...lobbyDoc.data() } as Lobby;
         const updates: Partial<Lobby> = {
           pickerVoteA: freshLobby.pickerVoteA,
@@ -548,9 +555,12 @@ export const draftService = {
         transaction.update(lobbyRef, cleanData(updates));
         return { success: true };
       });
-    } catch (error) {
-       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${lobby.id}`);
-       return { success: false, error: "Picker action failed" };
+    } catch (error: any) {
+      if (error.message?.includes('failed-precondition')) {
+        return { success: false, error: "O banco de dados está sincronizando os índices. Tente novamente em alguns segundos." };
+      }
+      handleFirestoreError(error, OperationType.UPDATE, `lobbies/${lobby.id}`);
+      return { success: false, error: "Picker action failed" };
     }
   },
 
@@ -576,17 +586,17 @@ export const draftService = {
   },
 
   async updateRoster(
-    lobby: Lobby, 
-    team: 'A' | 'B', 
-    newPicks: PickEntry[], 
-    subs: Substitution[], 
-    isCaptain1: boolean, 
+    lobby: Lobby,
+    team: 'A' | 'B',
+    newPicks: PickEntry[],
+    subs: Substitution[],
+    isCaptain1: boolean,
     isCaptain2: boolean
   ): Promise<{ success: boolean; error?: string }> {
     if (IS_DEV) {
       const freshLobby = getLocalLobby(lobby.id);
       if (!freshLobby) return { success: false, error: "Lobby not found" };
-      
+
       const newHistoryPicks = [...(freshLobby.picks || [])];
       newPicks.forEach(np => {
         const index = newHistoryPicks.findIndex(hp => hp.playerId === np.playerId && hp.team === np.team);
@@ -598,11 +608,11 @@ export const draftService = {
       });
       const addedSubs = [...(freshLobby.lastSubs || []), ...subs];
 
-      setLocalLobby(lobby.id, cleanData({ 
-        ...freshLobby, 
+      setLocalLobby(lobby.id, cleanData({
+        ...freshLobby,
         picks: newHistoryPicks,
         lastSubs: addedSubs,
-        lastActivityAt: now() 
+        lastActivityAt: now()
       }));
       return { success: true };
     }
@@ -611,10 +621,10 @@ export const draftService = {
         const lobbyRef = doc(db, 'lobbies', lobby.id);
         const lobbyDoc = await transaction.get(lobbyRef);
         if (!lobbyDoc.exists()) return { success: false, error: "Lobby not found" };
-        
+
         const freshLobby = normalizeLobbyData({ id: lobbyDoc.id, ...lobbyDoc.data() });
         const updates: Partial<Lobby> = { lastActivityAt: serverTimestamp() };
-        
+
         const newHistoryPicks = [...(freshLobby.picks || [])];
         newPicks.forEach(np => {
           const index = newHistoryPicks.findIndex(hp => hp.playerId === np.playerId && hp.team === np.team);
@@ -643,11 +653,14 @@ export const draftService = {
         (updates as any)[teamKey] = Object.entries(existingTeamPlayers)
           .map(([position, name]) => ({ position: Number(position), name }))
           .sort((a, b) => a.position - b.position);
-        
+
         transaction.update(lobbyRef, cleanData(updates));
         return { success: true };
       });
-    } catch (error) {
+    } catch (error: any) {
+      if (error.message?.includes('failed-precondition')) {
+        return { success: false, error: "O banco de dados está sincronizando os índices. Tente novamente em alguns segundos." };
+      }
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${lobby.id}`);
       return { success: false, error: "Roster update failed" };
     }

@@ -123,6 +123,9 @@ export type LobbySummary = {
   id: string;
   name: string;
   teamSize: number;
+  /** Present when summary is built from Firestore; both required for public list visibility */
+  captain1?: string | null;
+  captain2?: string | null;
   captain1Name: string;
   captain2Name: string;
   status: LobbyStatus;

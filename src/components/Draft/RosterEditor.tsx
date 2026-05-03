@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Users, X, Check, RefreshCw, UserPlus, UserMinus } from 'lucide-react';
 import { Lobby, PickEntry, Substitution } from '../../types';
@@ -33,14 +33,11 @@ export function RosterEditor({ lobby, team, onClose, onSave, t }: RosterEditorPr
   const teamPlayers = team === 'A' ? lobby.teamAPlayers : lobby.teamBPlayers;
   
   const [editedPicks, setEditedPicks] = useState<PickEntry[]>([]);
-  const hasInitialized = useRef(false);
+  const rosterSyncKey = `${lobby.id}-${team}-${lobby.currentGame}-${lobby.phase}`;
 
-  // Initialize and sync editedPicks ONLY ONCE or when team changes
+  // Reinicializa quando troca de game/time/fase — evita estado preso e subs fantasmas
   useEffect(() => {
-    if (hasInitialized.current) return;
-
     const initialPicks = teamPicks.map(p => {
-      // Find player info by matching playerId to the stored position in teamPlayers
       const playerInfo = teamPlayers?.find(tp => tp.position === p.playerId);
       return {
         ...p,
@@ -48,8 +45,7 @@ export function RosterEditor({ lobby, team, onClose, onSave, t }: RosterEditorPr
       };
     });
     setEditedPicks(initialPicks);
-    hasInitialized.current = true;
-  }, [teamPicks, teamPlayers]);
+  }, [rosterSyncKey, teamPicks, teamPlayers]);
   
   const handleNameChange = (playerId: number, name: string) => {
     setEditedPicks(prev => prev.map(p => 

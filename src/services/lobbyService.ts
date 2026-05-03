@@ -28,6 +28,43 @@ import { PLAYER_COLORS, MCL_ROUND_MAPS } from '../constants';
 export const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
 const STORAGE_PREFIX = 'mythos_draft_dev_';
 
+/** Max lobbies shown in the public list (21st and beyond are hidden). */
+export const PUBLIC_LOBBIES_PAGE_SIZE = 20;
+
+/** Public list: non-private, visible, and both captain slots filled. */
+export function isLobbyEligibleForPublicList(data: {
+  captain1?: string | null;
+  captain2?: string | null;
+  config?: { isPrivate?: boolean };
+  isHidden?: boolean;
+}): boolean {
+  if (!data.config || data.config.isPrivate || data.isHidden === true) return false;
+  return !!(data.captain1 && data.captain2);
+}
+
+function lobbyDocToSummary(id: string, normalized: Lobby): LobbySummary {
+  return {
+    id,
+    captain1: normalized.captain1 ?? null,
+    captain2: normalized.captain2 ?? null,
+    name: normalized.config?.name || `${normalized.config?.teamSize ?? 2}v${normalized.config?.teamSize ?? 2} Draft`,
+    teamSize: (typeof normalized.config?.teamSize === 'number' && !isNaN(normalized.config.teamSize)) ? normalized.config.teamSize : 2,
+    captain1Name: normalized.captain1Name || 'Captain 1',
+    captain2Name: normalized.captain2Name || 'Captain 2',
+    status: normalized.status || 'waiting',
+    phase: normalized.phase || 'waiting',
+    preset: normalized.config?.preset ?? null,
+    lastActivityAt: normalized.lastActivityAt ?? null,
+    createdAt: normalized.createdAt ?? null
+  };
+}
+
+function filterPublicSummaries(summaries: LobbySummary[]): LobbySummary[] {
+  return summaries
+    .filter((s) => !!(s.captain1 && s.captain2))
+    .slice(0, PUBLIC_LOBBIES_PAGE_SIZE);
+}
+
 /**
  * Verifica se o lobby está em modo Solo Admin (captain1 === captain2).
  * Centralizado aqui para evitar que cada serviço implemente a própria heurística.
@@ -58,9 +95,11 @@ const getLocalIndex = (): LobbySummary[] => {
       if (data) {
         try {
           const lobby: Lobby = JSON.parse(data);
-          if (lobby.config && !lobby.config.isPrivate && !lobby.isHidden) {
+          if (isLobbyEligibleForPublicList(lobby)) {
              lobbies.push({
                 id: lobby.id,
+                captain1: lobby.captain1 ?? null,
+                captain2: lobby.captain2 ?? null,
                 name: lobby.config.name || `${lobby.config.teamSize ?? 2}v${lobby.config.teamSize ?? 2} Draft`,
                 teamSize: lobby.config.teamSize ?? 2,
                 captain1Name: lobby.captain1Name || 'Captain 1',
@@ -229,6 +268,8 @@ export const lobbyService = {
         const index = getLocalIndex();
         const summary: LobbySummary = {
           id,
+          captain1: lobby.captain1 ?? null,
+          captain2: lobby.captain2 ?? null,
           name: lobby.config.name,
           teamSize: lobby.config.teamSize,
           captain1Name: lobby.captain1Name,
@@ -239,7 +280,7 @@ export const lobbyService = {
           lastActivityAt: Date.now() as any,
           createdAt: Date.now() as any
         };
-        setLocalIndex([summary, ...index].slice(0, 50));
+        setLocalIndex(filterPublicSummaries([summary, ...index]));
       }
       return;
     }
@@ -254,40 +295,39 @@ export const lobbyService = {
   },
 
   async getLobbiesPaginated(isFirstPage: boolean = true) {
-    if (IS_DEV) return getLocalIndex();
+    if (IS_DEV) return filterPublicSummaries(getLocalIndex());
     try {
-      // 1. Define a base da query ordenada por atividade recente
-      let lobbyQuery = query(
-        collection(db, 'lobbies'), 
-        orderBy('lastActivityAt', 'desc'), 
-        limit(20) // LOBBIES_PER_PAGE
-      );
+      const BATCH = 50;
+      const eligible: LobbySummary[] = [];
+      let cursor: QueryDocumentSnapshot | null =
+        isFirstPage ? null : ((this as any)._lastLobbyScanDoc as QueryDocumentSnapshot | null);
 
-      // 2. Se não for a primeira página, começa após o último documento visto
-      if (!isFirstPage && (this as any)._lastVisibleDoc) {
-        lobbyQuery = query(lobbyQuery, startAfter((this as any)._lastVisibleDoc));
+      while (eligible.length < PUBLIC_LOBBIES_PAGE_SIZE) {
+        let lobbyQuery = query(
+          collection(db, 'lobbies'),
+          orderBy('lastActivityAt', 'desc'),
+          limit(BATCH)
+        );
+        if (cursor) {
+          lobbyQuery = query(lobbyQuery, startAfter(cursor));
+        }
+
+        const snapshot = await getDocs(lobbyQuery);
+        if (snapshot.empty) break;
+
+        for (const docSnap of snapshot.docs) {
+          cursor = docSnap;
+          const normalized = normalizeLobbyData({ ...docSnap.data(), id: docSnap.id });
+          if (!isLobbyEligibleForPublicList(normalized)) continue;
+          eligible.push(lobbyDocToSummary(docSnap.id, normalized));
+          if (eligible.length >= PUBLIC_LOBBIES_PAGE_SIZE) break;
+        }
+
+        if (snapshot.docs.length < BATCH) break;
       }
 
-      const snapshot = await getDocs(lobbyQuery);
-      
-      // 3. Guarda o último documento para a próxima página
-      (this as any)._lastVisibleDoc = snapshot.docs[snapshot.docs.length - 1] || null;
-
-      return snapshot.docs.map(doc => {
-        const normalized = normalizeLobbyData(doc.data());
-        return {
-          id: doc.id,
-          name: normalized.config?.name || `${normalized.config?.teamSize ?? 2}v${normalized.config?.teamSize ?? 2} Draft`,
-          teamSize: (typeof normalized.config?.teamSize === 'number' && !isNaN(normalized.config.teamSize)) ? normalized.config.teamSize : 2,
-          captain1Name: normalized.captain1Name || 'Captain 1',
-          captain2Name: normalized.captain2Name || 'Captain 2',
-          status: normalized.status || 'waiting',
-          phase: normalized.phase || 'waiting',
-          preset: normalized.config?.preset ?? null,
-          lastActivityAt: normalized.lastActivityAt ?? null,
-          createdAt: normalized.createdAt ?? null
-        } as LobbySummary;
-      });
+      (this as any)._lastLobbyScanDoc = cursor;
+      return eligible;
     } catch (error) {
       console.error("Erro ao carregar lobbies paginados:", error);
       return [];
@@ -316,24 +356,12 @@ export const lobbyService = {
       const snap = await getDocs(q);
       const summaries = snap.docs
         .map(d => {
-          const data = d.data() as Lobby;
-          if (!data.config || data.config.isPrivate || data.isHidden === true) return null;
-
-          return {
-            id: d.id,
-            name: data.config.name || `${(typeof data.config.teamSize === 'number' && !isNaN(data.config.teamSize)) ? data.config.teamSize : 2}v${(typeof data.config.teamSize === 'number' && !isNaN(data.config.teamSize)) ? data.config.teamSize : 2} Draft`,
-            teamSize: (typeof data.config.teamSize === 'number' && !isNaN(data.config.teamSize)) ? data.config.teamSize : 2,
-            captain1Name: data.captain1Name || 'Captain 1',
-            captain2Name: data.captain2Name || 'Captain 2',
-            status: data.status || 'waiting',
-            phase: data.phase || 'waiting',
-            preset: data.config.preset ?? null,
-            lastActivityAt: data.lastActivityAt ?? null,
-            createdAt: data.createdAt ?? null
-          } as LobbySummary;
+          const normalized = normalizeLobbyData({ ...d.data(), id: d.id } as Lobby);
+          if (!isLobbyEligibleForPublicList(normalized)) return null;
+          return lobbyDocToSummary(d.id, normalized);
         })
         .filter((l): l is LobbySummary => l !== null)
-        .slice(0, 20);
+        .slice(0, PUBLIC_LOBBIES_PAGE_SIZE);
 
       await setDoc(doc(db, 'metadata', 'lobby_index'), cleanData({
         activeLobbies: summaries,
@@ -917,7 +945,7 @@ export const lobbyService = {
       if (snap.exists()) {
         const data = snap.data() as any;
         const lobbiesArray = Array.isArray(data.activeLobbies) ? data.activeLobbies : [];
-        onUpdate(lobbiesArray);
+        onUpdate(filterPublicSummaries(lobbiesArray as LobbySummary[]));
       } else {
         // Fallback para query direta se o índice não existir
         this.fallbackToDirectQuery(onUpdate);
@@ -939,27 +967,16 @@ export const lobbyService = {
       const s = await getDocs(q);
       const summaries = s.docs
         .map(d => {
-          const data = d.data() as Lobby;
-          if (!data.config) {
-            console.warn(`Lobby ${d.id} is missing config`, data);
+          const normalized = normalizeLobbyData({ ...d.data(), id: d.id } as Lobby);
+          if (!normalized.config) {
+            console.warn(`Lobby ${d.id} is missing config`, normalized);
             return null;
           }
-          if (data.config.isPrivate || data.isHidden === true) return null;
-
-          return {
-            id: d.id,
-            name: data.config.name || "Draft",
-            teamSize: data.config.teamSize || 2,
-            captain1Name: data.captain1Name || 'Captain 1',
-            captain2Name: data.captain2Name || 'Captain 2',
-            status: data.status || 'waiting',
-            phase: data.phase || 'waiting',
-            lastActivityAt: data.lastActivityAt,
-            createdAt: data.createdAt
-          } as LobbySummary;
+          if (!isLobbyEligibleForPublicList(normalized)) return null;
+          return lobbyDocToSummary(d.id, normalized);
         })
         .filter((l): l is LobbySummary => l !== null)
-        .slice(0, 20);
+        .slice(0, PUBLIC_LOBBIES_PAGE_SIZE);
       
       onUpdate(summaries);
     } catch (err) {
@@ -1003,11 +1020,10 @@ export const lobbyService = {
         updates.captain1 = guestId;
         updates.captain1Active = true;
         
-        // Use nickname for 1v1 if no custom team name provided
         const is1v1 = data.config.teamSize === 1;
-        const defaultNames = ['Team A (Host)', 'Time A (Host)', 'Team A', 'Time A', 'Host', 'Time A (Host)'];
-        updates.captain1Name = playerNames[100] || nickname;
-        if (is1v1 && (!playerNames[100] || defaultNames.includes(playerNames[100]))) {
+        const customTeamName = (playerNames[100] ?? '').trim();
+        updates.captain1Name = customTeamName || nickname;
+        if (is1v1 && !customTeamName) {
           updates.captain1Name = nickname;
         }
         
@@ -1035,11 +1051,10 @@ export const lobbyService = {
         updates.captain2 = guestId;
         updates.captain2Active = true;
         
-        // Use nickname for 1v1 if no custom team name provided
         const is1v1 = data.config.teamSize === 1;
-        const defaultNames = ['Team B (Guest)', 'Time B (Guest)', 'Team B', 'Time B', 'Guest', 'Time B (Convidado)', 'Convidado'];
-        updates.captain2Name = playerNames[200] || nickname;
-        if (is1v1 && (!playerNames[200] || defaultNames.includes(playerNames[200]))) {
+        const customTeamName = (playerNames[200] ?? '').trim();
+        updates.captain2Name = customTeamName || nickname;
+        if (is1v1 && !customTeamName) {
           updates.captain2Name = nickname;
         }
 
@@ -1158,6 +1173,8 @@ export const lobbyService = {
             updates.status = 'drafting';
             updates.turn = 0;
             updates.timerStart = Date.now() as any;
+            updates.rosterChangedA = false;
+            updates.rosterChangedB = false;
             const currentTurn = data.turnOrder?.[0];
             if (currentTurn) {
               updates.phase = currentTurn.target === 'MAP' 
@@ -1175,6 +1192,8 @@ export const lobbyService = {
 
         if (isReady) {
           updates.status = 'drafting';
+          updates.rosterChangedA = false;
+          updates.rosterChangedB = false;
           let startingTurn = 0;
           updates.timerStart = Date.now() as any;
           
@@ -1238,6 +1257,8 @@ export const lobbyService = {
               updates.status = 'drafting';
               updates.turn = 0;
               updates.timerStart = now();
+              updates.rosterChangedA = false;
+              updates.rosterChangedB = false;
               const currentTurn = data.turnOrder[0];
               if (currentTurn) {
                 updates.phase = currentTurn.target === 'MAP' 
@@ -1266,6 +1287,8 @@ export const lobbyService = {
             updates.status = 'drafting';
             updates.turn = 0;
             updates.timerStart = now();
+            updates.rosterChangedA = false;
+            updates.rosterChangedB = false;
             const currentTurn = data.turnOrder[0];
             if (currentTurn) {
               updates.phase = currentTurn.target === 'MAP' 
@@ -1534,6 +1557,8 @@ export const lobbyService = {
     const q = query(collection(db, 'lobbies', lobbyId, 'messages'), orderBy('timestamp', 'asc'), limit(100));
     return onSnapshot(q, (snap) => {
       onUpdate(snap.docs.map(d => ({ id: d.id, ...d.data() } as ChatMessage)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, `lobbies/${lobbyId}/messages`);
     });
   }
 }; // FIM DO OBJETO lobbyService

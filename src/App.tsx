@@ -14,7 +14,7 @@ import { BugReportModal } from './components/UI/BugReportModal';
 import { PatchNotesModal } from './components/UI/PatchNotesModal';
 import { TRANSLATIONS, PLAYER_COLORS, MCL_ROUND_MAPS, getMCLPicks } from './constants';
 import { Lobby, PickEntry, LobbySummary } from './types';
-import { lobbyService } from './services/lobbyService';
+import { lobbyService, PUBLIC_LOBBIES_PAGE_SIZE } from './services/lobbyService';
 import { cn } from './lib/utils';
 
 import { ErrorBoundary } from './components/UI/ErrorBoundary';
@@ -166,14 +166,14 @@ function AppContent() {
   useEffect(() => {
      lobbyService.getLobbiesPaginated(true).then((lbs) => {
         setPaginatedLobbies(lbs);
-        setHasMore(lbs.length >= 20);
+        setHasMore(lbs.length >= PUBLIC_LOBBIES_PAGE_SIZE);
      });
   }, []);
 
   const loadMore = async () => {
       const next = await lobbyService.getLobbiesPaginated(false);
       setPaginatedLobbies(prev => [...prev, ...next]);
-      setHasMore(next.length >= 20);
+      setHasMore(next.length >= PUBLIC_LOBBIES_PAGE_SIZE);
   };
 
   useEffect(() => {
@@ -727,7 +727,7 @@ function AppContent() {
                       onJoin={(id) => {
                         setLobbyId(id);
                         const targetLobby = paginatedLobbies.find(l => l.id === id);
-                        if (targetLobby && (targetLobby.captain1 === guestId || targetLobby.captain2 === guestId || (Array.isArray(targetLobby.spectators) ? targetLobby.spectators : Object.values(targetLobby.spectators || {})).some((s: any) => s.id === guestId))) {
+                        if (targetLobby && (targetLobby.captain1 === guestId || targetLobby.captain2 === guestId)) {
                           setShowJoinModal(false);
                         } else {
                           setShowJoinModal(true);

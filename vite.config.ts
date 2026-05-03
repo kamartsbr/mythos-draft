@@ -18,10 +18,22 @@ export default defineConfig(({ mode }) => {
           maximumFileSizeToCacheInBytes: 25 * 1024 * 1024,
           
           // Impede o Service Worker de quebrar a conexão com o Firestore
-          navigateFallbackDenylist: [/^\/__/, /firestore\.googleapis\.com/],
+          navigateFallbackDenylist: [/^\/__/, /firestore\.googleapis\.com/, /firebase\.googleapis\.com/, /identitytoolkit\.googleapis\.com/, /securetoken\.googleapis\.com/],
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/firestore\.googleapis\.com.*/,
+              handler: 'NetworkOnly',
+            },
+            {
+              urlPattern: /^https:\/\/firebase\.googleapis\.com\/.*/,
+              handler: 'NetworkOnly',
+            },
+            {
+              urlPattern: /^https:\/\/identitytoolkit\.googleapis\.com\/.*/,
+              handler: 'NetworkOnly',
+            },
+            {
+              urlPattern: /^https:\/\/securetoken\.googleapis\.com\/.*/,
               handler: 'NetworkOnly',
             },
           ],

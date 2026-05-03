@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { lobbyService } from '../services/lobbyService';
+import { lobbyService, PUBLIC_LOBBIES_PAGE_SIZE } from '../services/lobbyService';
 import { Lobby, LobbyConfig, LobbySummary } from '../types';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -153,7 +153,7 @@ export function useLobby(initialNickname: string) {
 useEffect(() => {
   if (!lobbyId) {
     const unsub = lobbyService.subscribeToPublicLobbies((lobbies) => {
-      setPublicLobbies(Array.isArray(lobbies) ? lobbies.slice(0, 20) : []);
+      setPublicLobbies(Array.isArray(lobbies) ? lobbies.slice(0, PUBLIC_LOBBIES_PAGE_SIZE) : []);
     });
     return unsub;
   }
@@ -178,7 +178,7 @@ useEffect(() => {
       // Lógica de Espectador CORRIGIDA
       // Só força espectador se as vagas de capitão estão PREENCHIDAS
       const slotAvailable = !data.captain1 || !data.captain2;
-      const isFull = data.captain1 && data.captain2;
+      const isFull = !!(data.captain1 && data.captain2);
       const isFinished = data.status === 'finished';
       
       // Se não é capitão E não há slots disponíveis E o lobby está cheio ou finido

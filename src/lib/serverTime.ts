@@ -4,6 +4,8 @@ import { doc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 
 let syncPromise: Promise<number> | null = null;
 
+const SYNC_TIMEOUT_MS = 12_000;
+
 /**
  * Obtém o offset (diferença) entre o relógio local e o do servidor.
  * Usa um Singleton para evitar múltiplas chamadas simultâneas.
@@ -21,19 +23,46 @@ export async function getServerTimeOffset(): Promise<number> {
         // Dispara o timestamp do servidor
         await setDoc(testDoc, { timestamp: serverTimestamp() }, { merge: true });
         
-        return new Promise<number>((resolve) => {
-          const unsub = onSnapshot(testDoc, (snapshot) => {
-            const data = snapshot.data();
-            if (data?.timestamp) {
-              unsub(); // Limpa o listener após obter o tempo
-              const serverMs = data.timestamp.toMillis();
-              const localMs = Date.now();
-              resolve(serverMs - localMs);
+        return await new Promise<number>((resolve) => {
+          let settled = false;
+          let unsub: (() => void) | null = null;
+
+          const finish = (offset: number) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeoutId);
+            try {
+              unsub?.();
+            } catch {
+              /* noop */
             }
-          });
+            resolve(offset);
+          };
+
+          const timeoutId = setTimeout(() => {
+            console.warn("[serverTime] Timeout aguardando timestamp do Firestore; usando offset 0.");
+            finish(0);
+          }, SYNC_TIMEOUT_MS);
+
+          unsub = onSnapshot(
+            testDoc,
+            (snapshot) => {
+              const data = snapshot.data();
+              if (data?.timestamp && typeof data.timestamp.toMillis === "function") {
+                const serverMs = data.timestamp.toMillis();
+                const localMs = Date.now();
+                finish(serverMs - localMs);
+              }
+            },
+            (err) => {
+              console.error("Erro no listener de sincronização de tempo:", err);
+              finish(0);
+            }
+          );
         });
       } catch (error) {
         console.error("Erro ao sincronizar tempo:", error);
+        syncPromise = null;
         return 0; // Fallback para tempo local se falhar
       }
     })();

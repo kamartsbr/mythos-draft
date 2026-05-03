@@ -443,6 +443,10 @@ export const draftService = {
           nextLobby.reportVoteA = null;
           nextLobby.reportVoteB = null;
           nextLobby.reportStartAt = null;
+          // Evita loop de substituições / alertas entre games sem novo roster edit
+          nextLobby.lastSubs = [];
+          nextLobby.rosterChangedA = false;
+          nextLobby.rosterChangedB = false;
           // Limpar estados que podem vazar entre games
           nextLobby.pickerVoteA = null;
           nextLobby.pickerVoteB = null;
@@ -596,12 +600,21 @@ export const draftService = {
           newHistoryPicks.push(np);
         }
       });
-      const addedSubs = [...(freshLobby.lastSubs || []), ...subs];
+      const namesChanged = newPicks.some(np => {
+        const old = (freshLobby.picks || []).find(hp => hp.playerId === np.playerId && hp.team === np.team);
+        return !!old && (old.playerName || '').trim() !== (np.playerName || '').trim();
+      });
+      const notifyOpponent = subs.length > 0 || namesChanged;
 
       setLocalLobby(lobby.id, cleanData({ 
         ...freshLobby, 
         picks: newHistoryPicks,
-        lastSubs: addedSubs,
+        ...(subs.length > 0 ? { lastSubs: [...(freshLobby.lastSubs || []), ...subs] } : {}),
+        ...(notifyOpponent
+          ? team === 'A'
+            ? { rosterChangedA: true }
+            : { rosterChangedB: true }
+          : {}),
         lastActivityAt: now() 
       }));
       return { success: true };
@@ -625,7 +638,19 @@ export const draftService = {
           }
         });
         updates.picks = newHistoryPicks;
-        updates.lastSubs = [...(freshLobby.lastSubs || []), ...subs];
+        if (subs.length > 0) {
+          updates.lastSubs = [...(freshLobby.lastSubs || []), ...subs];
+        }
+
+        const namesChanged = newPicks.some(np => {
+          const old = (freshLobby.picks || []).find(hp => hp.playerId === np.playerId && hp.team === np.team);
+          return !!old && (old.playerName || '').trim() !== (np.playerName || '').trim();
+        });
+        const notifyOpponent = subs.length > 0 || namesChanged;
+        if (notifyOpponent) {
+          if (team === 'A') updates.rosterChangedA = true;
+          else updates.rosterChangedB = true;
+        }
 
         const teamKey = team === 'A' ? 'teamAPlayers' : 'teamBPlayers';
         const existingTeamPlayers = (team === 'A' ? (freshLobby.teamAPlayers || []) : (freshLobby.teamBPlayers || []))

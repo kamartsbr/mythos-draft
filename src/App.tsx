@@ -14,7 +14,7 @@ import { BugReportModal } from './components/UI/BugReportModal';
 import { PatchNotesModal } from './components/UI/PatchNotesModal';
 import { TRANSLATIONS, PLAYER_COLORS, MCL_ROUND_MAPS, getMCLPicks } from './constants';
 import { Lobby, PickEntry, LobbySummary } from './types';
-import { lobbyService } from './services/lobbyService';
+import { lobbyService, PUBLIC_LOBBIES_PAGE_SIZE } from './services/lobbyService';
 import { cn } from './lib/utils';
 
 import { ErrorBoundary } from './components/UI/ErrorBoundary';
@@ -728,11 +728,13 @@ function AppContent() {
                         setLobbyId(id);
                         const targetLobby = paginatedLobbies.find(l => l.id === id);
                         if (targetLobby && (targetLobby.captain1 === guestId || targetLobby.captain2 === guestId)) {
-                          setShowJoinModal(false);
-                        } else {
-                          setShowJoinModal(true);
+                          if (targetLobby && (targetLobby.captain1 === guestId || targetLobby.captain2 === guestId)) {
+                            setShowJoinModal(false);
+                          } else {
+                            setShowJoinModal(true);
+                          }
                         }
-                      }}
+                      }
                       onClearAll={() => setShowClearConfirm(true)}
                       onLoadMore={loadMore}
                       hasMore={hasMore}

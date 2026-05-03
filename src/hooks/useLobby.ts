@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { lobbyService } from '../services/lobbyService';
+import { lobbyService, PUBLIC_LOBBIES_PAGE_SIZE } from '../services/lobbyService';
 import { Lobby, LobbyConfig, LobbySummary } from '../types';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -153,7 +153,7 @@ export function useLobby(initialNickname: string) {
 useEffect(() => {
   if (!lobbyId) {
     const unsub = lobbyService.subscribeToPublicLobbies((lobbies) => {
-      setPublicLobbies(Array.isArray(lobbies) ? lobbies.slice(0, 20) : []);
+      setPublicLobbies(Array.isArray(lobbies) ? lobbies.slice(0, PUBLIC_LOBBIES_PAGE_SIZE) : []);
     });
     return unsub;
   }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Lobby, PickEntry, Substitution } from '../../types';
 import { lobbyService } from '../../services/lobbyService';
@@ -33,6 +33,8 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
   const [hudScale, setHudScale] = useState(0.75);
   const [copiedObs, setCopiedObs] = useState(false);
   const [persistentSubs, setPersistentSubs] = useState<Substitution[]>([]);
+  const manualModeRef = useRef(manualMode);
+  manualModeRef.current = manualMode;
 
   const isObsMode = new URLSearchParams(window.location.search).get('view') === 'obs';
 
@@ -77,8 +79,8 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
         setLobby(updatedLobby);
         setLoading(false);
         
-        // Auto-sync game index if not in manual mode
-        if (!manualMode && updatedLobby) {
+        // Auto-sync game index if not in manual mode (ref avoids re-subscribing on toggle)
+        if (!manualModeRef.current && updatedLobby) {
           // If we are in ready phase, show the previous game results if available
           const autoIdx = (updatedLobby.phase === 'ready' && updatedLobby.currentGame > 1)
             ? updatedLobby.currentGame - 2
@@ -93,7 +95,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
     );
 
     return () => unsubscribe();
-  }, [lobbyId, manualMode]);
+  }, [lobbyId]);
 
   useEffect(() => {
     if (lobby?.lastSubs && lobby.lastSubs.length > 0) {
@@ -403,7 +405,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 pointer-events-auto"
+            className="fixed inset-0 z-[110] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 pointer-events-auto"
           >
             <motion.div
               initial={{ scale: 0.8, opacity: 0 }}
@@ -435,7 +437,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
 
       {/* MAIN HUD CONTENT */}
       <div 
-        className="max-w-[1920px] mx-auto h-screen flex flex-col items-center justify-between py-16 px-24 pointer-events-none relative z-10 transition-transform duration-500 ease-out"
+        className="max-w-[1920px] mx-auto h-screen flex flex-col items-center justify-between py-16 px-24 pointer-events-none relative z-[55] transition-transform duration-500 ease-out"
         style={{ transform: `scale(${hudScale})`, transformOrigin: 'center top' }}
       >
         
@@ -714,7 +716,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
         </AnimatePresence>
 
         {/* Persistent Subs for Streamer (Persistent until dismissed) */}
-        <div className="fixed inset-y-0 left-0 w-[400px] flex flex-col justify-center pointer-events-none p-8 z-[100] gap-4">
+        <div className="fixed inset-y-0 left-0 w-[280px] md:w-[340px] flex flex-col justify-center pointer-events-none p-6 md:p-8 z-[45] gap-4">
           <AnimatePresence mode="popLayout">
             {persistentSubs.filter(s => s.team === 'A').map((sub, idx) => (
               <motion.div
@@ -722,7 +724,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                 initial={{ opacity: 0, x: -50 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, scale: 0.9 }}
-                className="bg-slate-900/95 border-2 border-amber-500 rounded-3xl p-6 shadow-2xl shadow-amber-500/30 pointer-events-auto relative group translate-y-12"
+                className="bg-slate-900/95 border-2 border-amber-500 rounded-3xl p-5 shadow-2xl shadow-amber-500/30 pointer-events-auto relative group translate-y-4 md:translate-y-6"
               >
                 <button 
                   onClick={() => setPersistentSubs(prev => prev.filter(p => p !== sub))}
@@ -756,7 +758,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
           </AnimatePresence>
         </div>
 
-        <div className="fixed inset-y-0 right-0 w-[400px] flex flex-col justify-center pointer-events-none p-8 z-[100] gap-4">
+        <div className="fixed inset-y-0 right-0 w-[280px] md:w-[340px] flex flex-col justify-center pointer-events-none p-6 md:p-8 z-[45] gap-4">
           <AnimatePresence mode="popLayout">
             {persistentSubs.filter(s => s.team === 'B').map((sub, idx) => (
               <motion.div
@@ -764,7 +766,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                 initial={{ opacity: 0, x: 50 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, scale: 0.9 }}
-                className="bg-slate-900/95 border-2 border-amber-500 rounded-3xl p-6 shadow-2xl shadow-amber-500/30 pointer-events-auto relative group text-right translate-y-12"
+                className="bg-slate-900/95 border-2 border-amber-500 rounded-3xl p-5 shadow-2xl shadow-amber-500/30 pointer-events-auto relative group text-right translate-y-4 md:translate-y-6"
               >
                 <button 
                   onClick={() => setPersistentSubs(prev => prev.filter(p => p !== sub))}

@@ -149,49 +149,49 @@ export function useLobby(initialNickname: string) {
     };
   }, [lobbyId, guestId, updatePresence]);
 
-  // Subscriptions
-  useEffect(() => {
-    // Optimization: If we have a lobbyId, we IMMEDIATELY stop listening to public lobbies
-    // to save bandwidth and prevent unneeded re-renders during gameplay.
-    if (!lobbyId) {
-      console.log("[Lobby] Inscrição no índice global iniciada.");
-      const unsub = lobbyService.subscribeToPublicLobbies((lobbies) => {
-        setPublicLobbies(Array.isArray(lobbies) ? lobbies.slice(0, 20) : []);
-      });
-      return unsub;
-    }
-
-    // Entering a specific lobby - unsubscribe from global index happens automatically 
-    // because this effect cleans up when lobbyId becomes truthy.
-    console.log("[Lobby] Inscrição no lobby específico:", lobbyId);
-    setPublicLobbies([]); // Clear list to free memory
-
-    const unsub = lobbyService.subscribeToLobby(
-      lobbyId, 
-      (data) => {
-        setLobby(data);
-        const isC1 = data.captain1 === guestId;
-        const isC2 = data.captain2 === guestId;
-        const isFull = data.captain1 && data.captain2;
-        const isFinished = data.status === 'finished';
-        const isInProgress = data.status !== 'waiting' && data.status !== 'INCOMPLETE';
-        
-        // Activity check (2 hours)
-        const lastActivity = data.lastActivityAt?.toMillis?.() || data.createdAt?.toMillis?.() || Date.now();
-        const isActive = (Date.now() - lastActivity) < 7200000;
-
-        const shouldBeSpectator = !isC1 && !isC2 && (isFull || isFinished || (isInProgress && isActive));
-
-        setIsCaptain1(isC1);
-        setIsCaptain2(isC2);
-        setIsSpectator(shouldBeSpectator || !!(Array.isArray(data.spectators) ? data.spectators : Object.values(data.spectators || {})).some((s: any) => s.id === guestId));
-      },
-      (err) => setError("Lobby error: " + err.message)
-    );
-
+// Subscriptions ---
+useEffect(() => {
+  if (!lobbyId) {
+    const unsub = lobbyService.subscribeToPublicLobbies((lobbies) => {
+      setPublicLobbies(Array.isArray(lobbies) ? lobbies.slice(0, 20) : []);
+    });
     return unsub;
-  }, [lobbyId, guestId]);
+  }
 
+  setPublicLobbies([]); 
+
+  const unsub = lobbyService.subscribeToLobby(
+    lobbyId, 
+    (data) => {
+      // SÓ atualiza se algo importante mudou (evita o lag)
+      setLobby(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
+        return data;
+      });
+
+      const isC1 = data.captain1 === guestId;
+      const isC2 = data.captain2 === guestId;
+      
+      setIsCaptain1(isC1);
+      setIsCaptain2(isC2);
+
+      // Lógica de Espectador CORRIGIDA
+      // Só força espectador se as vagas de capitão estão PREENCHIDAS
+      const slotAvailable = !data.captain1 || !data.captain2;
+      const isFull = data.captain1 && data.captain2;
+      const isFinished = data.status === 'finished';
+      
+      // Se não é capitão E não há slots disponíveis E o lobby está cheio ou finido
+      const shouldBeSpectator = !isC1 && !isC2 && !slotAvailable && (isFull || isFinished);
+      
+      setIsSpectator(shouldBeSpectator);
+    },
+    (err) => setError("Erro no Lobby: " + err.message)
+  );
+
+  return unsub;
+}, [lobbyId, guestId]);
+// --- Fim da substituição ---
   const join = useCallback(async (id: string, role: 'A' | 'B' | 'SPECTATOR', preferredPosition: number, playerNames: Record<number, string>, newNickname?: string) => {
     const finalNickname = newNickname || nickname;
     if (newNickname) {

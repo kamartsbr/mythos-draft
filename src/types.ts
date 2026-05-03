@@ -20,7 +20,7 @@ export type MapInfo = {
 };
 
 export type LobbyStatus = 'waiting' | 'drafting' | 'finished' | 'INCOMPLETE';
-export type DraftPhase = 'waiting' | 'ready' | 'drafting' | 'map_ban' | 'map_pick' | 'god_ban' | 'god_pick' | 'ready_picker' | 'god_picker' | 'revealing' | 'post_draft' | 'reporting' | 'finished';
+export type DraftPhase = 'waiting' | 'ready' | 'setup' | 'roster_edit' | 'drafting' | 'map_ban' | 'map_pick' | 'god_ban' | 'god_pick' | 'ready_picker' | 'god_picker' | 'revealing' | 'post_draft' | 'reporting' | 'finished';
 
 export type TurnAction = 'PICK' | 'BAN' | 'SNIPE' | 'STEAL' | 'REVEAL';
 export type TurnModifier = 'GLOBAL' | 'EXCLUSIVE' | 'NONEXCLUSIVE';

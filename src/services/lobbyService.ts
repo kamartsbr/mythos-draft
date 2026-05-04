@@ -203,8 +203,12 @@ export const cleanData = (obj: any): any => {
   }
 
   // Preserve Firebase specific objects (FieldValue, Timestamp, etc)
-  const proto = Object.getPrototypeOf(obj);
-  if (proto !== Object.prototype && proto !== Array.prototype) {
+  if (
+    typeof obj.toDate === 'function' || 
+    typeof obj.isEqual === 'function' || 
+    obj._methodName || 
+    (Object.getPrototypeOf(obj) !== Object.prototype && Object.getPrototypeOf(obj) !== Array.prototype)
+  ) {
     return obj;
   }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { motion } from 'motion/react';
 import { Sword, Loader2, AlertTriangle, Github, MessageSquare, Scroll, User, X, Key, Shield } from 'lucide-react';
 import { useLobby } from './hooks/useLobby';
@@ -20,6 +20,19 @@ import { cn } from './lib/utils';
 import { ErrorBoundary } from './components/UI/ErrorBoundary';
 import { Footer } from './components/UI/Footer';
 
+// ── Forja de Hefesto — Lazy-loaded para isolamento total ──────────
+const ForjaHub = lazy(() => import('./features/forja/ForjaHub'));
+function ForjaLoader() {
+  return (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="flex flex-col items-center gap-4 text-amber-500">
+        <div className="w-12 h-12 border-4 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+        <span className="text-sm font-black uppercase tracking-widest text-amber-500/80">Entrando na Forja...</span>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -33,10 +46,11 @@ function AppContent() {
   const t = TRANSLATIONS[lang as keyof typeof TRANSLATIONS] || TRANSLATIONS.en;
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // Simple Routing for Streamer HUD & Overlay
+  // Simple Routing for Streamer HUD, Overlay & Forja
   const isOverlay = window.location.pathname.startsWith('/overlay/');
   const isStreamerHud = window.location.pathname.startsWith('/streamer/');
   const isStreamerDock = window.location.pathname.startsWith('/streamer-dock/');
+  const isForjaRoute = window.location.pathname.startsWith('/forja');
   const lobbyIdFromPath = (isOverlay || isStreamerHud || isStreamerDock) ? window.location.pathname.split('/')[2] : null;
 
   useEffect(() => {
@@ -408,7 +422,12 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-amber-500/30 relative flex flex-col">
-      {(isOverlay || isStreamerHud) && lobbyIdFromPath ? (
+      {/* ── Forja de Hefesto Route ── */}
+      {isForjaRoute ? (
+        <Suspense fallback={<ForjaLoader />}>
+          <ForjaHub />
+        </Suspense>
+      ) : (isOverlay || isStreamerHud) && lobbyIdFromPath ? (
         <StreamerHUD lobbyId={lobbyIdFromPath} />
       ) : (
         <>
@@ -485,6 +504,16 @@ function AppContent() {
                   </button>
                 )}
               </div>
+              {/* Forja de Hefesto — Botão de acesso principal */}
+              <a
+                href="/forja"
+                id="nav-forja-btn"
+                className="h-10 px-4 rounded-xl bg-gradient-to-r from-orange-600/80 to-amber-500/80 hover:from-orange-500 hover:to-amber-400 border border-amber-500/50 hover:border-amber-400 transition-all flex items-center gap-2 group shadow-[0_0_20px_rgba(245,158,11,0.25)] hover:shadow-[0_0_30px_rgba(245,158,11,0.5)]"
+                title="Forja de Hefesto — Torneio 3v3"
+              >
+                <span className="text-base leading-none group-hover:scale-110 transition-transform">🔥</span>
+                <span className="text-[10px] font-black text-white uppercase tracking-widest hidden sm:inline">Forja</span>
+              </a>
               <button
                 onClick={() => setShowPatchNotes(true)}
                 className="h-10 px-4 rounded-xl bg-slate-900/80 backdrop-blur-md border border-slate-800 hover:border-amber-500/50 hover:bg-slate-800 transition-all flex items-center gap-2 group relative"

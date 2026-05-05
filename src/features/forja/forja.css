@@ -1,0 +1,712 @@
+/**
+ * ============================================================
+ *  FORJA DE HEFESTO — Estilos Isolados
+ *  Escopo: .forja-* (prefixo exclusivo desta feature)
+ *  Importado pelo ForjaHub.tsx para isolamento total.
+ * ============================================================
+ */
+
+/* ─── Reset de Box ─────────────────────────────────────────── */
+.forja-hub *,
+.forja-hub *::before,
+.forja-hub *::after {
+  box-sizing: border-box;
+}
+
+/* ─── Hub Container ─────────────────────────────────────────── */
+.forja-hub {
+  min-height: 100vh;
+  background-color: #020617; /* slate-950 */
+  color: #f1f5f9; /* slate-100 */
+  font-family: 'Inter', system-ui, sans-serif;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── Header ─────────────────────────────────────────────────── */
+.forja-header {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(
+    180deg,
+    rgba(234, 88, 12, 0.15) 0%,
+    rgba(245, 158, 11, 0.08) 50%,
+    transparent 100%
+  );
+  border-bottom: 1px solid rgba(245, 158, 11, 0.15);
+  padding: 2rem 1.5rem 1.5rem;
+}
+
+.forja-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 0%, rgba(234, 88, 12, 0.2) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.forja-header-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  position: relative;
+  z-index: 1;
+}
+
+.forja-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.forja-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  width: fit-content;
+}
+
+.forja-title {
+  font-size: clamp(1.75rem, 5vw, 3rem);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  margin: 0;
+  background: linear-gradient(135deg, #ffffff 0%, #fbbf24 50%, #f97316 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1.1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.forja-title-icon {
+  -webkit-text-fill-color: initial;
+  filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.8));
+}
+
+.forja-subtitle {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #94a3b8; /* slate-400 */
+  font-style: italic;
+  max-width: 480px;
+}
+
+.forja-header-logo {
+  flex-shrink: 0;
+}
+
+.forja-aomr-logo {
+  height: 80px;
+  width: auto;
+  object-fit: contain;
+  opacity: 0.85;
+  filter: drop-shadow(0 0 24px rgba(245, 158, 11, 0.3));
+  transition: opacity 0.3s ease;
+}
+
+.forja-aomr-logo:hover {
+  opacity: 1;
+}
+
+/* ─── Back to Home link ─────────────────────────────────────── */
+.forja-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #64748b; /* slate-500 */
+  text-decoration: none;
+  transition: color 0.2s ease;
+  margin-bottom: 1rem;
+}
+
+.forja-back-link:hover {
+  color: #f59e0b;
+}
+
+/* ─── Tabs Navigation ────────────────────────────────────────── */
+.forja-tabs-nav {
+  background: rgba(15, 23, 42, 0.9);
+  border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+  backdrop-filter: blur(12px);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.forja-tabs-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: stretch;
+  padding: 0 1.5rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  gap: 0;
+}
+
+.forja-tabs-inner::-webkit-scrollbar {
+  display: none;
+}
+
+.forja-tab-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.875rem 1.1rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #64748b; /* slate-500 */
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: color 0.2s ease, background 0.2s ease;
+  border-radius: 0;
+  outline: none;
+  flex-shrink: 0;
+}
+
+.forja-tab-btn:hover {
+  color: #cbd5e1; /* slate-300 */
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.forja-tab-btn--active {
+  color: #f59e0b !important; /* amber-500 */
+}
+
+.forja-tab-icon {
+  font-size: 1rem;
+  line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+.forja-tab-btn:hover .forja-tab-icon {
+  transform: scale(1.15);
+}
+
+.forja-tab-label {
+  line-height: 1;
+}
+
+.forja-tab-indicator {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #f97316, #f59e0b);
+  border-radius: 2px 2px 0 0;
+  animation: forja-tab-in 0.2s ease;
+}
+
+@keyframes forja-tab-in {
+  from { opacity: 0; transform: scaleX(0.5); }
+  to   { opacity: 1; transform: scaleX(1); }
+}
+
+/* ─── Tab Content Area ───────────────────────────────────────── */
+.forja-tab-content {
+  flex: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 2.5rem 1.5rem;
+  animation: forja-fade-in 0.25s ease;
+}
+
+@keyframes forja-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── View Container ─────────────────────────────────────────── */
+.forja-view {
+  min-height: 400px;
+}
+
+/* ─── Loader Spinner ─────────────────────────────────────────── */
+.forja-tab-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  min-height: 300px;
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.forja-loader-spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 3px solid rgba(245, 158, 11, 0.2);
+  border-top-color: #f59e0b;
+  border-radius: 50%;
+  animation: forja-spin 0.8s linear infinite;
+}
+
+@keyframes forja-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Placeholder (Views do Passo 1) ─────────────────────────── */
+.forja-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  min-height: 400px;
+  border: 1px dashed rgba(245, 158, 11, 0.2);
+  border-radius: 1rem;
+  background: rgba(245, 158, 11, 0.02);
+  text-align: center;
+  padding: 3rem 2rem;
+}
+
+.forja-placeholder-icon {
+  font-size: 3rem;
+  opacity: 0.6;
+  display: block;
+}
+
+.forja-placeholder h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: #f1f5f9;
+  letter-spacing: -0.02em;
+}
+
+.forja-placeholder p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+/* ─── Shared Button Styles ───────────────────────────────────── */
+.forja-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.forja-btn--primary {
+  background: linear-gradient(135deg, #ea580c, #f59e0b);
+  color: #000;
+  box-shadow: 0 4px 20px rgba(245, 158, 11, 0.3);
+}
+
+.forja-btn--primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(245, 158, 11, 0.5);
+}
+
+.forja-btn--secondary {
+  background: rgba(51, 65, 85, 0.5);
+  color: #cbd5e1;
+  border: 1px solid rgba(71, 85, 105, 0.5);
+}
+
+.forja-btn--secondary:hover {
+  background: rgba(71, 85, 105, 0.5);
+  color: #f1f5f9;
+}
+
+.forja-btn--ghost {
+  background: transparent;
+  color: #94a3b8;
+  border: 1px solid rgba(71, 85, 105, 0.3);
+}
+
+.forja-btn--ghost:hover {
+  background: rgba(51, 65, 85, 0.3);
+  color: #f1f5f9;
+  border-color: rgba(100, 116, 139, 0.5);
+}
+
+.forja-btn--danger {
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.forja-btn--danger:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+/* ─── Shared Card Base ───────────────────────────────────────── */
+.forja-card {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(51, 65, 85, 0.5);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  backdrop-filter: blur(8px);
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.forja-card:hover {
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+/* ─── Section Title ──────────────────────────────────────────── */
+.forja-section-title {
+  font-size: 1.1rem;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  color: #f1f5f9;
+  margin: 0 0 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.forja-section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.3), transparent);
+}
+
+/* ─── Responsividade ─────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .forja-header-logo { display: none; }
+  .forja-tab-content { padding: 1.5rem 1rem; }
+  .forja-tab-btn { padding: 0.75rem 0.75rem; font-size: 0.7rem; }
+  .forja-tab-label { display: none; }
+  .forja-tab-icon { font-size: 1.25rem; }
+}
+
+/* ─── Page Header (shared) ───────────────────────────────────── */
+.forja-page-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap; margin-bottom: 2rem;
+}
+.forja-page-title {
+  font-size: 1.6rem; font-weight: 900; letter-spacing: -0.02em;
+  color: #f1f5f9; margin: 0 0 0.35rem; display: flex; align-items: center; gap: 0.5rem;
+}
+.forja-page-subtitle { margin: 0; color: #64748b; font-size: 0.875rem; }
+
+/* ─── Empty State ────────────────────────────────────────────── */
+.forja-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.75rem; min-height: 300px; color: #475569; text-align: center; padding: 3rem;
+}
+.forja-empty p { margin: 0; font-size: 1rem; }
+
+/* ─── Admin Banner ───────────────────────────────────────────── */
+.forja-admin-banner {
+  margin-top: 1.5rem; padding: 0.875rem 1.25rem;
+  background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2);
+  border-radius: 0.75rem; color: #f59e0b; font-size: 0.8rem; font-weight: 700;
+}
+
+/* ─── Inicio: Hero CTA ───────────────────────────────────────── */
+.forja-inicio-hero {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 2rem; flex-wrap: wrap; margin-bottom: 2rem;
+  padding: 2rem; border-radius: 1.25rem;
+  background: linear-gradient(135deg, rgba(234,88,12,0.1) 0%, rgba(245,158,11,0.05) 100%);
+  border: 1px solid rgba(245,158,11,0.15);
+}
+.forja-inicio-hero__title {
+  font-size: clamp(1.4rem,3vw,2rem); font-weight: 900; line-height: 1.2;
+  letter-spacing: -0.02em; margin: 0 0 0.75rem; color: #f1f5f9;
+}
+.forja-inicio-hero__desc { color: #94a3b8; font-size: 0.9rem; line-height: 1.6; margin: 0; max-width: 500px; }
+.forja-inicio-hero__cta { display: flex; flex-direction: column; align-items: flex-end; gap: 0.6rem; flex-shrink: 0; }
+.forja-btn--lg { padding: 0.9rem 1.75rem; font-size: 0.875rem; }
+.forja-btn--glow { box-shadow: 0 0 30px rgba(245,158,11,0.35); }
+.forja-btn--glow:hover { box-shadow: 0 0 50px rgba(245,158,11,0.55); }
+.forja-cta-note { font-size: 0.68rem; color: #475569; text-align: right; }
+
+/* ─── Stats Bar ──────────────────────────────────────────────── */
+.forja-stats-bar {
+  display: flex; align-items: center; gap: 0; margin-bottom: 1.75rem;
+  background: rgba(15,23,42,0.8); border: 1px solid rgba(51,65,85,0.5);
+  border-radius: 0.875rem; padding: 1rem 1.5rem; overflow-x: auto;
+}
+.forja-stats-item { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; padding: 0 1.25rem; flex-shrink: 0; }
+.forja-stats-value { font-size: 1.5rem; font-weight: 900; line-height: 1; color: #f1f5f9; }
+.forja-stats-label { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #475569; }
+.forja-stats-divider { width: 1px; height: 2.5rem; background: rgba(51,65,85,0.7); flex-shrink: 0; }
+
+/* ─── Filter Row ─────────────────────────────────────────────── */
+.forja-filter-row {
+  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.5rem;
+}
+.forja-filter-label { font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; margin-right: 0.25rem; }
+.forja-filter-btn {
+  padding: 0.35rem 0.875rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer;
+  border: 1px solid rgba(71,85,105,0.4); background: transparent; color: #64748b;
+  transition: all 0.2s ease;
+}
+.forja-filter-btn:hover { border-color: rgba(245,158,11,0.4); color: #f59e0b; }
+.forja-filter-btn--active { background: rgba(245,158,11,0.1); border-color: rgba(245,158,11,0.5); color: #f59e0b; }
+.forja-filter-count { margin-left: auto; font-size: 0.72rem; color: #475569; }
+
+/* ─── Players Grid ───────────────────────────────────────────── */
+.forja-players-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.25rem;
+}
+
+/* ─── Player Card ────────────────────────────────────────────── */
+.forja-player-card {
+  position: relative; background: rgba(15,23,42,0.85);
+  border: 1px solid rgba(51,65,85,0.5); border-radius: 1rem;
+  padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;
+  transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+  overflow: hidden;
+}
+.forja-player-card:hover {
+  border-color: rgba(245,158,11,0.3); transform: translateY(-3px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.4), 0 0 30px rgba(245,158,11,0.06);
+}
+.forja-seed-badge {
+  position: absolute; top: 0.75rem; right: 0.75rem;
+  font-size: 0.65rem; font-weight: 900; color: #475569;
+  background: rgba(30,41,59,0.8); border: 1px solid rgba(51,65,85,0.5);
+  border-radius: 0.375rem; padding: 0.2rem 0.5rem;
+}
+.forja-player-card__header { display: flex; align-items: flex-start; gap: 0.875rem; }
+.forja-player-avatar { position: relative; flex-shrink: 0; }
+.forja-player-avatar img {
+  width: 3.5rem; height: 3.5rem; border-radius: 0.75rem; object-fit: cover;
+  border: 2px solid rgba(51,65,85,0.6);
+}
+.forja-player-flag {
+  position: absolute; bottom: -4px; right: -4px; font-size: 0.8rem;
+  line-height: 1; background: rgba(15,23,42,0.9); border-radius: 0.25rem; padding: 1px;
+}
+.forja-player-info { flex: 1; min-width: 0; }
+.forja-player-nick {
+  font-size: 1rem; font-weight: 900; color: #f1f5f9; margin: 0 0 0.2rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.forja-player-aomlink {
+  font-size: 0.7rem; color: #f59e0b; text-decoration: none;
+  font-weight: 600; opacity: 0.8; transition: opacity 0.2s;
+}
+.forja-player-aomlink:hover { opacity: 1; text-decoration: underline; }
+.forja-player-elos {
+  display: flex; align-items: center; gap: 0;
+  background: rgba(2,6,23,0.5); border: 1px solid rgba(51,65,85,0.4);
+  border-radius: 0.625rem; overflow: hidden;
+}
+.forja-elo-block { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 0.5rem; }
+.forja-elo-label { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #475569; }
+.forja-elo-value { font-size: 1.1rem; font-weight: 900; line-height: 1.2; }
+.forja-elo-divider { width: 1px; height: 2rem; background: rgba(51,65,85,0.6); }
+.forja-player-gods { display: flex; flex-direction: column; gap: 0.4rem; }
+.forja-player-gods__label { font-size: 0.58rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.15em; color: #475569; }
+.forja-player-gods__row { display: flex; gap: 0.4rem; }
+.forja-god-icon {
+  position: relative; width: 2.25rem; height: 2.25rem; border-radius: 0.5rem;
+  overflow: hidden; border: 1px solid rgba(51,65,85,0.5);
+  background: rgba(2,6,23,0.6); display: flex; align-items: center; justify-content: center;
+  cursor: default; transition: border-color 0.2s;
+}
+.forja-god-icon:hover { border-color: rgba(245,158,11,0.5); }
+.forja-god-icon img { width: 100%; height: 100%; object-fit: cover; }
+.forja-god-wr {
+  position: absolute; bottom: 0; left: 0; right: 0; text-align: center;
+  font-size: 0.5rem; font-weight: 900; background: rgba(0,0,0,0.75);
+  color: #f59e0b; padding: 1px 0;
+}
+.forja-player-pitch { padding: 0.625rem 0.875rem; background: rgba(2,6,23,0.4); border-radius: 0.5rem; border-left: 2px solid rgba(245,158,11,0.3); }
+.forja-pitch-quote { font-size: 0.78rem; color: #94a3b8; font-style: italic; line-height: 1.4; }
+
+/* ─── Regras ─────────────────────────────────────────────────── */
+.forja-rule-version { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.7rem; font-weight: 700; color: #64748b; background: rgba(30,41,59,0.6); border: 1px solid rgba(51,65,85,0.4); border-radius: 0.5rem; padding: 0.35rem 0.75rem; }
+.forja-rule-quicknav { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+.forja-rule-quicknav__item { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.7rem; font-weight: 700; color: #64748b; text-decoration: none; padding: 0.3rem 0.75rem; border-radius: 999px; border: 1px solid rgba(51,65,85,0.4); background: rgba(15,23,42,0.5); transition: all 0.2s ease; }
+.forja-rule-quicknav__item:hover { color: #f59e0b; border-color: rgba(245,158,11,0.4); }
+.forja-rules-list { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 2rem; }
+.forja-rule-section { border: 1px solid rgba(51,65,85,0.4); border-radius: 0.875rem; background: rgba(15,23,42,0.6); overflow: hidden; transition: border-color 0.2s; }
+.forja-rule-section--open { border-color: rgba(245,158,11,0.25); }
+.forja-rule-section__header { width: 100%; display: flex; align-items: center; gap: 0.75rem; padding: 1rem 1.25rem; background: transparent; border: none; cursor: pointer; color: #f1f5f9; text-align: left; transition: background 0.2s; }
+.forja-rule-section__header:hover { background: rgba(255,255,255,0.03); }
+.forja-rule-section__icon { font-size: 1.1rem; flex-shrink: 0; }
+.forja-rule-section__title { font-size: 0.9rem; font-weight: 800; flex: 1; }
+.forja-rule-section__count,.forja-rule-section__chevron { font-size: 0.65rem; color: #475569; font-weight: 700; }
+.forja-rule-section__body { list-style: none; padding: 0 1.25rem 1.25rem; margin: 0; display: flex; flex-direction: column; gap: 0.875rem; }
+.forja-rule-article { display: flex; gap: 0.875rem; align-items: flex-start; }
+.forja-rule-num { flex-shrink: 0; font-size: 0.65rem; font-weight: 900; color: #f59e0b; background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.2); border-radius: 0.375rem; padding: 0.2rem 0.5rem; margin-top: 0.1rem; white-space: nowrap; }
+.forja-rule-text { font-size: 0.85rem; color: #94a3b8; line-height: 1.65; }
+.forja-rule-disclaimer { display: flex; align-items: flex-start; gap: 0.75rem; padding: 1rem 1.25rem; background: rgba(245,158,11,0.05); border: 1px solid rgba(245,158,11,0.15); border-radius: 0.75rem; }
+.forja-rule-disclaimer p { margin: 0; font-size: 0.8rem; color: #64748b; line-height: 1.6; }
+/* ─── Formato ────────────────────────────────────────────────── */
+.forja-formato-block { margin-bottom: 3rem; }
+.forja-formato-explainer { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+.forja-formato-explainer__text p { color: #94a3b8; font-size: 0.875rem; line-height: 1.7; margin: 0 0 1rem; }
+.forja-formato-explainer__text strong { color: #f1f5f9; }
+.forja-formato-explainer__rules { display: flex; flex-direction: column; gap: 0.875rem; }
+.forja-formato-rule { display: flex; gap: 0.875rem; align-items: flex-start; padding: 0.875rem; background: rgba(15,23,42,0.6); border: 1px solid rgba(51,65,85,0.4); border-radius: 0.75rem; }
+.forja-formato-rule__num { width: 1.75rem; height: 1.75rem; border-radius: 50%; background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3); color: #f59e0b; font-size: 0.75rem; font-weight: 900; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.forja-formato-rule strong { display: block; font-size: 0.8rem; color: #f1f5f9; margin-bottom: 0.25rem; }
+.forja-formato-rule p { margin: 0; font-size: 0.78rem; color: #64748b; line-height: 1.5; }
+.forja-formato-viz-note { font-size: 0.75rem; color: #475569; margin-bottom: 1rem; }
+.forja-snake-viz { border: 1px solid rgba(51,65,85,0.4); border-radius: 0.875rem; overflow: hidden; background: rgba(15,23,42,0.6); }
+.forja-snake-row { padding: 1rem 1.25rem; border-bottom: 1px solid rgba(51,65,85,0.3); }
+.forja-snake-row:last-child { border-bottom: none; }
+.forja-snake-round-label { font-size: 0.7rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
+.forja-snake-arrow { color: #f59e0b; font-size: 1rem; }
+.forja-snake-picks { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+.forja-snake-picks--reversed { flex-direction: row-reverse; }
+.forja-snake-pick { border: 1px solid; border-radius: 0.625rem; padding: 0.625rem 0.875rem; display: flex; flex-direction: column; gap: 0.25rem; min-width: 120px; flex: 1; background: rgba(2,6,23,0.4); }
+.forja-snake-pick__num { font-size: 0.65rem; font-weight: 900; padding: 0.15rem 0.4rem; border-radius: 0.25rem; width: fit-content; }
+.forja-snake-pick__team { font-size: 0.72rem; font-weight: 900; }
+.forja-snake-pick__label { font-size: 0.8rem; color: #f1f5f9; font-weight: 700; }
+.forja-snake-pick__tier { font-size: 0.6rem; font-weight: 900; padding: 0.15rem 0.4rem; border-radius: 0.25rem; width: fit-content; text-transform: uppercase; }
+.forja-snake-legend { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; padding: 0.75rem 1.25rem; background: rgba(2,6,23,0.3); border-top: 1px solid rgba(51,65,85,0.3); font-size: 0.7rem; color: #64748b; font-weight: 600; }
+.forja-snake-legend__item { display: flex; align-items: center; gap: 0.35rem; }
+.forja-tier-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+.forja-tier-card { border: 1px solid; border-radius: 1rem; padding: 1.5rem; display: flex; gap: 1.25rem; align-items: flex-start; }
+.forja-tier-card__badge { width: 3rem; height: 3rem; border-radius: 0.75rem; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 900; flex-shrink: 0; }
+.forja-tier-card__desc { font-size: 0.82rem; color: #94a3b8; line-height: 1.6; margin: 0 0 0.875rem; }
+.forja-tier-card__criteria { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.forja-tier-card__criteria li { display: flex; gap: 0.5rem; font-size: 0.78rem; color: #64748b; }
+.forja-timeline { display: flex; flex-direction: column; }
+.forja-timeline-item { display: flex; gap: 1.25rem; align-items: flex-start; position: relative; padding-bottom: 1.5rem; }
+.forja-timeline-dot { width: 2.5rem; height: 2.5rem; border-radius: 50%; border: 2px solid; display: flex; align-items: center; justify-content: center; flex-shrink: 0; z-index: 1; }
+.forja-timeline-line { position: absolute; left: 1.2rem; top: 2.5rem; bottom: 0; width: 2px; background: rgba(51,65,85,0.4); }
+.forja-timeline-content strong { display: block; font-size: 0.875rem; margin-bottom: 0.25rem; }
+.forja-timeline-content p { margin: 0; font-size: 0.8rem; color: #64748b; line-height: 1.5; }
+@media (max-width: 768px) { .forja-formato-explainer { grid-template-columns: 1fr; } }
+/* ─── Schedule ───────────────────────────────────────────────── */
+.forja-schedule-tz-note { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: #475569; margin-bottom: 1.5rem; }
+.forja-schedule-rounds { display: flex; flex-direction: column; gap: 2rem; margin-bottom: 2rem; }
+.forja-schedule-round__header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
+.forja-schedule-round__dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; flex-shrink: 0; }
+.forja-schedule-round__title { font-size: 0.875rem; font-weight: 900; margin: 0; text-transform: uppercase; letter-spacing: 0.05em; }
+.forja-schedule-round__count { font-size: 0.65rem; color: #475569; font-weight: 700; }
+.forja-schedule-matches { display: flex; flex-direction: column; gap: 0.875rem; }
+.forja-match-card { border: 1px solid rgba(51,65,85,0.4); border-left: 3px solid; border-radius: 0.875rem; padding: 1.25rem; background: rgba(15,23,42,0.7); display: flex; flex-direction: column; gap: 0.875rem; transition: transform 0.2s, box-shadow 0.2s; }
+.forja-match-card--hovered { transform: translateX(4px); box-shadow: 0 8px 30px rgba(0,0,0,0.3); }
+.forja-match-status { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; padding: 0.2rem 0.6rem; border-radius: 999px; width: fit-content; }
+.forja-match-matchup { display: flex; align-items: center; gap: 0.875rem; flex-wrap: wrap; }
+.forja-match-team { font-size: 1rem; font-weight: 900; color: #f1f5f9; }
+.forja-match-vs { font-size: 0.65rem; font-weight: 900; color: #475569; text-transform: uppercase; letter-spacing: 0.15em; padding: 0.2rem 0.5rem; border: 1px solid rgba(51,65,85,0.5); border-radius: 0.375rem; }
+.forja-match-meta { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+.forja-match-meta-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: #64748b; }
+.forja-match-stream-link { color: #a78bfa; text-decoration: none; font-weight: 700; }
+.forja-match-stream-link:hover { text-decoration: underline; }
+.forja-schedule-admin-teaser { display: flex; gap: 1rem; align-items: flex-start; padding: 1rem 1.25rem; background: rgba(245,158,11,0.06); border: 1px dashed rgba(245,158,11,0.2); border-radius: 0.875rem; margin-bottom: 1.5rem; font-size: 0.82rem; color: #64748b; line-height: 1.5; }
+.forja-schedule-admin-teaser__icon { font-size: 1.5rem; flex-shrink: 0; }
+.forja-schedule-admin-teaser strong { display: block; color: #f59e0b; margin-bottom: 0.35rem; }
+.forja-schedule-discord { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; padding: 1.25rem; background: rgba(88,101,242,0.08); border: 1px solid rgba(88,101,242,0.2); border-radius: 0.875rem; margin-top: 1rem; }
+.forja-schedule-discord p { margin: 0; flex: 1; font-size: 0.82rem; color: #64748b; }
+/* ─── Times ──────────────────────────────────────────────────── */
+.forja-times-captain-hint { display: flex; align-items: center; gap: 0.6rem; padding: 0.75rem 1.25rem; background: rgba(96,165,250,0.07); border: 1px solid rgba(96,165,250,0.2); border-radius: 0.75rem; font-size: 0.8rem; color: #94a3b8; margin-bottom: 1.5rem; }
+.forja-teams-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 1.5rem; }
+.forja-team-card { border: 1px solid; border-radius: 1rem; overflow: hidden; display: flex; flex-direction: column; }
+.forja-team-card__header { display: flex; align-items: center; gap: 1rem; padding: 1.25rem 1.25rem 1rem; border-bottom: 1px solid rgba(51,65,85,0.3); }
+.forja-team-card__order { width: 2.25rem; height: 2.25rem; border-radius: 0.5rem; border: 1px solid; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 900; flex-shrink: 0; }
+.forja-team-card__name-block { flex: 1; min-width: 0; }
+.forja-team-name { font-size: 1.1rem; font-weight: 900; margin: 0 0 0.2rem; }
+.forja-team-captain-label { font-size: 0.68rem; color: #64748b; font-weight: 600; }
+.forja-team-avg-elo { text-align: right; flex-shrink: 0; }
+.forja-team-name-edit { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.forja-team-name-input { background: rgba(2,6,23,0.6); border: 1px solid; border-radius: 0.5rem; color: #f1f5f9; font-size: 0.9rem; font-weight: 800; padding: 0.4rem 0.75rem; outline: none; min-width: 0; flex: 1; }
+.forja-team-card__members { display: flex; flex-direction: column; flex: 1; }
+.forja-member-row { display: flex; align-items: center; gap: 0.875rem; padding: 0.875rem 1.25rem; border-bottom: 1px solid rgba(51,65,85,0.2); transition: background 0.15s; }
+.forja-member-row:last-child { border-bottom: none; }
+.forja-member-row:hover { background: rgba(255,255,255,0.02); }
+.forja-member-avatar { position: relative; flex-shrink: 0; }
+.forja-member-avatar img { width: 2.5rem; height: 2.5rem; border-radius: 0.5rem; object-fit: cover; border: 1px solid rgba(51,65,85,0.5); }
+.forja-member-captain-crown { position: absolute; top: -6px; left: -6px; font-size: 0.8rem; line-height: 1; }
+.forja-member-info { flex: 1; min-width: 0; }
+.forja-member-nick { display: block; font-size: 0.875rem; font-weight: 800; color: #f1f5f9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.forja-member-aom { display: block; font-size: 0.68rem; color: #64748b; }
+.forja-member-stats { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+.forja-member-tier { font-size: 0.62rem; font-weight: 900; padding: 0.15rem 0.4rem; border-radius: 0.25rem; border: 1px solid; }
+.forja-member-elo { display: flex; flex-direction: column; align-items: flex-end; gap: 0.1rem; }
+.forja-member-flag { font-size: 1rem; flex-shrink: 0; }
+@media (max-width: 768px) { .forja-teams-grid { grid-template-columns: 1fr; } }
+/* ─── Drafts ─────────────────────────────────────────────────── */
+.forja-drafts-hero { position: relative; border: 1px solid rgba(245,158,11,0.2); border-radius: 1.25rem; padding: 3rem 2rem; text-align: center; overflow: hidden; margin-bottom: 2.5rem; background: rgba(15,23,42,0.8); }
+.forja-drafts-hero__glow { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 0%, rgba(245,158,11,0.08) 0%, transparent 70%); pointer-events: none; }
+.forja-drafts-hero__content { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 1rem; }
+.forja-drafts-hero__title { font-size: 1.75rem; font-weight: 900; margin: 0; letter-spacing: -0.02em; color: #f1f5f9; }
+.forja-drafts-hero__desc { color: #94a3b8; font-size: 0.9rem; line-height: 1.65; max-width: 480px; margin: 0; }
+.forja-drafts-hero__actions { display: flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center; margin-top: 0.5rem; }
+.forja-drafts-features { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+.forja-drafts-feature-card { display: flex; gap: 1rem; align-items: flex-start; padding: 1.25rem; background: rgba(15,23,42,0.7); border: 1px solid; border-radius: 0.875rem; transition: transform 0.2s; }
+.forja-drafts-feature-card:hover { transform: translateY(-2px); }
+.forja-drafts-feature-card__icon { width: 2.75rem; height: 2.75rem; border-radius: 0.625rem; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; flex-shrink: 0; }
+.forja-drafts-note { display: flex; gap: 0.875rem; align-items: flex-start; padding: 1.25rem; background: rgba(96,165,250,0.06); border: 1px solid rgba(96,165,250,0.15); border-radius: 0.875rem; }
+.forja-drafts-note strong { display: block; color: #60a5fa; margin-bottom: 0.35rem; font-size: 0.875rem; }
+.forja-drafts-note p { margin: 0; font-size: 0.82rem; color: #64748b; line-height: 1.6; }
+
+
+/* === PASSO 3 STYLES === */
+.forja-auth-widget{flex-shrink:0}.forja-auth-loading{display:flex;align-items:center;padding:.5rem}.forja-auth-user{display:flex;align-items:center;gap:.625rem;padding:.4rem .75rem;background:rgba(15,23,42,.8);border:1px solid rgba(51,65,85,.5);border-radius:.625rem}.forja-auth-avatar{width:2rem;height:2rem;border-radius:50%;object-fit:cover;border:1px solid rgba(245,158,11,.3);flex-shrink:0}.forja-auth-info{display:flex;flex-direction:column;gap:.1rem;min-width:0}.forja-auth-name{font-size:.78rem;font-weight:800;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100px}.forja-auth-admin{font-size:.55rem;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:#f59e0b;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:.25rem;padding:.1rem .3rem;width:fit-content}.forja-auth-logout{background:transparent;border:none;cursor:pointer;color:#475569;font-size:.7rem;padding:.25rem;transition:color .2s;line-height:1}.forja-auth-logout:hover{color:#f87171}.forja-card-remove-btn{position:absolute;top:.5rem;left:.5rem;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#f87171;font-size:.65rem;font-weight:900;border-radius:.375rem;padding:.2rem .45rem;cursor:pointer;transition:all .2s;line-height:1;z-index:2}.forja-card-remove-btn:hover{background:rgba(239,68,68,.25)}.forja-card-remove-btn:disabled{opacity:.5;cursor:default}.forja-skeleton{pointer-events:none;gap:.875rem;min-height:200px}@keyframes forja-shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}.forja-skeleton-avatar{width:3.5rem;height:3.5rem;border-radius:.75rem;background:linear-gradient(90deg,rgba(30,41,59,.6) 25%,rgba(51,65,85,.4) 50%,rgba(30,41,59,.6) 75%);background-size:800px 100%;animation:forja-shimmer 1.6s infinite}.forja-skeleton-line{height:1rem;border-radius:.375rem;background:linear-gradient(90deg,rgba(30,41,59,.6) 25%,rgba(51,65,85,.4) 50%,rgba(30,41,59,.6) 75%);background-size:800px 100%;animation:forja-shimmer 1.6s infinite}.forja-modal-overlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:1rem;animation:forja-fade-in .2s ease}.forja-modal{width:100%;max-width:520px;max-height:90vh;overflow-y:auto;background:#0f172a;border:1px solid rgba(245,158,11,.2);border-radius:1.25rem;box-shadow:0 24px 80px rgba(0,0,0,.6),0 0 60px rgba(245,158,11,.05);display:flex;flex-direction:column}.forja-modal-header{display:flex;align-items:center;justify-content:space-between;padding:1.25rem 1.5rem;border-bottom:1px solid rgba(51,65,85,.4);background:linear-gradient(135deg,rgba(234,88,12,.08),rgba(245,158,11,.04))}.forja-modal-header__title{display:flex;align-items:center;gap:.5rem;font-size:.9rem;font-weight:900;color:#f1f5f9}.forja-modal-header__icon{font-size:1.2rem}.forja-modal-close{background:transparent;border:none;cursor:pointer;color:#475569;font-size:1rem;padding:.25rem;transition:color .2s;line-height:1}.forja-modal-close:hover{color:#f1f5f9}.forja-modal-body{padding:1.5rem;display:flex;flex-direction:column;gap:1rem}.forja-modal-error{display:flex;align-items:flex-start;gap:.5rem;padding:.75rem 1rem;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:.625rem;font-size:.82rem;color:#fca5a5}.forja-modal-step{display:flex;flex-direction:column;align-items:center;text-align:center;gap:.875rem;padding:1.5rem 0}.forja-modal-step__icon{font-size:3rem}.forja-modal-step__title{font-size:1.2rem;font-weight:900;color:#f1f5f9;margin:0}.forja-modal-step__desc{font-size:.85rem;color:#64748b;line-height:1.65;margin:0;max-width:360px}.forja-reg-form{display:flex;flex-direction:column;gap:1.25rem}.forja-reg-user-banner{display:flex;align-items:center;gap:.875rem;padding:.875rem;background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.15);border-radius:.75rem}.forja-reg-avatar{width:2.75rem;height:2.75rem;border-radius:.625rem;object-fit:cover;border:1px solid rgba(245,158,11,.3);flex-shrink:0}.forja-reg-username{display:block;font-size:.9rem;font-weight:800;color:#f1f5f9}.forja-reg-userid{display:block;font-size:.65rem;color:#475569;font-family:monospace}.forja-reg-verified{margin-left:auto;font-size:.65rem;font-weight:700;color:#4ade80;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.25);border-radius:.375rem;padding:.2rem .5rem;white-space:nowrap}.forja-reg-field{display:flex;flex-direction:column;gap:.375rem}.forja-reg-label{font-size:.78rem;font-weight:700;color:#f1f5f9}.forja-reg-input{width:100%;background:rgba(2,6,23,.8);border:1px solid rgba(51,65,85,.5);border-radius:.625rem;color:#f1f5f9;font-size:.875rem;padding:.75rem 1rem;outline:none;transition:border-color .2s;font-family:inherit}.forja-reg-input:focus{border-color:rgba(245,158,11,.5)}.forja-reg-input--error{border-color:rgba(239,68,68,.5)!important}.forja-reg-input:disabled{opacity:.6;cursor:not-allowed}.forja-reg-hint{font-size:.7rem;color:#475569}.forja-reg-field-error{font-size:.7rem;color:#f87171}.forja-reg-char-count{position:absolute;right:.75rem;top:50%;transform:translateY(-50%);font-size:.65rem;font-weight:700;pointer-events:none}.forja-reg-checkbox{display:flex;align-items:flex-start;gap:.75rem;cursor:pointer}.forja-reg-checkbox input[type=checkbox]{position:absolute;opacity:0;width:0;height:0}.forja-reg-checkbox__box{width:1.25rem;height:1.25rem;border:2px solid rgba(71,85,105,.6);border-radius:.375rem;background:rgba(2,6,23,.6);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#f59e0b;font-size:.75rem;font-weight:900;transition:all .2s;margin-top:.1rem}.forja-reg-checkbox input:checked+.forja-reg-checkbox__box{background:rgba(245,158,11,.15);border-color:rgba(245,158,11,.5)}.forja-reg-checkbox__label{font-size:.82rem;color:#94a3b8;line-height:1.5}.forja-reg-actions{display:flex;gap:.75rem;justify-content:flex-end;flex-wrap:wrap;margin-top:.5rem}.forja-reg-spinner{width:1rem;height:1rem;border:2px solid rgba(0,0,0,.2);border-top-color:#000;border-radius:50%;animation:forja-spin .7s linear infinite;display:inline-block;flex-shrink:0}.forja-reg-spinner--lg{width:2.5rem;height:2.5rem;border-width:3px;border-color:rgba(245,158,11,.2);border-top-color:#f59e0b}
+
+/* === PASSO 4 STYLES === */
+/* Admin tab highlight */
+.forja-tab-btn--admin{border-top:2px solid rgba(245,158,11,.3)}.forja-tab-btn--admin.forja-tab-btn--active{border-top-color:#f59e0b}
+/* Page header */
+.forja-page-header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:2rem;flex-wrap:wrap}.forja-page-title{font-size:1.5rem;font-weight:900;color:#f1f5f9;display:flex;align-items:center;gap:.5rem;margin:0 0 .25rem}.forja-page-subtitle{font-size:.82rem;color:#64748b;margin:0}
+/* Schedule */
+.forja-schedule-list{display:flex;flex-direction:column;gap:1rem}.forja-schedule-match-card{background:rgba(15,23,42,.6);border:1px solid rgba(51,65,85,.4);border-radius:.875rem;padding:1.25rem;display:flex;flex-direction:column;gap:.5rem;transition:border-color .2s}.forja-schedule-match-card:hover{border-color:rgba(245,158,11,.2)}.forja-schedule-match-card__date{font-size:.72rem;color:#f59e0b;font-weight:700;letter-spacing:.05em}.forja-schedule-match-card__matchup{font-size:1.1rem;font-weight:900;color:#f1f5f9}.forja-schedule-match-card__stream{font-size:.8rem;color:#64748b}.forja-schedule-match-card__stream a{color:#60a5fa;text-decoration:none}.forja-schedule-admin-actions{display:flex;gap:.5rem;margin-top:.25rem}.forja-schedule-footer{display:flex;justify-content:space-between;align-items:center;margin-top:2rem;padding-top:1rem;border-top:1px solid rgba(51,65,85,.3);font-size:.75rem;color:#475569;flex-wrap:wrap;gap:.5rem}
+/* Times */
+.forja-times-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1.5rem}.forja-team-card{background:rgba(15,23,42,.7);border:1px solid rgba(51,65,85,.4);border-top:3px solid var(--team-color,#f59e0b);border-radius:1rem;padding:1.25rem;display:flex;flex-direction:column;gap:1rem;transition:border-color .2s}.forja-team-card__header{display:flex;align-items:center;justify-content:space-between;gap:.5rem}.forja-team-name{font-size:1.1rem;font-weight:900;margin:0}.forja-team-stats{display:flex;justify-content:space-between;font-size:.72rem;color:#475569;padding:.5rem .75rem;background:rgba(2,6,23,.4);border-radius:.5rem}.forja-team-members{display:flex;flex-direction:column;gap:.625rem}.forja-team-member{display:flex;align-items:center;gap:.75rem;padding:.5rem;border-radius:.5rem;transition:background .2s;position:relative}.forja-team-member:hover{background:rgba(255,255,255,.03)}.forja-team-member--captain{background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.15);border-radius:.5rem}.forja-team-member__avatar{width:2.25rem;height:2.25rem;border-radius:.5rem;object-fit:cover}.forja-team-captain-crown{position:absolute;top:-.4rem;left:-.3rem;font-size:.8rem}.forja-team-member__info{display:flex;flex-direction:column;gap:.1rem}.forja-team-member__nick{font-size:.85rem;font-weight:700;color:#f1f5f9}.forja-team-member__elo{font-size:.68rem;color:#475569}
+/* Buttons */
+.forja-btn--danger{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#f87171}.forja-btn--danger:hover{background:rgba(239,68,68,.2)}.forja-admin-completed-badge{background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:#4ade80;padding:.4rem 1rem;border-radius:.5rem;font-size:.8rem;font-weight:700}
+/* Admin Draft Layout */
+.forja-admin-draft-layout{display:grid;grid-template-columns:1fr 380px;gap:1.5rem;align-items:start}@media(max-width:900px){.forja-admin-draft-layout{grid-template-columns:1fr}}
+/* Admin pool */
+.forja-admin-pool{background:rgba(15,23,42,.5);border:1px solid rgba(51,65,85,.3);border-radius:1rem;padding:1.25rem}.forja-admin-player-list{display:flex;flex-direction:column;gap:.5rem;max-height:60vh;overflow-y:auto;padding-right:.25rem}.forja-admin-player-row{display:flex;align-items:center;gap:.75rem;padding:.625rem .75rem;border-radius:.625rem;border:1px solid transparent;transition:all .2s;background:rgba(2,6,23,.4)}.forja-admin-player-row:hover{border-color:rgba(51,65,85,.5)}.forja-admin-player-row--drafted{opacity:.45;pointer-events:none}.forja-admin-player-row--current-pick{border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.05);animation:forja-pulse .8s ease-in-out infinite alternate}.forja-admin-player-avatar{width:2rem;height:2rem;border-radius:.375rem;object-fit:cover;flex-shrink:0}.forja-admin-player-info{flex:1;min-width:0}.forja-admin-player-nick{display:block;font-size:.82rem;font-weight:700;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.forja-admin-player-elo{display:block;font-size:.65rem;color:#475569}.forja-admin-tier-select{display:flex;gap:.25rem;flex-shrink:0}.forja-admin-tier-btn{width:1.5rem;height:1.5rem;border-radius:.35rem;border:1px solid rgba(51,65,85,.5);background:transparent;cursor:pointer;font-size:.65rem;font-weight:900;color:#475569;transition:all .2s;display:flex;align-items:center;justify-content:center}.forja-admin-tier-btn--active{border-color:var(--tier-color,#f59e0b);color:var(--tier-color,#f59e0b);background:rgba(var(--tier-color,245,158,11),.1)}.forja-admin-tier-badge{font-size:.65rem;font-weight:900;white-space:nowrap;flex-shrink:0}.forja-admin-drafted-badge{font-size:.65rem;color:#4ade80;font-weight:700;white-space:nowrap;flex-shrink:0}
+/* Admin right panel */
+.forja-admin-right{display:flex;flex-direction:column;gap:1rem}.forja-admin-captains-panel{background:rgba(15,23,42,.6);border:1px solid rgba(245,158,11,.15);border-radius:1rem;padding:1.25rem}.forja-admin-captains-list{display:flex;flex-direction:column;gap:.5rem;margin-top:.75rem}.forja-admin-captain-item{display:flex;align-items:center;gap:.75rem;padding:.5rem .75rem;background:rgba(245,158,11,.04);border:1px solid rgba(245,158,11,.12);border-radius:.625rem}.forja-admin-captain-order{font-size:.65rem;font-weight:900;color:#f59e0b;width:1.25rem;text-align:center;flex-shrink:0}.forja-admin-teams-summary{background:rgba(15,23,42,.5);border:1px solid rgba(51,65,85,.3);border-radius:1rem;padding:1.25rem}.forja-admin-team-card{background:rgba(2,6,23,.5);border:1px solid rgba(51,65,85,.3);border-radius:.75rem;padding:.875rem;margin-top:.75rem}.forja-admin-team-header{display:flex;justify-content:space-between;margin-bottom:.5rem}.forja-admin-team-members{display:flex;flex-direction:column;gap:.25rem}.forja-admin-team-member{display:flex;align-items:center;gap:.5rem;font-size:.78rem;color:#94a3b8}.forja-admin-team-member img{width:1.5rem;height:1.5rem;border-radius:.3rem;object-fit:cover}
+/* Draft board */
+.forja-draft-board{background:rgba(15,23,42,.6);border:1px solid rgba(51,65,85,.3);border-radius:1rem;padding:1.25rem;display:flex;flex-direction:column;gap:1rem}.forja-draft-progress{display:flex;flex-direction:column;gap:.375rem}.forja-draft-progress__bar{height:.35rem;background:rgba(51,65,85,.5);border-radius:99px;overflow:hidden}.forja-draft-progress__fill{height:100%;background:linear-gradient(90deg,#f59e0b,#fb923c);border-radius:99px;transition:width .5s ease}.forja-draft-progress__label{font-size:.72rem;color:#64748b;font-weight:600}.forja-draft-current-turn{display:flex;align-items:center;gap:.5rem;padding:.75rem;background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.15);border-radius:.625rem;font-size:.82rem}.forja-draft-history{display:flex;flex-direction:column;gap:.35rem;max-height:40vh;overflow-y:auto}.forja-draft-pick-item{display:flex;align-items:center;gap:.5rem;font-size:.75rem;color:#94a3b8;padding:.3rem .5rem;border-radius:.375rem}.forja-draft-pick-item:hover{background:rgba(255,255,255,.03)}.forja-draft-pick-item__num{font-size:.65rem;color:#475569;width:1.5rem;text-align:right;flex-shrink:0}.forja-draft-pick-item__avatar{width:1.25rem;height:1.25rem;border-radius:.25rem;object-fit:cover;flex-shrink:0}.forja-draft-pick-item__nick{flex:1;font-weight:600;color:#f1f5f9}.forja-draft-pick-item__arrow{color:#334155}.forja-draft-pick-item__team{color:#f59e0b}.forja-draft-pick-item__forced{font-size:.6rem;background:rgba(245,158,11,.1);color:#f59e0b;border-radius:.25rem;padding:.1rem .3rem}
+/* OBS Mode */
+.forja-obs-root{min-height:100vh;background:#020617;display:flex;flex-direction:column;padding:1rem;gap:1rem;font-family:'Inter',sans-serif;color:#f1f5f9}.forja-obs-loading,.forja-obs-standby{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;color:#475569}.forja-obs-standby__logo{font-size:5rem;animation:forja-float 3s ease-in-out infinite}.forja-obs-standby__title{font-size:2.5rem;font-weight:900;color:#f1f5f9;margin:0}.forja-obs-standby__sub{font-size:1rem;color:#475569;margin:0}.forja-obs-standby__pulse{width:12px;height:12px;border-radius:50%;background:#f59e0b;animation:forja-pulse 1.5s ease-in-out infinite;margin-top:.5rem}
+.forja-obs-statusbar{display:flex;align-items:center;gap:1rem;padding:.75rem 1.25rem;background:rgba(15,23,42,.9);border:1px solid rgba(51,65,85,.4);border-radius:.875rem;flex-wrap:wrap}.forja-obs-statusbar__title{font-size:1rem;font-weight:900;display:flex;align-items:center;gap:.75rem}.forja-obs-live-dot{color:#f87171;font-size:.7rem;animation:forja-pulse 1.2s ease-in-out infinite}.forja-obs-statusbar__turn{margin-left:auto;font-size:.875rem}.forja-obs-progress-mini{flex:1;max-width:200px;height:.25rem;background:rgba(51,65,85,.5);border-radius:99px;overflow:hidden}.forja-obs-progress-mini__fill{height:100%;background:linear-gradient(90deg,#f59e0b,#4ade80);border-radius:99px;transition:width .8s ease}
+.forja-obs-teams{display:grid;gap:1rem;flex:1}.forja-obs-team{background:rgba(15,23,42,.85);border:1px solid rgba(51,65,85,.4);border-top:3px solid var(--team-color,#f59e0b);border-radius:1rem;padding:1.25rem;display:flex;flex-direction:column;gap:.875rem;transition:all .4s}.forja-obs-team--active{border-color:var(--team-color,#f59e0b);box-shadow:0 0 40px rgba(245,158,11,.15);transform:translateY(-2px)}.forja-obs-team__header{display:flex;align-items:center;justify-content:space-between}.forja-obs-team__name{font-size:1.1rem;font-weight:900;color:var(--team-color,#f59e0b)}.forja-obs-team__picking{font-size:.6rem;font-weight:900;letter-spacing:.1em;text-transform:uppercase;background:var(--team-color,#f59e0b);color:#020617;padding:.2rem .5rem;border-radius:.25rem;animation:forja-pulse .6s ease-in-out infinite alternate}.forja-obs-members{display:flex;flex-direction:column;gap:.625rem}.forja-obs-member{display:flex;align-items:center;gap:.75rem;padding:.5rem;border-radius:.625rem;background:rgba(2,6,23,.4)}.forja-obs-member--empty{opacity:.3}.forja-obs-member__avatar-wrap{position:relative;flex-shrink:0}.forja-obs-member__avatar{width:2.5rem;height:2.5rem;border-radius:.625rem;object-fit:cover}.forja-obs-member__avatar--empty{width:2.5rem;height:2.5rem;border-radius:.625rem;background:rgba(51,65,85,.3);display:flex;align-items:center;justify-content:center;font-size:1rem;color:#334155}.forja-obs-captain-crown{position:absolute;top:-.4rem;right:-.4rem;font-size:.8rem}.forja-obs-member__nick{font-weight:700;font-size:.9rem;flex:1}.forja-obs-member__tier{font-size:.65rem;font-weight:900;padding:.1rem .3rem;border-radius:.25rem;background:rgba(255,255,255,.05)}
+.forja-obs-feed{background:rgba(15,23,42,.85);border:1px solid rgba(51,65,85,.3);border-radius:.875rem;padding:.875rem 1.25rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap}.forja-obs-feed__label{font-size:.72rem;color:#475569;font-weight:700;white-space:nowrap}.forja-obs-feed__items{display:flex;gap:1rem;flex-wrap:wrap}.forja-obs-feed__item{display:flex;align-items:center;gap:.35rem;font-size:.78rem}.forja-obs-feed__item img{width:1.25rem;height:1.25rem;border-radius:.3rem}
+/* Section title */
+.forja-section-title{font-size:.9rem;font-weight:900;color:#f1f5f9;display:flex;align-items:center;gap:.4rem;margin:0}

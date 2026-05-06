@@ -405,7 +405,6 @@ function StatsBar({ players, isLive }: { players: ForjaPlayer[]; isLive: boolean
   );
 }
 
-
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface ForjaInicioProps extends ForjaViewProps {
@@ -502,6 +501,14 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
       {/* Hero CTA */}
       <div className="forja-inicio-hero">
         <div className="forja-inicio-hero__text">
+          {/* Logo Injetada Aqui */}
+          <div className="flex justify-center md:justify-start mb-6">
+            <img 
+              src="/logo-forja.png" 
+              alt="Logo Forja de Hefesto" 
+              className="w-64 md:w-80 lg:w-[400px] drop-shadow-[0_0_25px_rgba(255,165,0,0.4)] hover:scale-105 transition-transform duration-300"
+            />
+          </div>
           <h2 className="forja-inicio-hero__title">
             Forje seu legado.<br />
             <span style={{ color: '#f59e0b' }}>A batalha está chegando.</span>

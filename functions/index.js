@@ -4,7 +4,6 @@ const axios = require("axios");
 const cheerio = require("cheerio");
 
 exports.fetchAomProfile = functions.https.onRequest(async (req, res) => {
-  // Libera o acesso para o seu site (CORS)
   res.set("Access-Control-Allow-Origin", "*");
 
   if (req.method === "OPTIONS") {
@@ -20,33 +19,69 @@ exports.fetchAomProfile = functions.https.onRequest(async (req, res) => {
   }
 
   try {
-    const url = `https://aomstats.io/profiles/${profileId}`;
+    const url = `https://aomstats.io/profile/${profileId}`;
     
-    // Faz o download do HTML da página do AoMStats disfarçado de navegador
     const { data: html } = await axios.get(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      }
+      },
+      timeout: 8000 
     });
 
     const $ = cheerio.load(html);
 
-    // Lógica de Scraping: Pegando os dados do HTML
+    // 1. Dados Básicos
     const alias = $("h1").first().text().trim() || "Usuário Desconhecido";
-    const avatar_url = $("img[src*='avatars']").attr("src") || "";
-    const elo_1v1 = parseInt($(".rating-value").first().text().replace(/\D/g, "")) || 0;
+    const avatar_url = $(".profile-avatar img").attr("src") || $("img[src*='avatars']").attr("src") || "";
+
+    // 2. Extração de ELOs (Buscando nas tabelas de estatísticas)
+    let elo_1v1 = 0;
+    let elo_tg = 0;
+
+    $(".rating-container").each((i, el) => {
+      const label = $(el).find(".rating-label").text().toLowerCase();
+      const value = parseInt($(el).find(".rating-value").text().replace(/\D/g, "")) || 0;
+      
+      if (label.includes("1v1")) elo_1v1 = value;
+      if (label.includes("team")) elo_tg = value;
+    });
+
+    // 3. Extração dos Top 5 Deuses
+    const top_gods = [];
+    $(".god-stats-row").slice(0, 5).each((i, el) => {
+      const godName = $(el).find(".god-name").text().trim();
+      const godImg = $(el).find(".god-icon img").attr("src");
+      const winRate = parseInt($(el).find(".win-rate").text().replace(/\D/g, "")) || 0;
+      const playRate = parseInt($(el).find(".play-rate").text().replace(/\D/g, "")) || 0;
+
+      if (godName) {
+        top_gods.push({
+          god: godName.toLowerCase(),
+          godName: godName,
+          image: godImg,
+          winRate: winRate,
+          playRate: playRate
+        });
+      }
+    });
 
     res.json({
+      success: true,
       profile_id: parseInt(profileId),
       alias: alias,
       avatar_url: avatar_url,
       elo_1v1: elo_1v1,
-      elo_tg: 0, 
-      top_gods: []
+      elo_tg: elo_tg, 
+      top_gods: top_gods
     });
 
   } catch (error) {
-    console.error("Erro no Scraping:", error.message);
-    res.status(500).json({ error: "Não foi possível ler os dados do AoMStats." });
+    console.error(`Erro ao processar perfil ${profileId}:`, error.message);
+    
+    if (error.response && error.response.status === 404) {
+      return res.status(404).json({ success: false, error: "Perfil não encontrado." });
+    }
+
+    res.status(500).json({ success: false, error: "Falha na integração com AoMStats." });
   }
 });

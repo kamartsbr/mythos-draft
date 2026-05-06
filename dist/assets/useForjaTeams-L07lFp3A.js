@@ -1,0 +1,1 @@
+import{r as e}from"./index-Drx08dbC.js";import{j as m}from"./ForjaHub-C5wsDKdX.js";function l(){const[t,a]=e.useState([]),[o,r]=e.useState(!0),[u,s]=e.useState(null);return e.useEffect(()=>{const n=m(c=>{a(c),r(!1),s(null)},()=>{s("Erro ao carregar times."),r(!1)});return()=>n()},[]),{teams:t,loading:o,error:u}}export{l as u};

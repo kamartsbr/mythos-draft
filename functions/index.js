@@ -117,4 +117,4 @@ exports.updateEloSnapshot = functions.https.onCall(async (data, context) => {
 
   await Promise.all(updates);
   return { success: true, message: "Snapshot finalizado com sucesso!" };
-});git add
+});

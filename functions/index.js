@@ -13,7 +13,7 @@ if (!admin.apps.length) {
  * Centraliza a captura de dados com seletores mais robustos
  */
 async function scrapeAomData(profileId) {
-  const url = `https://aomstats.io/profile/${profileId}`;
+  const url = `https://us-central1-boxwood-plating-368522.cloudfunctions.net/fetchAomProfile?id=${id}`;
   
   const { data: html } = await axios.get(url, {
     headers: {

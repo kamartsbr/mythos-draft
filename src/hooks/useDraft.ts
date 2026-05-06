@@ -125,11 +125,13 @@ export function useDraft(
         // System Picks G1
         mapOrder.push({ player: 'ADMIN', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
       }
-    } else if (cfg.preset === 'MCL') {
+    } else if (cfg.preset === 'MCL' || cfg.preset === 'FORJA') {
       if (gameNumber === 1) {
         mapOrder.push({ player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
       } else if (gameNumber === 2) {
         mapOrder.push({ player: 'B', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
+      } else if (gameNumber === 3 && cfg.preset === 'FORJA') {
+        mapOrder.push({ player: 'ADMIN', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
       }
       // God picks happen every game in MCL
     } else if (cfg.seriesType !== 'BO1') {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { LobbyConfig, SeriesType, TeamSize } from '../types';
-import { MAPS, MAJOR_GODS, RANKED_MAP_POOL, CASCA_GROSSA_POOL, CASCA_GROSSA_GROUP_POOL, CASCA_GROSSA_PLAYOFF_POOL, MCL_ROUND_MAPS, MCL_MAP_POOL, getMCLMapPool } from '../constants';
+import { MAPS, MAJOR_GODS, RANKED_MAP_POOL, CASCA_GROSSA_POOL, CASCA_GROSSA_GROUP_POOL, CASCA_GROSSA_PLAYOFF_POOL, MCL_ROUND_MAPS, MCL_MAP_POOL, getMCLMapPool, FORJA_MAP_POOL } from '../constants';
 
 export function useDraftConfig() {
   const [lobbyName, setLobbyName] = useState('');
@@ -137,6 +137,22 @@ export function useDraftConfig() {
         if (roundMap && !newConfig.allowedMaps.includes(roundMap)) {
           newConfig.allowedMaps = [...newConfig.allowedMaps, roundMap];
         }
+      } else if (preset === 'FORJA') {
+        newConfig.allowedMaps = FORJA_MAP_POOL;
+        newConfig.allowedPantheons = MAJOR_GODS.map(g => g.id);
+        newConfig.teamSize = 3;
+        newConfig.seriesType = 'CUSTOM';
+        newConfig.customGameCount = 3;
+        newConfig.mapBanCount = 0;
+        newConfig.banCount = 0;
+        newConfig.acePick = false;
+        newConfig.isExclusive = false;
+        newConfig.pickType = 'alternated';
+        newConfig.firstMapRandom = false;
+        newConfig.loserPicksNextMap = false;
+        newConfig.tournamentStage = 'GROUP';
+        newConfig.timerDuration = 60;
+        newConfig.mapTurnOrder = [];
       }
       
       return newConfig;
@@ -149,6 +165,7 @@ export function useDraftConfig() {
     if (manualFields.includes(field)) {
       if (config.preset === 'MCL') return true;
       if (config.preset === 'CASCA') return true;
+      if (config.preset === 'FORJA') return true;
       return false;
     }
 
@@ -156,7 +173,7 @@ export function useDraftConfig() {
       return true;
     }
 
-    if (config.preset === 'MCL') {
+    if (config.preset === 'MCL' || config.preset === 'FORJA') {
       const lockedFields = ['seriesType', 'customGameCount', 'mapBanCount', 'banCount', 'isExclusive', 'pickType', 'teamSize', 'mapTurnOrder', 'firstMapRandom', 'loserPicksNextMap', 'acePick', 'tournamentStage'];
       return lockedFields.includes(field);
     }

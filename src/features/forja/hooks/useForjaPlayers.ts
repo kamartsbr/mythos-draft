@@ -14,6 +14,7 @@ import { subscribeToForjaPlayers } from '../services/forjaService';
 const MOCK_PLAYERS: ForjaPlayer[] = [
   {
     discord_id: '111111111111111111',
+    aom_profile_id: 10001,
     aom_id: 'omoradin',
     nick: 'Omoradin',
     avatar_url: 'https://cdn.discordapp.com/embed/avatars/0.png',
@@ -28,12 +29,17 @@ const MOCK_PLAYERS: ForjaPlayer[] = [
       { god: 'kronos', godName: 'Kronos', winRate: 48, playRate: 5  },
     ],
     status: 'available', tier: 'A', team_id: null, seed: 1, registered_at: null,
+    consent_rules: true, consent_format: true,
+    discord_avatar_url: 'https://cdn.discordapp.com/embed/avatars/0.png',
+    availability: ['weekday-eve', 'weekend-eve'],
   },
   {
     discord_id: '222222222222222222',
+    aom_profile_id: 10002,
     aom_id: 'kamaRTS',
     nick: 'KamaRTS',
     avatar_url: 'https://cdn.discordapp.com/embed/avatars/1.png',
+    discord_avatar_url: 'https://cdn.discordapp.com/embed/avatars/1.png',
     is_brazilian: true,
     pitch_quote: 'Loki main. Chaos is the plan.',
     elo_1v1: 2080, elo_tg: 2010,
@@ -45,12 +51,16 @@ const MOCK_PLAYERS: ForjaPlayer[] = [
       { god: 'oranos', godName: 'Oranos', winRate: 45, playRate: 5  },
     ],
     status: 'available', tier: 'A', team_id: null, seed: 2, registered_at: null,
+    consent_rules: true, consent_format: true,
+    availability: ['weekend-aft', 'weekend-eve'],
   },
   {
     discord_id: '333333333333333333',
+    aom_profile_id: 10003,
     aom_id: 'thunderaxe99',
     nick: 'ThunderAxe',
     avatar_url: 'https://cdn.discordapp.com/embed/avatars/2.png',
+    discord_avatar_url: 'https://cdn.discordapp.com/embed/avatars/2.png',
     is_brazilian: true,
     pitch_quote: 'Thor TG é science, não opinião.',
     elo_1v1: 1920, elo_tg: 2100,
@@ -62,6 +72,8 @@ const MOCK_PLAYERS: ForjaPlayer[] = [
       { god: 'gaia',     godName: 'Gaia',     winRate: 44, playRate: 3  },
     ],
     status: 'available', tier: 'B', team_id: null, seed: 3, registered_at: null,
+    consent_rules: true, consent_format: true,
+    availability: ['weekday-eve'],
   },
 ];
 

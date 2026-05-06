@@ -200,6 +200,11 @@ export function LobbyCreation({
                 id: 'MCL', 
                 label: t.mclTournament,
                 icon: "https://liquipedia.net/commons/images/c/c0/Mythic_Clan_League_allmode.png"
+              },
+              {
+                id: 'FORJA',
+                label: "Forja de Hefesto",
+                icon: "https://media.discordapp.net/attachments/1012117565860712499/1344686940029358172/f8d8393e-2b1b-4cf3-a72f-51ef1cceb3ca.webp"
               }
             ].map(preset => (
               <button

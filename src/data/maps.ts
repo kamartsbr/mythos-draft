@@ -64,6 +64,14 @@ export const MAPS: MapInfo[] = [
   { id: 'blood_river_crossing', name: 'Blood River Crossing', image: '/Blood_River_Crossing.webp', isRanked: true, positions: DEFAULT_POSITIONS },
   { id: 'valley_of_the_sun_serpent', name: 'Valley of The Sun Serpent', image: '/Valley_of_The_Sun_Serpent.webp', isRanked: true, positions: DEFAULT_POSITIONS },
   { id: 'temple_of_the_jaguar_moon', name: 'Temple of the Jaguar Moon', image: '/Temple_of_the_Jaguar_Moon.webp', isRanked: true, positions: DEFAULT_POSITIONS },
+  { id: 'aso_grasslands', name: 'Aso Grasslands', image: 'https://static.wikia.nocookie.net/ageofempires/images/1/1c/Aso_Grasslands_icon_AoMR.png/revision/latest?cb=20251004175034', isRanked: true, positions: DEFAULT_POSITIONS },
+  { id: 'senjogahara', name: 'Senjōgahara', image: 'https://static.wikia.nocookie.net/ageofempires/images/3/3c/Senjogahara_icon_AoMR.png/revision/latest?cb=20251004175039', isRanked: true, positions: DEFAULT_POSITIONS },
+];
+
+export const FORJA_MAP_POOL = [
+  'blood_river_crossing', 'cloud_forest', 'obsidian_ridge', 
+  'temple_of_the_jaguar_moon', 'valley_of_the_sun_serpent', 
+  'anatolia', 'mediterranean', 'aso_grasslands', 'senjogahara', 'kii'
 ];
 
 export const RANKED_MAP_POOL = [

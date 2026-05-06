@@ -51,5 +51,19 @@ service cloud.firestore {
     match /test/connection {
       allow read: if true;
     }
+    
+    // Forja de Hefesto
+    match /forja_players/{playerId} {
+      allow read: if true;
+      allow write: if true; // Em prod, você pode restringir se usar Firebase Auth
+    }
+    match /forja_draft/{draftId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    match /forja_content/{contentId} {
+      allow read: if true;
+      allow write: if true;
+    }
   }
 }

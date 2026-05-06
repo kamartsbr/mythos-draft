@@ -77,6 +77,17 @@ export async function isPlayerRegistered(discordId: string): Promise<boolean> {
   return (await getDoc(doc(db, PLAYERS_COL, discordId))).exists();
 }
 
+export const ESPORTS_ELO_OVERRIDES: Record<string, number> = {
+  'mosca':     1307,
+  'tunison':   1287,
+  'ericbr':    1157,
+  'kama':      1124,
+  'player':    1094,
+  'superafim': 1047,
+  'zapata_br': 1027,
+  'shaolim':   1019,
+};
+
 export async function registerForjaPlayer(
   discordUser: ForjaDiscordUser,
   form: ForjaRegistrationForm,
@@ -84,27 +95,47 @@ export async function registerForjaPlayer(
   const profileId = parseAomProfileId(form.aomstats_url);
   if (!profileId) throw new Error('URL do aomstats inválida — não foi possível extrair o profile_id.');
 
+  const pd = form.aom_profile_data;
+
+  // Avatar: scraped do aomstats (Steam) > Discord
+  const avatar_url = pd?.avatar_url ?? discordUser.avatar_url;
+
+  // ELO e top_gods: use os valores do scraper se disponíveis (valores iniciais
+  // antes do snapshot oficial de sábado)
+  const initial_elo_1v1 = pd?.elo_1v1  ?? 0;
+  const initial_elo_tg  = pd?.elo_tg   ?? 0;
+  const initial_gods    = pd?.top_gods  ?? [];
+  
+  const normalizedNick = form.nick.trim().toLowerCase();
+  const esportsElo = ESPORTS_ELO_OVERRIDES[normalizedNick] ?? ESPORTS_ELO_OVERRIDES[String(profileId)] ?? undefined;
+
   const player: Omit<ForjaPlayer, 'discord_id'> = {
-    aom_profile_id: profileId,
-    aom_id:         String(profileId),
-    nick:           discordUser.username,
-    avatar_url:     discordUser.avatar_url,
-    is_brazilian:   form.is_brazilian,
-    pitch_quote:    form.pitch_quote.slice(0, 50),
-    elo_1v1:        0,
-    elo_tg:         0,
-    top_gods:       [],
-    status:         'available',
-    tier:           null,
-    team_id:        null,
-    seed:           undefined,
-    registered_at:  serverTimestamp() as any,
-    consent_rules:  form.consent_rules,
-    consent_format: form.consent_format,
+    aom_profile_id:     profileId,
+    aom_id:             String(profileId),
+    nick:               form.nick.trim() || discordUser.username,
+    avatar_url,
+    discord_avatar_url: discordUser.avatar_url,
+    is_brazilian:       form.is_brazilian,
+    pitch_quote:        form.pitch_quote.slice(0, 50),
+    availability:       form.availability,
+    elo_1v1:            initial_elo_1v1,
+    elo_tg:             initial_elo_tg,
+    top_gods:           initial_gods,
+    elo_snapshot:       initial_elo_1v1,
+    ...(esportsElo !== undefined && { esports_elo: esportsElo }),
+    status:             'available',
+    tier:               null,
+    team_id:            null,
+    seed:               null,
+    registered_at:      serverTimestamp() as any,
+    consent_rules:      form.consent_rules,
+    consent_format:     form.consent_format,
   };
+
 
   await setDoc(doc(db, PLAYERS_COL, discordUser.discord_id), player);
 }
+
 
 export async function removeForjaPlayer(discordId: string): Promise<void> {
   await deleteDoc(doc(db, PLAYERS_COL, discordId));
@@ -117,8 +148,8 @@ export async function setPlayerTier(discordId: string, tier: ForjaTier, seed?: n
   });
 }
 
-export async function setPlayerElo(discordId: string, elo_1v1: number, elo_snapshot: number): Promise<void> {
-  await updateDoc(doc(db, PLAYERS_COL, discordId), { elo_1v1, elo_snapshot });
+export async function updatePlayerStatsSnapshot(discordId: string, updates: Partial<ForjaPlayer>): Promise<void> {
+  await updateDoc(doc(db, PLAYERS_COL, discordId), updates);
 }
 
 // ─── Schedule ─────────────────────────────────────────────────────────────────
@@ -278,6 +309,46 @@ export async function makeDraftPick(
   });
 
   await batch.commit();
+}
+
+/** Desfaz o último pick (apenas Admin) */
+export async function undoLastDraftPick(session: ForjaDraftSession): Promise<void> {
+  if (!session.picks || session.picks.length === 0) {
+    throw new Error('Nenhum pick para desfazer.');
+  }
+
+  const lastPick = session.picks[session.picks.length - 1];
+  const batch = writeBatch(db);
+
+  // 1. Restaurar o jogador
+  batch.update(doc(db, PLAYERS_COL, lastPick.player_id), { status: 'available', team_id: null });
+
+  // 2. Remover do time (pode usar arrayRemove do Firebase)
+  batch.update(doc(db, TEAMS_COL, lastPick.team_id), { members: arrayRemove(lastPick.player_id) });
+
+  // 3. Atualizar a sessão
+  const newPicks = session.picks.slice(0, -1);
+  const prevIndex = session.current_pick_index - 1;
+  const prevTeamId = session.pick_order_sequence[prevIndex];
+  const N = session.pick_order_sequence.length / 2;
+  const prevRound = prevIndex < N ? 'B' : 'C';
+
+  batch.update(draftDocRef(), {
+    picks: newPicks,
+    current_pick_index: prevIndex,
+    current_team_id: prevTeamId,
+    current_round: prevRound,
+    status: 'active', // Volta pra ativo se tava completed
+    updated_at: serverTimestamp(),
+  });
+
+  await batch.commit();
+}
+
+/** Permite que o Capitão mude o nome do seu time */
+export async function renameForjaTeam(teamId: string, newName: string): Promise<void> {
+  if (!newName.trim() || newName.length > 25) throw new Error('Nome inválido (1-25 chars).');
+  await updateDoc(doc(db, TEAMS_COL, teamId), { team_name: newName.trim() });
 }
 
 /** Atualiza o heartbeat de presença de um capitão */

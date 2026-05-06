@@ -1,35 +1,39 @@
 /**
  * ============================================================
- *  FORJA DE HEFESTO — Hub Principal
- *  Rota: /forja
- *  Passo 4: admin draft tab + OBS mode
+ *  FORJA DE HEFESTO — Hub Principal (Revisão Major)
+ *  Passo 4: draft-room tab, settings/deadline, seed content
  * ============================================================
  */
-
-import React, { useState, lazy, Suspense, useEffect } from 'react';
+import React, { useState, lazy, Suspense, useEffect, useCallback } from 'react';
 import { ForjaTab, ForjaTabId } from './types';
 import { useForjaDiscordAuth } from './hooks/useForjaDiscordAuth';
+import { useForjaSettings } from './hooks/useForjaContent';
+import { useForjaDraftSession } from './hooks/useForjaDraftSession';
+import { seedDefaultContent } from './services/forjaService';
 import ForjaRegistrationModal from './components/ForjaRegistrationModal';
 import './forja.css';
 
 // ── Sub-abas (Lazy) ───────────────────────────────────────────────────────────
 const ForjaInicio      = lazy(() => import('./views/ForjaInicio'));
 const ForjaRegras      = lazy(() => import('./views/ForjaRegras'));
+const ForjaMapas       = lazy(() => import('./views/ForjaMapas'));
 const ForjaFormato     = lazy(() => import('./views/ForjaFormato'));
 const ForjaSchedule    = lazy(() => import('./views/ForjaSchedule'));
 const ForjaTimes       = lazy(() => import('./views/ForjaTimes'));
-const ForjaDrafts      = lazy(() => import('./views/ForjaDrafts'));
+const ForjaTabela      = lazy(() => import('./views/ForjaTabela'));
 const ForjaAdminDraft  = lazy(() => import('./views/ForjaAdminDraft'));
+const ForjaDraftRoom   = lazy(() => import('./views/ForjaDraftRoom'));
 const ForjaDraftOBS    = lazy(() => import('./views/ForjaDraftOBS'));
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 const PUBLIC_TABS: ForjaTab[] = [
   { id: 'inicio',   label: 'Início',   icon: '🏛️' },
   { id: 'regras',   label: 'Regras',   icon: '📜' },
+  { id: 'mapas',    label: 'Mapas',    icon: '🗺️' },
   { id: 'formato',  label: 'Formato',  icon: '🐍' },
   { id: 'schedule', label: 'Schedule', icon: '📅' },
   { id: 'times',    label: 'Times',    icon: '🛡️' },
-  { id: 'drafts',   label: 'Drafts',   icon: '⚔️' },
+  { id: 'tabela',   label: 'Tabela',   icon: '📊' },
 ];
 
 const ADMIN_TABS: ForjaTab[] = [
@@ -37,7 +41,19 @@ const ADMIN_TABS: ForjaTab[] = [
   { id: 'obs',         label: 'OBS Mode',    icon: '📺' },
 ];
 
-// ── Tab Fallback ──────────────────────────────────────────────────────────────
+// ── Countdown ─────────────────────────────────────────────────────────────────
+function useCountdown(targetMs: number) {
+  const [remaining, setRemaining] = useState(Math.max(0, targetMs - Date.now()));
+  useEffect(() => {
+    const i = setInterval(() => setRemaining(Math.max(0, targetMs - Date.now())), 1000);
+    return () => clearInterval(i);
+  }, [targetMs]);
+  const h = Math.floor(remaining / 3600000);
+  const m = Math.floor((remaining % 3600000) / 60000);
+  const s = Math.floor((remaining % 60000) / 1000);
+  return { remaining, h, m, s, expired: remaining === 0 };
+}
+
 function TabFallback() {
   return (
     <div className="forja-tab-loader">
@@ -47,47 +63,57 @@ function TabFallback() {
   );
 }
 
-// ── OBS Mode (full-page, sem chrome) ─────────────────────────────────────────
-function OBSShell({ discordUser, isAdmin }: { discordUser: any; isAdmin: boolean }) {
-  return (
-    <div style={{ background: '#020617', minHeight: '100vh' }}>
-      <Suspense fallback={<TabFallback />}>
-        <ForjaDraftOBS discordUser={discordUser} isAdmin={isAdmin} />
-      </Suspense>
-    </div>
-  );
-}
-
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function ForjaHub() {
   const [activeTab, setActiveTab]       = useState<ForjaTabId>('inicio');
   const [showRegModal, setShowRegModal] = useState(false);
+  const [seeding, setSeeding]           = useState(false);
 
   const { discordUser, isAdmin, isLoading: authLoading, loginWithDiscord, logout } = useForjaDiscordAuth();
+  const { registrationOpen, msToDeadline, data: settings } = useForjaSettings();
+  const { session } = useForjaDraftSession();
+
+  const countdown = useCountdown(settings?.registration_deadline_ms ?? Date.now() + 999999999);
 
   // Ler aba da URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab') as ForjaTabId | null;
-    const allTabs = [...PUBLIC_TABS, ...ADMIN_TABS];
+    const allTabs = [...PUBLIC_TABS, ...ADMIN_TABS, { id: 'draft-room' as ForjaTabId }];
     if (tab && allTabs.find(t => t.id === tab)) setActiveTab(tab);
   }, []);
 
-  const handleTabChange = (id: ForjaTabId) => {
+  const handleTabChange = useCallback((id: ForjaTabId) => {
     setActiveTab(id);
     const url = new URL(window.location.href);
     url.pathname = '/forja';
     url.searchParams.set('tab', id);
     window.history.replaceState(null, '', url.toString());
+  }, []);
+
+  const handleSeedContent = async () => {
+    setSeeding(true);
+    await seedDefaultContent(discordUser?.username ?? 'admin');
+    setSeeding(false);
+    alert('Conteúdo padrão inicializado! Acesse as abas Regras e Formato para editar.');
   };
 
   const sharedProps = { discordUser, isAdmin };
 
-  // OBS mode: renderização fullscreen sem chrome
+  // Capitão logado (tem time no draft)
+  // Mostrar draft-room tab se o draft estiver ativo e o usuário for capitão ou admin
+  const isDraftActive = !!session && session.status === 'active';
+  const showDraftRoomTab = isDraftActive && (isAdmin || !!discordUser);
+
+  // OBS mode: fullscreen sem chrome
   if (activeTab === 'obs') {
     return (
       <>
-        <OBSShell {...sharedProps} />
+        <div style={{ background: '#020617', minHeight: '100vh' }}>
+          <Suspense fallback={<TabFallback />}>
+            <ForjaDraftOBS {...sharedProps} />
+          </Suspense>
+        </div>
         <button
           style={{ position: 'fixed', top: '0.75rem', right: '0.75rem', zIndex: 100,
             background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(51,65,85,0.5)',
@@ -101,10 +127,36 @@ export default function ForjaHub() {
     );
   }
 
-  const allVisibleTabs = isAdmin ? [...PUBLIC_TABS, ...ADMIN_TABS] : PUBLIC_TABS;
+  const allVisibleTabs: ForjaTab[] = [
+    ...PUBLIC_TABS,
+    ...(showDraftRoomTab ? [{ id: 'draft-room' as ForjaTabId, label: 'Sala de Draft', icon: '🎯' }] : []),
+    ...(isAdmin ? ADMIN_TABS : []),
+  ];
+
+  // Mostrar banner de deadline apenas se < 24h e inscrições ainda abertas
+  const showDeadlineBanner = registrationOpen && msToDeadline < 24 * 3600 * 1000 && msToDeadline > 0;
 
   return (
     <div className="forja-hub">
+
+      {/* ── Deadline Banner ──────────────────────── */}
+      {showDeadlineBanner && (
+        <div className="forja-deadline-banner">
+          <span>⏰</span>
+          <span>
+            Inscrições encerram em{' '}
+            <strong>{countdown.h}h {countdown.m}m {countdown.s}s</strong>
+            {' '}— Sábado 09/05 às 13h59 BRT
+          </span>
+          <button
+            className="forja-btn forja-btn--primary"
+            style={{ fontSize: '0.72rem', padding: '0.3rem 0.75rem', marginLeft: 'auto' }}
+            onClick={() => setShowRegModal(true)}
+          >
+            Inscreva-se agora
+          </button>
+        </div>
+      )}
 
       {/* ── Header ─────────────────────────────── */}
       <header className="forja-header">
@@ -121,6 +173,21 @@ export default function ForjaHub() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+            {/* Admin quick actions */}
+            {isAdmin && (
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  className="forja-btn forja-btn--ghost"
+                  style={{ fontSize: '0.68rem', padding: '0.35rem 0.75rem' }}
+                  onClick={handleSeedContent}
+                  disabled={seeding}
+                  title="Inicializar conteúdo padrão no Firestore (Regras, Formato, Premiação)"
+                >
+                  {seeding ? '⏳' : '🌱'} Seed
+                </button>
+              </div>
+            )}
+
             {/* Discord Auth */}
             <div className="forja-auth-widget">
               {authLoading ? (
@@ -151,12 +218,6 @@ export default function ForjaHub() {
             </div>
 
             <a href="/" className="forja-back-link" style={{ marginBottom: 0 }}>← Voltar</a>
-
-            <div className="forja-header-logo">
-              <img src="https://static.wikia.nocookie.net/ageofempires/images/e/e0/Logo_AoMR.png/revision/latest"
-                alt="Age of Mythology: Retold" className="forja-aomr-logo"
-                referrerPolicy="no-referrer" loading="lazy" />
-            </div>
           </div>
         </div>
       </header>
@@ -170,8 +231,7 @@ export default function ForjaHub() {
               id={`forja-tab-${tab.id}`}
               role="tab"
               aria-selected={activeTab === tab.id}
-              aria-controls={`forja-panel-${tab.id}`}
-              className={`forja-tab-btn ${activeTab === tab.id ? 'forja-tab-btn--active' : ''} ${ADMIN_TABS.find(t => t.id === tab.id) ? 'forja-tab-btn--admin' : ''}`}
+              className={`forja-tab-btn ${activeTab === tab.id ? 'forja-tab-btn--active' : ''} ${ADMIN_TABS.find(t => t.id === tab.id) ? 'forja-tab-btn--admin' : ''} ${tab.id === 'draft-room' ? 'forja-tab-btn--draft-room' : ''}`}
               onClick={() => handleTabChange(tab.id)}
             >
               <span className="forja-tab-icon">{tab.icon}</span>
@@ -183,19 +243,16 @@ export default function ForjaHub() {
       </nav>
 
       {/* ── Tab Content ───────────────────────── */}
-      <main
-        className="forja-tab-content"
-        id={`forja-panel-${activeTab}`}
-        role="tabpanel"
-        aria-labelledby={`forja-tab-${activeTab}`}
-      >
+      <main className="forja-tab-content">
         <Suspense fallback={<TabFallback />}>
           {activeTab === 'inicio'      && <ForjaInicio {...sharedProps} onRegisterClick={() => setShowRegModal(true)} />}
           {activeTab === 'regras'      && <ForjaRegras {...sharedProps} />}
+          {activeTab === 'mapas'       && <ForjaMapas {...sharedProps} />}
           {activeTab === 'formato'     && <ForjaFormato {...sharedProps} />}
           {activeTab === 'schedule'    && <ForjaSchedule {...sharedProps} />}
           {activeTab === 'times'       && <ForjaTimes {...sharedProps} />}
-          {activeTab === 'drafts'      && <ForjaDrafts {...sharedProps} />}
+          {activeTab === 'tabela'      && <ForjaTabela {...sharedProps} />}
+          {activeTab === 'draft-room'  && <ForjaDraftRoom {...sharedProps} />}
           {activeTab === 'admin-draft' && <ForjaAdminDraft {...sharedProps} />}
         </Suspense>
       </main>

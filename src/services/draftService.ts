@@ -207,7 +207,7 @@ export const draftService = {
             } else {
               const emptySlotIndex = updates.seriesMaps!.indexOf("");
               if (emptySlotIndex !== -1) {
-                if (freshLobby.config.preset === 'MCL' && emptySlotIndex !== (freshLobby.currentGame - 1)) {
+                if ((freshLobby.config.preset === 'MCL' || freshLobby.config.preset === 'FORJA') && emptySlotIndex !== (freshLobby.currentGame - 1)) {
                   return false;
                 }
                 updates.seriesMaps![emptySlotIndex] = id;
@@ -229,7 +229,7 @@ export const draftService = {
           }
           updates.selectedMap = id;
 
-          if (freshLobby.config.preset === 'MCL') {
+          if (freshLobby.config.preset === 'MCL' || freshLobby.config.preset === 'FORJA') {
             const newMCLPicks = getMCLPicks(freshLobby.currentGame, id, freshLobby.lastWinner || null);
             updates.picks = newMCLPicks.map(p => {
               const teamPlayers = p.team === 'A' ? freshLobby.teamAPlayers : freshLobby.teamBPlayers;
@@ -425,7 +425,7 @@ export const draftService = {
         else nextLobby.scoreB++;
 
         let isFinished = false;
-        if (lobby.config.preset === 'MCL') {
+        if (lobby.config.preset === 'MCL' || (lobby.config.preset === 'FORJA' && lobby.config.tournamentStage === 'GROUP')) {
           isFinished = lobby.currentGame === 3 && Boolean(nextLobby.reportVoteA && nextLobby.reportVoteB);
         } else {
           const maxGamesStr = lobby.config.seriesType === 'CUSTOM' ? (lobby.config.customGameCount || 1).toString() : lobby.config.seriesType.replace('BO', '');
@@ -462,10 +462,10 @@ export const draftService = {
           nextLobby.readyB_report = false;
           nextLobby.lastSubs = [];
 
-          // Para MCL: se o próximo game tem mapa pré-determinado (Game 3 = round map),
+          // Para MCL/FORJA: se o próximo game tem mapa pré-determinado (Game 3 = round map no MCL, ou serieMaps no FORJA),
           // reinicializa os picks com as posições corretas para aquele mapa.
           // Se o mapa ainda não está definido (Game 2), apenas limpa os godIds.
-          if (nextLobby.config.preset === 'MCL') {
+          if (nextLobby.config.preset === 'MCL' || nextLobby.config.preset === 'FORJA') {
             const nextGameMap = (nextLobby.seriesMaps || [])[nextLobby.currentGame - 1];
             if (nextGameMap && nextGameMap !== '') {
               // Game 3: mapa pré-determinado pelo round — recalcula skeleton de posições

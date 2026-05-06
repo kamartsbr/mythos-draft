@@ -805,7 +805,7 @@ export const lobbyService = {
           bans: [],
           mapBans: lobby.currentGame === 1 ? [] : lobby.mapBans,
           seriesMaps: newSeriesMaps,
-          selectedMap: (lobby.config.preset === 'MCL' && lobby.currentGame === 3) ? (lobby.seriesMaps ? lobby.seriesMaps[2] : null) : null,
+          selectedMap: ((lobby.config.preset === 'MCL' || lobby.config.preset === 'FORJA') && lobby.currentGame === 3) ? (lobby.seriesMaps ? lobby.seriesMaps[2] : null) : null,
           isPaused: false,
           timerStart: Date.now() as any,
           timerPausedAt: null,
@@ -1032,7 +1032,7 @@ export const lobbyService = {
       const data = normalizeLobbyData(docSnap.data());
       const updates: any = {};
 
-      const isMCL = data.config.preset === 'MCL';
+      const isMCL = data.config.preset === 'MCL' || data.config.preset === 'FORJA';
 
       if (role === 'A') {
         if (data.captain1 && data.captain1 !== guestId) {

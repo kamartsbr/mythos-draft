@@ -62,7 +62,13 @@ export type LobbyConfig = {
   timerDuration?: number;
   preset?: string;
   mclRound?: number;
-  tournamentStage?: 'GROUP' | 'PLAYOFFS';
+  tournamentStage?: 'GROUP' | 'PLAYOFFS' | 'PLAYOFFS_BO3' | 'PLAYOFFS_BO5';
+  
+  // Forja Integration
+  forjaMatchId?: string;
+  forjaTeamA?: string;
+  forjaTeamB?: string;
+  forjaGroupId?: string;
 };
 
 export type PickEntry = {

@@ -6,31 +6,15 @@
 import React, { useState } from 'react';
 import { ForjaViewProps, ForjaPlayer, ForjaGodStat, ForjaTier } from '../types';
 import { useForjaPlayers } from '../hooks/useForjaPlayers';
-import { removeForjaPlayer } from '../services/forjaService';
+import { subscribeToForjaPlayers, removeForjaPlayer, ESPORTS_ELO_OVERRIDES } from '../services/forjaService';
+import { MAJOR_GODS } from '../../../data/gods';
 
 // ─── Mock Data ───────────────────────────────────────────────────────────────
-
-const GOD_IMAGES: Record<string, string> = {
-  zeus: 'https://static.wikia.nocookie.net/ageofempires/images/1/14/AoMRT_Greek_Zeus.webp/revision/latest/scale-to-width-down/64?cb=20250701110532',
-  hades: 'https://static.wikia.nocookie.net/ageofempires/images/5/5e/AoMRT_Greek_Hades.webp/revision/latest/scale-to-width-down/64?cb=20250701110530',
-  poseidon: 'https://static.wikia.nocookie.net/ageofempires/images/e/e6/AoMRT_Greek_Poseidon.webp/revision/latest/scale-to-width-down/64?cb=20250701110531',
-  ra: 'https://static.wikia.nocookie.net/ageofempires/images/6/67/AoMRT_Egyptian_Ra.webp/revision/latest/scale-to-width-down/64?cb=20250701110519',
-  isis: 'https://static.wikia.nocookie.net/ageofempires/images/d/dd/AoMRT_Egyptian_Isis.webp/revision/latest/scale-to-width-down/64?cb=20250701110517',
-  set: 'https://static.wikia.nocookie.net/ageofempires/images/3/3e/AoMRT_Egyptian_Set-scaled.webp/revision/latest/scale-to-width-down/64?cb=20250701110515',
-  thor: 'https://static.wikia.nocookie.net/ageofempires/images/5/55/AoMRT_Norse_Thor.webp/revision/latest/scale-to-width-down/64?cb=20250701110503',
-  loki: 'https://static.wikia.nocookie.net/ageofempires/images/7/7c/AoMRT_Norse_Loki.webp/revision/latest/scale-to-width-down/64?cb=20250701110502',
-  odin: 'https://static.wikia.nocookie.net/ageofempires/images/9/9a/AoMRT_Norse_Odin.webp/revision/latest/scale-to-width-down/64?cb=20250701110501',
-  kronos: 'https://static.wikia.nocookie.net/ageofempires/images/e/e7/AoMRT_Atlantean_Kronos.webp/revision/latest/scale-to-width-down/64?cb=20250701110454',
-  oranos: 'https://static.wikia.nocookie.net/ageofempires/images/3/37/AoMRT_Atlantean_Oranos.webp/revision/latest/scale-to-width-down/64?cb=20250701110455',
-  gaia: 'https://static.wikia.nocookie.net/ageofempires/images/0/00/AoMRT_Atlantean_Gaia.webp/revision/latest/scale-to-width-down/64?cb=20250701110453',
-  amaterasu: 'https://static.wikia.nocookie.net/ageofempires/images/3/3e/Amaterasu_artwork_new_AoMR.png/revision/latest/scale-to-width-down/64?cb=20250730190329',
-  fuxi: 'https://static.wikia.nocookie.net/ageofempires/images/f/f5/Fuxi_artwork_AoMR.png/revision/latest/scale-to-width-down/64?cb=20250204185506',
-  nuwa: 'https://static.wikia.nocookie.net/ageofempires/images/4/45/Nuwa_artwork_AoMR.png/revision/latest/scale-to-width-down/64?cb=20250204185423',
-};
 
 const MOCK_PLAYERS: ForjaPlayer[] = [
   {
     discord_id: '111111111111111111',
+    aom_profile_id: 10001,
     aom_id: 'omoradin',
     nick: 'Omoradin',
     avatar_url: 'https://cdn.discordapp.com/embed/avatars/0.png',
@@ -50,9 +34,14 @@ const MOCK_PLAYERS: ForjaPlayer[] = [
     team_id: null,
     seed: 1,
     registered_at: null,
+    consent_rules: true,
+    consent_format: true,
+    discord_avatar_url: 'https://cdn.discordapp.com/embed/avatars/0.png',
+    availability: ['weekday-eve', 'weekend-eve'],
   },
   {
     discord_id: '222222222222222222',
+    aom_profile_id: 10002,
     aom_id: 'kamaRTS',
     nick: 'KamaRTS',
     avatar_url: 'https://cdn.discordapp.com/embed/avatars/1.png',
@@ -72,9 +61,14 @@ const MOCK_PLAYERS: ForjaPlayer[] = [
     team_id: null,
     seed: 2,
     registered_at: null,
+    consent_rules: true,
+    consent_format: true,
+    discord_avatar_url: 'https://cdn.discordapp.com/embed/avatars/1.png',
+    availability: ['weekend-aft', 'weekend-eve'],
   },
   {
     discord_id: '333333333333333333',
+    aom_profile_id: 10003,
     aom_id: 'thunderaxe99',
     nick: 'ThunderAxe',
     avatar_url: 'https://cdn.discordapp.com/embed/avatars/2.png',
@@ -94,9 +88,14 @@ const MOCK_PLAYERS: ForjaPlayer[] = [
     team_id: null,
     seed: 3,
     registered_at: null,
+    consent_rules: true,
+    consent_format: true,
+    discord_avatar_url: 'https://cdn.discordapp.com/embed/avatars/2.png',
+    availability: ['weekday-eve'],
   },
   {
     discord_id: '444444444444444444',
+    aom_profile_id: 10004,
     aom_id: 'mythkeeper_br',
     nick: 'MythKeeper',
     avatar_url: 'https://cdn.discordapp.com/embed/avatars/3.png',
@@ -116,9 +115,14 @@ const MOCK_PLAYERS: ForjaPlayer[] = [
     team_id: null,
     seed: 4,
     registered_at: null,
+    consent_rules: true,
+    consent_format: true,
+    discord_avatar_url: 'https://cdn.discordapp.com/embed/avatars/3.png',
+    availability: ['weekend-eve', 'late-night'],
   },
   {
     discord_id: '555555555555555555',
+    aom_profile_id: 10005,
     aom_id: 'dragonlord_pt',
     nick: 'DragonLord_PT',
     avatar_url: 'https://cdn.discordapp.com/embed/avatars/4.png',
@@ -138,9 +142,14 @@ const MOCK_PLAYERS: ForjaPlayer[] = [
     team_id: null,
     seed: 5,
     registered_at: null,
+    consent_rules: true,
+    consent_format: true,
+    discord_avatar_url: 'https://cdn.discordapp.com/embed/avatars/4.png',
+    availability: ['weekday-eve', 'weekend-aft'],
   },
   {
     discord_id: '666666666666666666',
+    aom_profile_id: 10006,
     aom_id: 'goldenspear7',
     nick: 'GoldenSpear',
     avatar_url: 'https://cdn.discordapp.com/embed/avatars/5.png',
@@ -160,6 +169,10 @@ const MOCK_PLAYERS: ForjaPlayer[] = [
     team_id: null,
     seed: 6,
     registered_at: null,
+    consent_rules: true,
+    consent_format: true,
+    discord_avatar_url: 'https://cdn.discordapp.com/embed/avatars/5.png',
+    availability: ['weekend-eve', 'late-night'],
   },
 ];
 
@@ -169,6 +182,13 @@ const TIER_COLORS: Record<string, { bg: string; border: string; text: string; gl
   A: { bg: 'rgba(234,179,8,0.12)', border: 'rgba(234,179,8,0.5)', text: '#facc15', glow: 'rgba(234,179,8,0.3)' },
   B: { bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.5)', text: '#60a5fa', glow: 'rgba(59,130,246,0.3)' },
   C: { bg: 'rgba(100,116,139,0.12)', border: 'rgba(100,116,139,0.5)', text: '#94a3b8', glow: 'rgba(100,116,139,0.2)' },
+};
+
+const AVAILABILITY_LABELS: Record<string, { label: string; icon: string }> = {
+  'weekday-eve': { label: 'Semana/Noite', icon: '🌙' },
+  'weekend-aft': { label: 'FDS/Tarde', icon: '☀️' },
+  'weekend-eve': { label: 'FDS/Noite', icon: '🌃' },
+  'late-night':  { label: 'Madrugada', icon: '🦉' }
 };
 
 function TierBadge({ tier }: { tier: ForjaTier }) {
@@ -190,7 +210,8 @@ function TierBadge({ tier }: { tier: ForjaTier }) {
 // ─── God Icon ─────────────────────────────────────────────────────────────────
 
 function GodIcon({ god, godName, winRate }: ForjaGodStat) {
-  const src = GOD_IMAGES[god];
+  const godData = MAJOR_GODS.find(g => g.id.toLowerCase() === god.toLowerCase());
+  const src = godData?.image;
   return (
     <div className="forja-god-icon" title={`${godName ?? god} — ${winRate}% WR`}>
       {src
@@ -223,10 +244,15 @@ function PlayerCard({ player, isAdmin }: { player: ForjaPlayer; isAdmin: boolean
     }
   };
 
+  const esportsEloValue = player.esports_elo || ESPORTS_ELO_OVERRIDES[player.nick.toLowerCase()] || undefined;
+
   return (
     <article className="forja-player-card" style={{ opacity: removing ? 0.4 : 1, transition: 'opacity 0.3s' }}>
       {/* Seed Badge */}
-      {player.seed && <div className="forja-seed-badge">#{player.seed}</div>}
+      <div className="forja-seed-badge">#{player.seed}</div>
+      
+      {/* Capitão Badge */}
+      {esportsEloValue && <div className="forja-seed-badge" style={{ right: player.seed ? '2.5rem' : '0.5rem', background: 'rgba(245,158,11,0.2)', color: '#f59e0b', borderColor: 'rgba(245,158,11,0.5)' }}>CAPITÃO</div>}
 
       {/* Admin Remove */}
       {isAdmin && (
@@ -259,11 +285,11 @@ function PlayerCard({ player, isAdmin }: { player: ForjaPlayer; isAdmin: boolean
         <div className="forja-player-info">
           <h3 className="forja-player-nick">{player.nick}</h3>
           <a
-            href={`https://aomstats.io/players/${player.aom_id}`}
+            href={`https://aomstats.io/profile/${player.aom_profile_id}`}
             target="_blank" rel="noreferrer noopener"
             className="forja-player-aomlink" title="Ver no AoMStats"
           >
-            @{player.aom_id}
+            link aomstats
           </a>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.25rem' }}>
             <TierBadge tier={player.tier} />
@@ -273,6 +299,17 @@ function PlayerCard({ player, isAdmin }: { player: ForjaPlayer; isAdmin: boolean
 
       {/* ELO Stats */}
       <div className="forja-player-elos">
+        {esportsEloValue && (
+          <>
+            <div className="forja-elo-block" style={{ background: 'rgba(245,158,11,0.08)' }}>
+              <span className="forja-elo-label" style={{ color: '#f59e0b' }}>ESPORTS ELO</span>
+              <span className="forja-elo-value" style={{ color: '#facc15' }}>
+                {esportsEloValue.toLocaleString()}
+              </span>
+            </div>
+            <div className="forja-elo-divider" />
+          </>
+        )}
         <div className="forja-elo-block">
           <span className="forja-elo-label">1v1 ELO</span>
           <span className="forja-elo-value" style={{ color: eloColor(player.elo_1v1) }}>
@@ -291,7 +328,7 @@ function PlayerCard({ player, isAdmin }: { player: ForjaPlayer; isAdmin: boolean
       {/* Top 5 Gods */}
       {player.top_gods.length > 0 && (
         <div className="forja-player-gods">
-          <span className="forja-player-gods__label">TOP DEUSES</span>
+          <span className="forja-player-gods__label">TOP 5 DEUSES MAIS JOGADOS</span>
           <div className="forja-player-gods__row">
             {player.top_gods.slice(0, 5).map(g => (
               <GodIcon key={g.god} {...g} />
@@ -300,9 +337,29 @@ function PlayerCard({ player, isAdmin }: { player: ForjaPlayer; isAdmin: boolean
         </div>
       )}
 
+      {/* Horários de Disponibilidade */}
+      {player.availability && player.availability.length > 0 && (
+        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '1rem', justifyContent: 'center' }}>
+          {[...player.availability].sort((a, b) => {
+            const order: Record<string, number> = { 'weekday-eve': 1, 'weekend-aft': 2, 'weekend-eve': 3, 'late-night': 4 };
+            return (order[a] || 99) - (order[b] || 99);
+          }).map(a => {
+            const lbl = AVAILABILITY_LABELS[a] || { label: a, icon: '⏱️' };
+            return (
+              <span key={a} style={{ 
+                fontSize: '0.65rem', background: 'rgba(255,255,255,0.05)', 
+                padding: '0.2rem 0.5rem', borderRadius: '1rem', color: '#cbd5e1' 
+              }}>
+                {lbl.icon} {lbl.label}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
       {/* Pitch Quote */}
       {player.pitch_quote && (
-        <div className="forja-player-pitch">
+        <div className="forja-player-pitch" style={{ marginTop: '0.75rem' }}>
           <span className="forja-pitch-quote">"{player.pitch_quote}"</span>
         </div>
       )}
@@ -368,13 +425,76 @@ function PlayerSkeleton() {
   );
 }
 
+// ─── Player Table ─────────────────────────────────────────────────────────────
+
+function PlayerTable({ players, isAdmin }: { players: ForjaPlayer[]; isAdmin: boolean }) {
+  const eloColor = (elo: number) => elo >= 2000 ? '#f59e0b' : elo >= 1800 ? '#60a5fa' : '#94a3b8';
+
+  return (
+    <div style={{ overflowX: 'auto', background: '#0f172a', borderRadius: '1rem', border: '1px solid #1e293b' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '800px' }}>
+        <thead style={{ background: '#1e293b', color: '#94a3b8', fontSize: '0.8rem', textTransform: 'uppercase' }}>
+          <tr>
+            <th style={{ padding: '1rem' }}>Seed</th>
+            <th style={{ padding: '1rem' }}>Jogador</th>
+            <th style={{ padding: '1rem' }}>Tier</th>
+            <th style={{ padding: '1rem' }}>Esports Elo</th>
+            <th style={{ padding: '1rem' }}>1v1 Elo</th>
+            <th style={{ padding: '1rem' }}>TG Elo</th>
+            <th style={{ padding: '1rem' }}>Disponibilidade</th>
+          </tr>
+        </thead>
+        <tbody>
+          {players.map((p) => {
+            const esportsEloValue = p.esports_elo || ESPORTS_ELO_OVERRIDES[p.nick.toLowerCase()] || undefined;
+            return (
+              <tr key={p.discord_id} style={{ borderBottom: '1px solid #1e293b', color: '#f8fafc' }}>
+                <td style={{ padding: '1rem', color: esportsEloValue ? '#f59e0b' : '#94a3b8', fontWeight: 'bold' }}>#{p.seed}</td>
+                <td style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <img src={p.avatar_url} style={{ width: '2rem', height: '2rem', borderRadius: '0.2rem' }} referrerPolicy="no-referrer" alt={p.nick} />
+                  {p.nick} {esportsEloValue && <span style={{ background: 'rgba(245,158,11,0.2)', color: '#f59e0b', padding: '0.1rem 0.3rem', borderRadius: '0.2rem', fontSize: '0.6rem', fontWeight: 'bold' }}>CAP</span>}
+                </td>
+                <td style={{ padding: '1rem' }}><TierBadge tier={p.tier} /></td>
+                <td style={{ padding: '1rem', color: '#facc15', fontWeight: 'bold' }}>{esportsEloValue ? esportsEloValue.toLocaleString() : '—'}</td>
+                <td style={{ padding: '1rem', color: eloColor(p.elo_1v1) }}>{p.elo_1v1 > 0 ? p.elo_1v1.toLocaleString() : '—'}</td>
+                <td style={{ padding: '1rem', color: eloColor(p.elo_tg) }}>{p.elo_tg > 0 ? p.elo_tg.toLocaleString() : '—'}</td>
+                <td style={{ padding: '1rem', fontSize: '0.8rem', color: '#94a3b8' }}>
+                  {p.availability && p.availability.length > 0 ? (
+                    <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+                      {p.availability.map(a => {
+                        const lbl = AVAILABILITY_LABELS[a];
+                        return <span key={a} style={{ background: '#1e293b', padding: '0.1rem 0.4rem', borderRadius: '0.2rem', whiteSpace: 'nowrap' }}>{lbl?.icon} {lbl?.label}</span>;
+                      })}
+                    </div>
+                  ) : '—'}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: ForjaInicioProps) {
   const { players, loading, error, isLive } = useForjaPlayers();
   const [filter, setFilter] = useState<'all' | 'A' | 'B' | 'C'>('all');
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
 
-  const filtered = filter === 'all' ? players : players.filter(p => p.tier === filter);
+  const sortedPlayers = [...players].sort((a, b) => {
+    const aEsports = a.esports_elo || ESPORTS_ELO_OVERRIDES[a.nick.toLowerCase()] || 0;
+    const bEsports = b.esports_elo || ESPORTS_ELO_OVERRIDES[b.nick.toLowerCase()] || 0;
+    
+    if (aEsports !== bEsports) {
+      return bEsports - aEsports; // Descending Esports Elo
+    }
+    return b.elo_1v1 - a.elo_1v1; // Descending 1v1 Elo
+  }).map((p, index) => ({ ...p, seed: index + 1 }));
+
+  const filtered = filter === 'all' ? sortedPlayers : sortedPlayers.filter(p => p.tier === filter);
 
   return (
     <section className="forja-view forja-view--inicio">
@@ -416,37 +536,47 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
       {/* Live Stats Bar */}
       {!loading && <StatsBar players={players} isLive={isLive} />}
 
-      {/* Filter Tabs */}
-      <div className="forja-filter-row">
-        <span className="forja-filter-label">Filtrar por Tier:</span>
-        {(['all', 'A', 'B', 'C'] as const).map(f => (
-          <button
-            key={f}
-            id={`forja-filter-${f}`}
-            className={`forja-filter-btn ${filter === f ? 'forja-filter-btn--active' : ''}`}
-            onClick={() => setFilter(f)}
-          >
-            {f === 'all' ? 'Todos' : `Tier ${f}`}
-          </button>
-        ))}
-        {!loading && (
-          <span className="forja-filter-count">
-            {filtered.length} jogador{filtered.length !== 1 ? 'es' : ''}
-          </span>
-        )}
+      {/* Filter Tabs & View Toggle */}
+      <div className="forja-filter-row" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <span className="forja-filter-label">Filtrar por Tier:</span>
+          {(['all', 'A', 'B', 'C'] as const).map(f => (
+            <button
+              key={f}
+              id={`forja-filter-${f}`}
+              className={`forja-filter-btn ${filter === f ? 'forja-filter-btn--active' : ''}`}
+              onClick={() => setFilter(f)}
+            >
+              {f === 'all' ? 'Todos' : `Tier ${f}`}
+            </button>
+          ))}
+          {!loading && (
+            <span className="forja-filter-count">
+              {filtered.length} jogador{filtered.length !== 1 ? 'es' : ''}
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button className={`forja-btn ${viewMode === 'cards' ? 'forja-btn--primary' : 'forja-btn--ghost'}`} style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }} onClick={() => setViewMode('cards')}>🃏 Cards</button>
+          <button className={`forja-btn ${viewMode === 'table' ? 'forja-btn--primary' : 'forja-btn--ghost'}`} style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }} onClick={() => setViewMode('table')}>📋 Tabela</button>
+        </div>
       </div>
 
-      {/* Player Grid */}
+      {/* Player Grid / Table */}
       {loading ? (
         <div className="forja-players-grid">
           {[1,2,3,4,5,6].map(i => <PlayerSkeleton key={i} />)}
         </div>
       ) : filtered.length > 0 ? (
-        <div className="forja-players-grid">
-          {filtered.map(player => (
-            <PlayerCard key={player.discord_id} player={player} isAdmin={isAdmin} />
-          ))}
-        </div>
+        viewMode === 'cards' ? (
+          <div className="forja-players-grid">
+            {filtered.map((player) => (
+              <PlayerCard key={player.discord_id} player={player} isAdmin={isAdmin} />
+            ))}
+          </div>
+        ) : (
+          <PlayerTable players={filtered} isAdmin={isAdmin} />
+        )
       ) : (
         <div className="forja-empty">
           <span>🔍</span>

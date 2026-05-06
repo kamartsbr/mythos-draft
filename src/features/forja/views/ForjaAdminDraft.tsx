@@ -8,7 +8,7 @@ import { useForjaPlayers } from '../hooks/useForjaPlayers';
 import { useForjaTeams }   from '../hooks/useForjaTeams';
 import { useForjaDraftSession } from '../hooks/useForjaDraftSession';
 import {
-  setPlayerTier, startForjaDraft, makeDraftPick, resetForjaDraft,
+  setPlayerTier, startForjaDraft, makeDraftPick, resetForjaDraft, updatePlayerStatsSnapshot, ESPORTS_ELO_OVERRIDES, undoLastDraftPick
 } from '../services/forjaService';
 
 // ─── Tier Badge ───────────────────────────────────────────────────────────────
@@ -197,6 +197,7 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
   const [tierFilter, setTierFilter]             = useState<'all'|'A'|'B'|'C'>('all');
   const [isBusy, setIsBusy]                     = useState(false);
   const [error, setError]                       = useState<string | null>(null);
+  const [snapshotProgress, setSnapshotProgress] = useState<{ current: number; total: number } | null>(null);
 
   const isDraftActive = !!session;
 
@@ -207,7 +208,23 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
 
   const visiblePlayers = useMemo(() => {
     const base = tierFilter === 'all' ? players : players.filter(p => p.tier === tierFilter);
-    return base.sort((a, b) => (a.tier ?? 'Z').localeCompare(b.tier ?? 'Z') || (a.seed ?? 99) - (b.seed ?? 99));
+    return base.sort((a, b) => {
+      // Prioridade 1: ESPORTS_ELO (descendente)
+      if (a.esports_elo || b.esports_elo) {
+        const ea = a.esports_elo ?? 0;
+        const eb = b.esports_elo ?? 0;
+        if (ea !== eb) return eb - ea;
+      }
+      // Prioridade 2: Tier visual (se setado, C > B > A em string locale ou Z)
+      const t = (a.tier ?? 'Z').localeCompare(b.tier ?? 'Z');
+      if (t !== 0) return t;
+      // Prioridade 3: ELO Snapshot / ELO 1v1 (descendente)
+      const eloA = a.elo_snapshot ?? a.elo_1v1;
+      const eloB = b.elo_snapshot ?? b.elo_1v1;
+      if (eloA !== eloB) return eloB - eloA;
+      // Prioridade 4: Seed (ascendente)
+      return (a.seed ?? 99) - (b.seed ?? 99);
+    });
   }, [players, tierFilter]);
 
   const availablePlayers = useMemo(
@@ -240,11 +257,21 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
     finally { setIsBusy(false); }
   };
 
-  // ── Make pick ────────────────────────────────────────────────────────────
-  const handlePick = async (playerId: string) => {
+  // ── Make pick ──────────────────────────────────────────────────────────────
+  const handlePick = async (player: ForjaPlayer) => {
     if (!session) return;
     setIsBusy(true); setError(null);
-    try { await makeDraftPick(session, playerId); }
+    try { await makeDraftPick(session, player, true); }
+    catch (e: any) { setError(e.message); }
+    finally { setIsBusy(false); }
+  };
+
+  // ── Undo last pick ───────────────────────────────────────────────────────
+  const handleUndo = async () => {
+    if (!session || session.picks.length === 0) return;
+    if (!confirm('Desfazer a última escolha de draft? O jogador será devolvido ao pool.')) return;
+    setIsBusy(true); setError(null);
+    try { await undoLastDraftPick(session); }
     catch (e: any) { setError(e.message); }
     finally { setIsBusy(false); }
   };
@@ -256,6 +283,50 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
     try { await resetForjaDraft(); setSelectedCaptains([]); }
     catch (e: any) { setError(e.message); }
     finally { setIsBusy(false); }
+  };
+
+  // ── Snapshot ELO ─────────────────────────────────────────────────────────
+  const handleSnapshot = async () => {
+    if (!confirm(`Atenção: Isso vai atualizar o ELO e Top Deuses de todos os ${players.length} inscritos com os dados em tempo real do AoMStats.io. Pode levar alguns minutos. Deseja continuar?`)) return;
+    setIsBusy(true); setError(null);
+    setSnapshotProgress({ current: 0, total: players.length });
+
+    let successCount = 0;
+    try {
+      for (let i = 0; i < players.length; i++) {
+        const player = players[i];
+        setSnapshotProgress({ current: i + 1, total: players.length });
+        try {
+          const res = await fetch(`/api/forja/fetch-aom-profile?id=${player.aom_profile_id}`);
+          if (!res.ok) throw new Error('API Error');
+          const json = await res.json();
+          if (json.data) {
+            // Verifica o override via constante (usando lowercase para comparar o nick ou o ID)
+            const normalizedNick = player.nick.trim().toLowerCase();
+            const esportsElo = ESPORTS_ELO_OVERRIDES[normalizedNick] ?? ESPORTS_ELO_OVERRIDES[String(player.aom_profile_id)] ?? undefined;
+
+            await updatePlayerStatsSnapshot(player.discord_id, {
+              elo_1v1: json.data.elo_1v1 ?? player.elo_1v1,
+              elo_tg: json.data.elo_tg ?? player.elo_tg,
+              top_gods: json.data.top_gods ?? player.top_gods,
+              elo_snapshot: json.data.elo_1v1 ?? player.elo_1v1, // Salva um registro definitivo
+              ...(esportsElo !== undefined && { esports_elo: esportsElo }),
+            });
+            successCount++;
+          }
+        } catch (err) {
+          console.warn(`[Forja Snapshot] Falha ao atualizar jogador ${player.nick}:`, err);
+        }
+        // Delay to prevent rate limits / heavy loads
+        await new Promise(r => setTimeout(r, 600));
+      }
+      alert(`Snapshot concluído! ${successCount} de ${players.length} atualizados.`);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsBusy(false);
+      setSnapshotProgress(null);
+    }
   };
 
   if (!isAdmin) {
@@ -281,19 +352,45 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
               : `${players.length} inscritos · ${selectedCaptains.length} capitão(es) selecionado(s)`}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          {snapshotProgress && (
+            <span style={{ color: '#60a5fa', fontSize: '0.85rem', fontWeight: 600 }}>
+              📸 Atualizando {snapshotProgress.current} de {snapshotProgress.total}...
+            </span>
+          )}
           {!isDraftActive && (
-            <button
-              id="forja-admin-start-draft-btn"
-              className="forja-btn forja-btn--primary"
-              onClick={handleStartDraft}
-              disabled={isBusy || selectedCaptains.length < 2}
-            >
-              {isBusy ? '⏳ Iniciando...' : '🚀 Iniciar Draft'}
-            </button>
+            <>
+              <button
+                className="forja-btn forja-btn--ghost"
+                style={{ borderColor: '#60a5fa', color: '#60a5fa' }}
+                onClick={handleSnapshot}
+                disabled={isBusy}
+              >
+                📸 Snapshot de ELO
+              </button>
+              <button
+                id="forja-admin-start-draft-btn"
+                className="forja-btn forja-btn--primary"
+                onClick={handleStartDraft}
+                disabled={isBusy || selectedCaptains.length < 2}
+              >
+                {isBusy ? '⏳ Iniciando...' : '🚀 Iniciar Draft'}
+              </button>
+            </>
           )}
           {isDraftActive && session?.status === 'completed' && (
             <span className="forja-admin-completed-badge">🏆 Draft Concluído!</span>
+          )}
+          {isDraftActive && session?.picks.length > 0 && (
+            <button
+              className="forja-btn forja-btn--ghost"
+              style={{ color: '#facc15', borderColor: '#facc15' }}
+              onClick={handleUndo}
+              disabled={isBusy}
+              title="Desfazer Última Escolha"
+            >
+              ↩ Undo Pick
+            </button>
           )}
           <button
             id="forja-admin-reset-draft-btn"
@@ -348,9 +445,9 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
                   isSelected={false}
                   isCaptain={selectedCaptains.includes(player.discord_id)}
                   isDraftActive={isDraftActive}
-                  isCurrentPick={isDraftActive && session?.current_team_id !== null}
+                  isCurrentPick={isDraftActive && session?.current_team_id !== null && player.tier === session?.current_round}
                   onToggleCaptain={() => toggleCaptain(player.discord_id)}
-                  onPick={() => handlePick(player.discord_id)}
+                  onPick={() => handlePick(player)}
                   onTierChange={t => handleTierChange(player.discord_id, t)}
                 />
               ))}

@@ -25,13 +25,17 @@ export interface ForjaPlayer {
   /** Slug/alias exibido nas URLs do aomstats */
   aom_id: string;
   nick: string;
+  /** Avatar principal: Steam/aomstats (scraped) ou Discord como fallback */
   avatar_url: string;
+  /** Avatar do Discord (sempre disponível) */
+  discord_avatar_url: string;
   is_brazilian: boolean;
   pitch_quote: string;
   elo_1v1: number;
   elo_tg: number;
   /** ELO 1v1 no momento do snapshot (sábado 14h) */
   elo_snapshot?: number;
+  esports_elo?: number;
   top_gods: ForjaGodStat[];
   status: ForjaPlayerStatus;
   tier: ForjaTier;
@@ -42,6 +46,8 @@ export interface ForjaPlayer {
   consent_rules: boolean;
   /** Consentimento com o Formato */
   consent_format: boolean;
+  /** Horários de disponibilidade do jogador */
+  availability: string[];
 }
 
 // ─── Time ────────────────────────────────────────────────────────────────────
@@ -132,9 +138,28 @@ export interface ForjaSettings {
 }
 
 // ─── Formulário de Inscrição ──────────────────────────────────────────────────
+export interface AomProfileData {
+  profile_id: number;
+  avatar_url: string | null;
+  alias: string | null;
+  verified: boolean;
+  /** ELO do ranking Supremacy 1v1 extraído do perfil */
+  elo_1v1: number | null;
+  /** ELO do ranking Supremacy Team Game extraído do perfil */
+  elo_tg: number | null;
+  /** Top 5 deuses com win rate e play rate calculados do perfil */
+  top_gods: ForjaGodStat[];
+}
+
 export interface ForjaRegistrationForm {
+  /** Nick de jogo (preenchido pelo usuário) */
+  nick: string;
   /** URL completa do perfil no aomstats.io/profiles/XXXXX */
   aomstats_url: string;
+  /** Dados do perfil retornados pelo scraper server-side */
+  aom_profile_data: AomProfileData | null;
+  /** Horários de disponibilidade selecionados */
+  availability: string[];
   pitch_quote: string;
   is_brazilian: boolean;
   consent_rules: boolean;
@@ -154,6 +179,7 @@ export interface ForjaDiscordUser {
 export type ForjaTabId =
   | 'inicio'
   | 'regras'
+  | 'mapas'
   | 'formato'
   | 'schedule'
   | 'times'

@@ -21,7 +21,7 @@ function SectionEditor({
   onDelete: (i: number) => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [title, setTitle]     = useState(section.title);
+  const [title, setTitle] = useState(section.title);
   const [content, setContent] = useState(section.content);
 
   useEffect(() => { setTitle(section.title); setContent(section.content); }, [section]);
@@ -82,8 +82,8 @@ function SectionEditor({
 
 export default function ForjaContentEditor({ docId, data, updatedBy }: Props) {
   const [sections, setSections] = useState<ForjaContentSection[]>(data?.sections ?? []);
-  const [saving, setSaving]     = useState(false);
-  const [saved, setSaved]       = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => { setSections(data?.sections ?? []); }, [data]);
 

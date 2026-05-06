@@ -1,295 +1,152 @@
 /**
  * Forja de Hefesto — Aba: Formato
- * Explicação do Snake Draft e Tiers A, B e C.
+ * Passo 4 Major: conteúdo editável via CMS (Firestore) + visualizador snake draft estático.
  */
-
 import React from 'react';
 import { ForjaViewProps } from '../types';
+import { useForjaContent } from '../hooks/useForjaContent';
+import ForjaContentEditor from '../components/ForjaContentEditor';
 
-// ─── Snake Draft Visualizer ───────────────────────────────────────────────────
-
-/**
- * Exemplo visual para 3 times (A, B, C) com 3 rodadas Snake Draft.
- * Snake = Rodada 1: A→B→C, Rodada 2: C→B→A, Rodada 3: A→B→C...
- */
+// ─── Snake Draft Visualizer (estático — é explicativo) ───────────────────────
 const SNAKE_EXAMPLE = [
   {
-    round: 1, picks: [
-      { slot: 1, team: 'A', tier: 'A', label: 'Capitão A', dir: 'right' },
-      { slot: 2, team: 'B', tier: 'A', label: 'Capitão B', dir: 'right' },
-      { slot: 3, team: 'C', tier: 'A', label: 'Capitão C', dir: 'right' },
+    round: 'B', label: 'Round B — Tier B', subtitle: 'Último capitão escolhe primeiro',
+    picks: [
+      { slot: 1, team: 'Seed 12', tier: 'B', dir: '←' },
+      { slot: 2, team: 'Seed 11', tier: 'B', dir: '←' },
+      { slot: 11, team: '...', tier: 'B', dir: '←' },
+      { slot: 12, team: 'Seed 1', tier: 'B', dir: '←' },
     ]
   },
   {
-    round: 2, picks: [
-      { slot: 4, team: 'C', tier: 'B', label: 'Membro C', dir: 'left' },
-      { slot: 5, team: 'B', tier: 'B', label: 'Membro B', dir: 'left' },
-      { slot: 6, team: 'A', tier: 'B', label: 'Membro A', dir: 'left' },
-    ]
-  },
-  {
-    round: 3, picks: [
-      { slot: 7, team: 'A', tier: 'B', label: 'Membro A₂', dir: 'right' },
-      { slot: 8, team: 'B', tier: 'C', label: 'Membro B₂', dir: 'right' },
-      { slot: 9, team: 'C', tier: 'C', label: 'Membro C₂', dir: 'right' },
+    round: 'C', label: 'Round C — Tier C', subtitle: 'Primeiro capitão escolhe primeiro',
+    picks: [
+      { slot: 13, team: 'Seed 1', tier: 'C', dir: '→' },
+      { slot: 14, team: 'Seed 2', tier: 'C', dir: '→' },
+      { slot: 23, team: '...', tier: 'C', dir: '→' },
+      { slot: 24, team: 'Seed 12', tier: 'C', dir: '→' },
     ]
   },
 ];
 
-const TEAM_COLORS: Record<string, string> = {
-  A: '#f59e0b',
-  B: '#60a5fa',
-  C: '#a78bfa',
-};
-
-const TIER_LABELS: Record<string, { color: string; bg: string; desc: string; criteria: string[] }> = {
-  A: {
-    color: '#facc15',
-    bg: 'rgba(234,179,8,0.1)',
-    desc: 'Elite do torneio. Os Capitães e os melhores jogadores. Alto ELO, consistência em torneios e capacidade de liderança.',
-    criteria: [
-      'ELO 1v1 ≥ 1900 ou ELO TG ≥ 2000',
-      'Histórico em torneios competitivos',
-      'Experiência como liderança de time',
-      'Indicação ou validação da organização',
-    ],
-  },
-  B: {
-    color: '#60a5fa',
-    bg: 'rgba(59,130,246,0.1)',
-    desc: 'Jogadores sólidos e versáteis. Boa base mecânica e estratégica, mas sem o nível de consistência do Tier A.',
-    criteria: [
-      'ELO 1v1 entre 1650–1899 ou ELO TG entre 1750–1999',
-      'Participação em torneios amadores',
-      'Conhecimento de múltiplas civilizações',
-      'Comunicação e adaptabilidade',
-    ],
-  },
-  C: {
-    color: '#94a3b8',
-    bg: 'rgba(100,116,139,0.1)',
-    desc: 'Jogadores emergentes com potencial. Podem surpreender com o suporte correto dos Capitães.',
-    criteria: [
-      'ELO 1v1 < 1650 ou ELO TG < 1750',
-      'Jogadores motivados e comprometidos',
-      'Disposição para aprender e se adaptar',
-      'Pontualidade e fair play comprovados',
-    ],
-  },
-};
-
-// ─── Snake Visualizer Component ───────────────────────────────────────────────
+const TIER_COLOR: Record<string, string> = { A: '#facc15', B: '#60a5fa', C: '#94a3b8' };
 
 function SnakeVisualizer() {
   return (
-    <div className="forja-snake-viz">
-      {SNAKE_EXAMPLE.map(row => (
-        <div key={row.round} className="forja-snake-row">
-          <div className="forja-snake-round-label">
-            Rodada {row.round}
-            <span className="forja-snake-arrow">
-              {row.picks[0].dir === 'right' ? '→' : '←'}
-            </span>
+    <div className="forja-snake-visualizer">
+      <h3 className="forja-snake-visualizer__title">🐍 Ordem do Draft — Exemplo com 12 Times</h3>
+      <div className="forja-snake-rounds">
+        {/* Capitães — automático por ELO */}
+        <div className="forja-snake-round forja-snake-round--captains">
+          <div className="forja-snake-round__header">
+            <span className="forja-snake-round__label">Capitães (Tier A)</span>
+            <span className="forja-snake-round__sub">Definidos automaticamente pelo ELO snapshot (14h)</span>
           </div>
-          <div className={`forja-snake-picks ${row.picks[0].dir === 'left' ? 'forja-snake-picks--reversed' : ''}`}>
-            {row.picks.map(pick => (
-              <div
-                key={pick.slot}
-                className="forja-snake-pick"
-                style={{ borderColor: TEAM_COLORS[pick.team] + '80' }}
-              >
-                <div
-                  className="forja-snake-pick__num"
-                  style={{ background: TEAM_COLORS[pick.team] + '20', color: TEAM_COLORS[pick.team] }}
-                >
-                  #{pick.slot}
-                </div>
-                <div
-                  className="forja-snake-pick__team"
-                  style={{ color: TEAM_COLORS[pick.team] }}
-                >
-                  Time {pick.team}
-                </div>
-                <div className="forja-snake-pick__label">{pick.label}</div>
-                <div
-                  className="forja-snake-pick__tier"
-                  style={{
-                    background: TIER_LABELS[pick.tier].bg,
-                    color: TIER_LABELS[pick.tier].color,
-                    border: `1px solid ${TIER_LABELS[pick.tier].color}40`,
-                  }}
-                >
-                  Tier {pick.tier}
-                </div>
+          <div className="forja-snake-picks">
+            {['Seed 1 ← Maior ELO', '...', 'Seed 12 ← Menor ELO'].map((label, i) => (
+              <div key={i} className="forja-snake-pick forja-snake-pick--captain">
+                <span className="forja-snake-pick__slot">#{i === 2 ? 12 : i + 1}</span>
+                <span className="forja-snake-pick__team" style={{ color: '#facc15' }}>{label}</span>
+                <span className="forja-snake-pick__tier" style={{ color: '#facc15' }}>Tier A</span>
               </div>
             ))}
           </div>
         </div>
-      ))}
 
-      <div className="forja-snake-legend">
-        {Object.entries(TEAM_COLORS).map(([team, color]) => (
-          <div key={team} className="forja-snake-legend__item">
-            <span style={{ width: '0.6rem', height: '0.6rem', borderRadius: '50%', background: color, display: 'inline-block' }} />
-            Time {team}
+        {/* Rounds B e C */}
+        {SNAKE_EXAMPLE.map((round) => (
+          <div key={round.round} className={`forja-snake-round forja-snake-round--${round.round.toLowerCase()}`}>
+            <div className="forja-snake-round__header">
+              <span className="forja-snake-round__label" style={{ color: TIER_COLOR[round.round] }}>
+                {round.label}
+              </span>
+              <span className="forja-snake-round__sub">{round.subtitle}</span>
+            </div>
+            <div className="forja-snake-picks">
+              {round.picks.map((pick, i) => (
+                <div key={i} className="forja-snake-pick">
+                  <span className="forja-snake-pick__slot">#{pick.slot}</span>
+                  <span className="forja-snake-pick__dir">{pick.dir}</span>
+                  <span className="forja-snake-pick__team">{pick.team}</span>
+                  <span className="forja-snake-pick__tier" style={{ color: TIER_COLOR[pick.tier] }}>
+                    Tier {pick.tier}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         ))}
-        <div className="forja-snake-legend__item" style={{ marginLeft: 'auto' }}>
-          * Exemplo com 3 times e 3 jogadores cada
-        </div>
       </div>
-    </div>
-  );
-}
 
-// ─── Tier Card ────────────────────────────────────────────────────────────────
-
-function TierCard({ tier, info }: { tier: string; info: typeof TIER_LABELS['A'] }) {
-  return (
-    <div className="forja-tier-card" style={{ borderColor: info.color + '40', background: info.bg }}>
-      <div className="forja-tier-card__badge" style={{ color: info.color, border: `2px solid ${info.color}60` }}>
-        {tier}
-      </div>
-      <div className="forja-tier-card__content">
-        <p className="forja-tier-card__desc">{info.desc}</p>
-        <ul className="forja-tier-card__criteria">
-          {info.criteria.map((c, i) => (
-            <li key={i}>
-              <span style={{ color: info.color }}>✓</span>
-              {c}
-            </li>
+      {/* Resultado final */}
+      <div className="forja-snake-result">
+        <h4 className="forja-snake-result__title">Composição Final de Cada Time</h4>
+        <div className="forja-snake-result__teams">
+          {[
+            { seed: 1, b: 'Pior restante do B', c: 'Melhor escolha do C', note: '← seed 1 pega sobra do B, mas escolhe primeiro no C' },
+            { seed: 6, b: 'Escolha Média do B', c: 'Escolha Média do C', note: '' },
+            { seed: 12, b: 'Melhor do Tier B',   c: 'Última escolha do C', note: '← seed 12 escolhe primeiro no B, mas último no C' },
+          ].map(t => (
+            <div key={t.seed} className="forja-snake-result__team">
+              <div className="forja-snake-result__seed" style={{ color: '#f59e0b' }}>Time Seed {t.seed}</div>
+              <div className="forja-snake-result__members">
+                <span style={{ color: '#facc15' }}>Tier A</span> +{' '}
+                <span style={{ color: '#60a5fa' }}>{t.b}</span> +{' '}
+                <span style={{ color: '#94a3b8' }}>{t.c}</span>
+              </div>
+              {t.note && <p className="forja-snake-result__note">{t.note}</p>}
+            </div>
           ))}
-        </ul>
+        </div>
       </div>
     </div>
   );
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-
 export default function ForjaFormato({ discordUser, isAdmin }: ForjaViewProps) {
+  const { data, loading } = useForjaContent('format');
+
   return (
     <section className="forja-view forja-view--formato">
-      {/* Page Header */}
       <div className="forja-page-header">
         <div>
-          <h2 className="forja-page-title">
-            <span>🐍</span> Formato do Torneio
-          </h2>
-          <p className="forja-page-subtitle">
-            Sistema Snake Draft e classificação por Tiers
-          </p>
+          <h2 className="forja-page-title"><span>🐍</span> Formato do Torneio</h2>
+          <p className="forja-page-subtitle">Snake Draft 3v3 — 1 Tier A + 1 Tier B + 1 Tier C por time</p>
         </div>
       </div>
 
-      {/* What is Snake Draft */}
-      <div className="forja-formato-block">
-        <h3 className="forja-section-title">
-          <span>🐍</span> O que é o Snake Draft?
-        </h3>
-        <div className="forja-formato-explainer">
-          <div className="forja-formato-explainer__text">
-            <p>
-              O <strong>Snake Draft</strong> é o sistema de formação de times utilizado no torneio.
-              Em vez de um time escolher todos os seus jogadores antes do próximo, a ordem de seleção
-              "serpenteia" a cada rodada, garantindo <strong>equilíbrio competitivo</strong>.
-            </p>
-            <p>
-              Na <strong>Rodada 1</strong>, os Capitães escolhem na ordem 1, 2, 3.
-              Na <strong>Rodada 2</strong>, a ordem se inverte: 3, 2, 1.
-              Na <strong>Rodada 3</strong>, volta ao normal: 1, 2, 3... e assim por diante.
-            </p>
-            <p>
-              Isso significa que o Capitão que escolhe <em>primeiro</em> na primeira rodada
-              escolhe <em>por último</em> na segunda rodada — compensando a vantagem inicial.
-            </p>
+      {/* Visualizador estático do Snake Draft */}
+      <SnakeVisualizer />
+
+      {/* Conteúdo editável */}
+      <div style={{ marginTop: '2rem' }}>
+        {loading ? (
+          <div className="forja-tab-loader"><div className="forja-loader-spinner" /></div>
+        ) : isAdmin ? (
+          <ForjaContentEditor
+            docId="format"
+            data={data}
+            updatedBy={discordUser?.username ?? 'admin'}
+          />
+        ) : (
+          <div className="forja-content-sections">
+            {(data?.sections ?? []).map((s, i) => (
+              <div key={i} className="forja-content-section">
+                <h3 className="forja-content-section__title">{s.title}</h3>
+                <div className="forja-content-section__body">
+                  {s.content.split('\n').map((line, j) => <p key={j}>{line}</p>)}
+                </div>
+              </div>
+            ))}
+            {(!data || data.sections.length === 0) && (
+              <div className="forja-empty">
+                <span>📋</span>
+                <p>Detalhes do formato em breve.</p>
+              </div>
+            )}
           </div>
-          <div className="forja-formato-explainer__rules">
-            <div className="forja-formato-rule">
-              <span className="forja-formato-rule__num">1</span>
-              <div>
-                <strong>Ordem Serpentina</strong>
-                <p>A ordem de pick inverte a cada rodada, garantindo equidade entre os Capitães.</p>
-              </div>
-            </div>
-            <div className="forja-formato-rule">
-              <span className="forja-formato-rule__num">2</span>
-              <div>
-                <strong>Capitões no Tier A</strong>
-                <p>Os próprios Capitães são os picks da Rodada 1. A ordem do draft é sorteada ao vivo.</p>
-              </div>
-            </div>
-            <div className="forja-formato-rule">
-              <span className="forja-formato-rule__num">3</span>
-              <div>
-                <strong>Respeito aos Tiers</strong>
-                <p>Não há obrigatoriedade de tier por rodada, mas o balanceamento é orientado pela organização.</p>
-              </div>
-            </div>
-            <div className="forja-formato-rule">
-              <span className="forja-formato-rule__num">4</span>
-              <div>
-                <strong>Tempo de Pick</strong>
-                <p>Cada Capitão tem um tempo limite por pick. O Admin pode forçar uma escolha se necessário.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Snake Visualizer */}
-      <div className="forja-formato-block">
-        <h3 className="forja-section-title">
-          <span>📊</span> Visualização do Draft
-        </h3>
-        <p className="forja-formato-viz-note">
-          Exemplo ilustrativo com 3 times · 3 membros cada · 9 picks totais
-        </p>
-        <SnakeVisualizer />
-      </div>
-
-      {/* Tier System */}
-      <div className="forja-formato-block">
-        <h3 className="forja-section-title">
-          <span>🎖️</span> Sistema de Tiers
-        </h3>
-        <p style={{ color: '#94a3b8', marginBottom: '1.5rem', lineHeight: '1.7' }}>
-          Os jogadores inscritos são classificados pela organização em três Tiers antes do draft.
-          A classificação leva em conta ELO atual no AoMStats, histórico competitivo e avaliação técnica.
-        </p>
-        <div className="forja-tier-grid">
-          {Object.entries(TIER_LABELS).map(([tier, info]) => (
-            <TierCard key={tier} tier={tier} info={info} />
-          ))}
-        </div>
-      </div>
-
-      {/* Timeline */}
-      <div className="forja-formato-block">
-        <h3 className="forja-section-title">
-          <span>🗓️</span> Cronograma do Draft
-        </h3>
-        <div className="forja-timeline">
-          {[
-            { step: '01', color: '#f59e0b', label: 'Inscrições Abertas', desc: 'Jogadores se inscrevem pela aba Início' },
-            { step: '02', color: '#60a5fa', label: 'Triagem e Tiers', desc: 'Admin classifica os jogadores em Tiers A, B e C' },
-            { step: '03', color: '#a78bfa', label: 'Sorteio da Ordem', desc: 'A ordem dos picks do draft é sorteada ao vivo no Discord' },
-            { step: '04', color: '#f97316', label: 'Snake Draft ao Vivo', desc: 'Capitães fazem seus picks em sessão transmitida' },
-            { step: '05', color: '#4ade80', label: 'Times Formados', desc: 'Times publicados na aba "Times" do Hub' },
-            { step: '06', color: '#facc15', label: 'Competição Inicia', desc: 'Partidas conforme cronograma na aba Schedule' },
-          ].map((item, i, arr) => (
-            <div key={item.step} className="forja-timeline-item">
-              <div className="forja-timeline-dot" style={{ borderColor: item.color, background: item.color + '20' }}>
-                <span style={{ color: item.color, fontWeight: 900, fontSize: '0.7rem' }}>{item.step}</span>
-              </div>
-              {i < arr.length - 1 && <div className="forja-timeline-line" />}
-              <div className="forja-timeline-content">
-                <strong style={{ color: item.color }}>{item.label}</strong>
-                <p>{item.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+        )}
       </div>
     </section>
   );

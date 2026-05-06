@@ -162,21 +162,18 @@ export function useForjaDiscordAuth(): UseForjaDiscordAuthResult {
 
   const loginWithDiscord = useCallback(() => {
     const clientId = import.meta.env.VITE_DISCORD_CLIENT_ID;
+    
+    // Checa se está vazio, indefinido ou se ainda está com o texto placeholder padrão
     if (!clientId || clientId === 'SEU_CLIENT_ID_AQUI') {
-      const redirectUri = getRedirectUri();
-      alert(
-        '🔧 Configure o Discord OAuth:\n\n' +
-        '1. Acesse: discord.com/developers/applications\n' +
-        '2. Crie ou selecione seu app\n' +
-        '3. General Information → copie o Client ID\n' +
-        '4. OAuth2 → Redirects → adicione:\n' +
-        `   ${redirectUri}\n` +
-        '5. Cole o Client ID no arquivo .env:\n' +
-        '   VITE_DISCORD_CLIENT_ID=seu_id_aqui\n' +
-        '6. Reinicie o servidor (npm run dev)'
-      );
+      console.error("Erro de Autenticação: Client ID do Discord ausente ou inválido no ambiente.");
+      
+      // Se você não tiver um sistema de Toast configurado, 
+      // pode deixar um alert genérico para o usuário não clicar no vazio.
+      alert("Serviço de login temporariamente indisponível."); 
       return;
     }
+
+    // Se a chave existir e for válida, executa o redirecionamento
     window.location.href = buildDiscordOAuthUrl();
   }, []);
 

@@ -125,7 +125,7 @@ exports.fetchAomProfile = functions.https.onRequest(async (req, res) => {
  * Sintaxe Universal para evitar problemas de versão e CORS.
  */
 exports.updateEloSnapshot = functions.https.onCall(async (data, context) => {
-  const db = admin.firestore();
+  const db = admin.firestore("mythosdraft-prod");
   const snapshot = await db.collection("forja_players").get();
 
   const players = snapshot.docs

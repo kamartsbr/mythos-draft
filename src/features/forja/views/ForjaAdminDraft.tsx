@@ -7,10 +7,11 @@ import { ForjaViewProps, ForjaPlayer, ForjaTier } from '../types';
 import { useForjaPlayers } from '../hooks/useForjaPlayers';
 import { useForjaTeams }   from '../hooks/useForjaTeams';
 import { useForjaDraftSession } from '../hooks/useForjaDraftSession';
-import { getEffectiveElo } from '../forjaUtils';
+// Adicionamos o updatePlayerProfile na importação
 import {
-  setPlayerTier, startForjaDraft, makeDraftPick, resetForjaDraft, updatePlayerStatsSnapshot, undoLastDraftPick
+  setPlayerTier, startForjaDraft, makeDraftPick, resetForjaDraft, undoLastDraftPick, updatePlayerProfile
 } from '../services/forjaService';
+import { getFunctions, httpsCallable } from "firebase/functions";
 
 // ─── Tier Badge ───────────────────────────────────────────────────────────────
 const TIER_COLOR: Record<string, string> = { A: '#facc15', B: '#60a5fa', C: '#94a3b8' };
@@ -33,6 +34,72 @@ function TierSelect({ player, onSet }: { player: ForjaPlayer; onSet: (t: ForjaTi
   );
 }
 
+// ─── Modal de Edição Manual (Modo Deus) ──────────────────────────────────────
+function PlayerEditModal({ player, onClose, onSave }: { player: ForjaPlayer, onClose: () => void, onSave: (discordId: string, data: Partial<ForjaPlayer>) => Promise<void> }) {
+  const [nick, setNick] = useState(player.nick || '');
+  const [profileId, setProfileId] = useState(player.aom_profile_id?.toString() || player.aom_id?.toString() || '');
+  const [avatarUrl, setAvatarUrl] = useState(player.avatar_url || '');
+  const [elo1v1, setElo1v1] = useState(player.elo_1v1 || 0);
+  const [eloTg, setEloTg] = useState(player.elo_tg || 0);
+  // @ts-ignore - forçando a leitura caso não exista na tipagem
+  const [esportsElo, setEsportsElo] = useState(player.esports_elo || 0);
+  const [gods, setGods] = useState((player.top_gods || []).join(', '));
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    const topGodsArray = gods.split(',').map(g => g.trim()).filter(Boolean);
+    
+    await onSave(player.discord_id, {
+      nick,
+      aom_profile_id: profileId ? profileId : null,
+      avatar_url: avatarUrl,
+      elo_1v1: Number(elo1v1),
+      elo_tg: Number(eloTg),
+      // @ts-ignore
+      esports_elo: Number(esportsElo),
+      top_gods: topGodsArray
+    });
+    
+    setIsSaving(false);
+    onClose();
+  };
+
+  const inputStyle = {
+    width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #334155', background: '#0f172a', color: 'white', marginTop: '0.25rem'
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#1e293b', padding: '1.5rem', borderRadius: '8px', width: '90%', maxWidth: '450px', color: '#f8fafc', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}>
+        <h3 style={{ marginTop: 0, marginBottom: '1rem', borderBottom: '1px solid #334155', paddingBottom: '0.5rem' }}>✏️ Editar: {player.nick}</h3>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          
+          <div><label>Nick:</label><input style={inputStyle} value={nick} onChange={e => setNick(e.target.value)} /></div>
+          <div><label>AoM Profile ID:</label><input style={inputStyle} value={profileId} onChange={e => setProfileId(e.target.value)} /></div>
+          <div><label>Avatar URL:</label><input style={inputStyle} value={avatarUrl} onChange={e => setAvatarUrl(e.target.value)} /></div>
+          
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <div style={{ flex: 1 }}><label>ELO 1v1:</label><input type="number" style={inputStyle} value={elo1v1} onChange={e => setElo1v1(Number(e.target.value))} /></div>
+            <div style={{ flex: 1 }}><label>ELO TG:</label><input type="number" style={inputStyle} value={eloTg} onChange={e => setEloTg(Number(e.target.value))} /></div>
+          </div>
+          
+          <div><label>Esports ELO (Custom):</label><input type="number" style={inputStyle} value={esportsElo} onChange={e => setEsportsElo(Number(e.target.value))} /></div>
+          <div><label>Top Deuses (Vírgula):</label><input style={inputStyle} value={gods} placeholder="Ex: Zeus, Hades, Isis" onChange={e => setGods(e.target.value)} /></div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
+            <button type="button" onClick={onClose} className="forja-btn forja-btn--ghost" disabled={isSaving}>Cancelar</button>
+            <button type="submit" className="forja-btn forja-btn--primary" disabled={isSaving}>
+              {isSaving ? 'Salvando...' : '💾 Salvar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── Player Row (Admin) ───────────────────────────────────────────────────────
 interface PlayerRowProps {
   player: ForjaPlayer;
@@ -43,11 +110,12 @@ interface PlayerRowProps {
   onToggleCaptain: () => void;
   onPick: () => void;
   onTierChange: (t: ForjaTier) => void;
+  onEdit: () => void;
 }
 
 function PlayerRow({
   player, isSelected, isCaptain, isDraftActive, isCurrentPick,
-  onToggleCaptain, onPick, onTierChange,
+  onToggleCaptain, onPick, onTierChange, onEdit
 }: PlayerRowProps) {
   const [imgErr, setImgErr] = useState(false);
   const fallback = `https://cdn.discordapp.com/embed/avatars/${parseInt(player.discord_id.slice(-1)) % 6}.png`;
@@ -60,7 +128,7 @@ function PlayerRow({
       `}
     >
       <img
-        src={imgErr ? fallback : player.avatar_url}
+        src={imgErr ? fallback : player.avatar_url || fallback}
         alt={player.nick}
         onError={() => setImgErr(true)}
         className="forja-admin-player-avatar"
@@ -71,6 +139,8 @@ function PlayerRow({
         <span className="forja-admin-player-elo">
           1v1: <strong>{player.elo_1v1 || '—'}</strong>
           &nbsp;·&nbsp;TG: <strong>{player.elo_tg || '—'}</strong>
+          {/* @ts-ignore */}
+          {player.esports_elo ? <span style={{ color: '#fbbf24', marginLeft: '6px' }}>Esports: {player.esports_elo}</span> : null}
         </span>
       </div>
 
@@ -86,16 +156,26 @@ function PlayerRow({
         </span>
       )}
 
-      {/* Capitão toggle (só antes do draft) */}
+      {/* Botoes de Ação (só antes do draft) */}
       {!isDraftActive && (
-        <button
-          className={`forja-btn ${isCaptain ? 'forja-btn--primary' : 'forja-btn--ghost'}`}
-          style={{ padding: '0.3rem 0.75rem', fontSize: '0.7rem' }}
-          onClick={onToggleCaptain}
-          title={isCaptain ? 'Remover como Capitão' : 'Definir como Capitão'}
-        >
-          {isCaptain ? '👑 Cap.' : '+ Cap.'}
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button
+            className={`forja-btn ${isCaptain ? 'forja-btn--primary' : 'forja-btn--ghost'}`}
+            style={{ padding: '0.3rem 0.5rem', fontSize: '0.7rem' }}
+            onClick={onToggleCaptain}
+            title={isCaptain ? 'Remover como Capitão' : 'Definir como Capitão'}
+          >
+            {isCaptain ? '👑 Cap' : '+ Cap'}
+          </button>
+          <button
+            className="forja-btn forja-btn--ghost"
+            style={{ padding: '0.3rem 0.5rem', fontSize: '0.7rem', color: '#cbd5e1' }}
+            onClick={onEdit}
+            title="Editar Jogador Manualmente"
+          >
+            ✏️
+          </button>
+        </div>
       )}
 
       {/* Pick button (durante o draft, jogador disponível) */}
@@ -191,14 +271,16 @@ function DraftBoard({ session, teams, players }: {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
   const { rankedPlayers: players, loading: playersLoading } = useForjaPlayers();
-  const { teams }                            = useForjaTeams();
+  const { teams }                                            = useForjaTeams();
   const { session, loading: sessionLoading } = useForjaDraftSession();
 
   const [selectedCaptains, setSelectedCaptains] = useState<string[]>([]);
   const [tierFilter, setTierFilter]             = useState<'all'|'A'|'B'|'C'>('all');
   const [isBusy, setIsBusy]                     = useState(false);
   const [error, setError]                       = useState<string | null>(null);
-  const [snapshotProgress, setSnapshotProgress] = useState<{ current: number; total: number } | null>(null);
+  
+  // Estado para controlar quem estamos editando manualmente
+  const [editingPlayer, setEditingPlayer] = useState<ForjaPlayer | null>(null);
 
   const isDraftActive = !!session;
 
@@ -208,11 +290,10 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
   );
 
   const visiblePlayers = useMemo(() => {
-    // players já vem ordenado por effectiveElo via computeRankedPlayers
     const base = tierFilter === 'all'
       ? players
       : players.filter(p => (p as any).computedTier === tierFilter);
-    return [...base]; // já está ordenado
+    return [...base];
   }, [players, tierFilter]);
 
   const availablePlayers = useMemo(
@@ -233,6 +314,15 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
         ? prev.filter(id => id !== discordId)
         : [...prev, discordId]
     );
+  };
+
+  // ── Save Manual Edit ─────────────────────────────────────────────────────
+  const handleSaveEdit = async (discordId: string, data: Partial<ForjaPlayer>) => {
+    try {
+      await updatePlayerProfile(discordId, data);
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
 
   // ── Start draft ──────────────────────────────────────────────────────────
@@ -273,43 +363,25 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
     finally { setIsBusy(false); }
   };
 
-  // ── Snapshot ELO ─────────────────────────────────────────────────────────
+  // ── Snapshot ELO (Backend) ───────────────────────────────────────────────
   const handleSnapshot = async () => {
-    if (!confirm(`Atenção: Isso vai atualizar o ELO e Top Deuses de todos os ${players.length} inscritos com os dados em tempo real do AoMStats.io. Pode levar alguns minutos. Deseja continuar?`)) return;
-    setIsBusy(true); setError(null);
-    setSnapshotProgress({ current: 0, total: players.length });
+    if (!confirm(`Atenção: Isso vai iniciar o processamento em lote no servidor para atualizar o ELO e Top Deuses de todos os ${players.length} inscritos. Deseja continuar?`)) return;
+    
+    setIsBusy(true); 
+    setError(null);
 
-    let successCount = 0;
     try {
-      for (let i = 0; i < players.length; i++) {
-        const player = players[i];
-        setSnapshotProgress({ current: i + 1, total: players.length });
-        try {
-          const res = await fetch(`/api/forja/fetch-aom-profile?id=${player.aom_profile_id}`);
-          if (!res.ok) throw new Error('API Error');
-          const json = await res.json();
-          if (json.data) {
-            await updatePlayerStatsSnapshot(player.discord_id, {
-              elo_1v1: json.data.elo_1v1 ?? player.elo_1v1,
-              elo_tg: json.data.elo_tg ?? player.elo_tg,
-              top_gods: json.data.top_gods ?? player.top_gods,
-              elo_snapshot: json.data.elo_1v1 ?? player.elo_1v1,
-              // esports_elo_enabled e esports_elo_value são mantidos pelo Admin via Modal
-            });
-            successCount++;
-          }
-        } catch (err) {
-          console.warn(`[Forja Snapshot] Falha ao atualizar jogador ${player.nick}:`, err);
-        }
-        // Delay to prevent rate limits / heavy loads
-        await new Promise(r => setTimeout(r, 600));
-      }
-      alert(`Snapshot concluído! ${successCount} de ${players.length} atualizados.`);
+      const functionsObj = getFunctions();
+      const runSnapshot = httpsCallable(functionsObj, 'updateEloSnapshot');
+      const result = await runSnapshot();
+      
+      alert(`Snapshot finalizado com sucesso!`);
+      console.log("Resultado do Snapshot:", result.data);
     } catch (err: any) {
-      setError(err.message);
+      console.error("[Forja Snapshot] Erro:", err);
+      setError("Falha ao rodar o Snapshot: " + err.message);
     } finally {
       setIsBusy(false);
-      setSnapshotProgress(null);
     }
   };
 
@@ -326,6 +398,15 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
 
   return (
     <section className="forja-view forja-view--admin-draft">
+      {/* Modal de Edição */}
+      {editingPlayer && (
+        <PlayerEditModal
+          player={editingPlayer}
+          onClose={() => setEditingPlayer(null)}
+          onSave={handleSaveEdit}
+        />
+      )}
+
       {/* Header */}
       <div className="forja-page-header">
         <div>
@@ -337,11 +418,6 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          {snapshotProgress && (
-            <span style={{ color: '#60a5fa', fontSize: '0.85rem', fontWeight: 600 }}>
-              📸 Atualizando {snapshotProgress.current} de {snapshotProgress.total}...
-            </span>
-          )}
           {!isDraftActive && (
             <>
               <button
@@ -350,7 +426,7 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
                 onClick={handleSnapshot}
                 disabled={isBusy}
               >
-                📸 Snapshot de ELO
+                {isBusy ? '📸 Atualizando Servidor...' : '📸 Snapshot de ELO'}
               </button>
               <button
                 id="forja-admin-start-draft-btn"
@@ -433,6 +509,7 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
                   onToggleCaptain={() => toggleCaptain(player.discord_id)}
                   onPick={() => handlePick(player)}
                   onTierChange={t => handleTierChange(player.discord_id, t)}
+                  onEdit={() => setEditingPlayer(player)}
                 />
               ))}
               {/* Drafted players (greyed) */}
@@ -447,6 +524,7 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
                   onToggleCaptain={() => {}}
                   onPick={() => {}}
                   onTierChange={() => {}}
+                  onEdit={() => setEditingPlayer(player)}
                 />
               ))}
               {players.length === 0 && (
@@ -508,25 +586,3 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
                 return (
                   <div key={team.id} className="forja-admin-team-card">
                     <div className="forja-admin-team-header">
-                      <strong style={{ color: '#f59e0b' }}>{team.team_name}</strong>
-                      <span style={{ color: '#475569', fontSize: '0.7rem' }}>Pick #{team.pick_order}</span>
-                    </div>
-                    <div className="forja-admin-team-members">
-                      {memberPlayers.map(p => (
-                        <span key={p!.discord_id} className="forja-admin-team-member">
-                          <img src={p!.avatar_url} alt={p!.nick} onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} referrerPolicy="no-referrer" />
-                          {p!.nick}
-                          {p!.discord_id === team.captain_id && ' 👑'}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}

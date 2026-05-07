@@ -1,6 +1,6 @@
 /**
  * ============================================================
- *  FORJA DE HEFESTO — Firestore Service (Revisão Major)
+ * FORJA DE HEFESTO — Firestore Service (Revisão Major)
  * ============================================================
  */
 
@@ -30,9 +30,9 @@ const CONTENT_COL  = 'forja_content';
 /**
  * Extrai o profile_id numérico de uma URL do aomstats.io
  * Aceita:
- *   https://aomstats.io/profiles/12345
- *   https://aomstats.io/leaderboard/1?search=nick  (fallback)
- *   "12345" (número direto)
+ * https://aomstats.io/profiles/12345
+ * https://aomstats.io/leaderboard/1?search=nick  (fallback)
+ * "12345" (número direto)
  */
 export function parseAomProfileId(input: string): number | null {
   const trimmed = input.trim();
@@ -155,6 +155,22 @@ export async function updatePlayerStatsSnapshot(discordId: string, updates: Part
 }
 
 // ─── Admin Player Management (Schema v2) ──────────────────────────────────────
+
+/**
+ * Atualiza todas as informações de um jogador manualmente através do Modo Deus.
+ */
+export async function updatePlayerProfile(discordId: string, data: Partial<ForjaPlayer>): Promise<void> {
+  try {
+    const docRef = doc(db, PLAYERS_COL, discordId);
+    await updateDoc(docRef, {
+      ...data,
+      last_update: serverTimestamp()
+    });
+  } catch (error) {
+    console.error("Erro ao atualizar perfil do jogador:", error);
+    throw new Error("Falha ao salvar edição manual.");
+  }
+}
 
 /**
  * Campos que o Admin pode alterar via modal.
@@ -292,8 +308,8 @@ export function subscribeToForjaDraftSession(
  * Regra de composição: 1 Tier A (capitão) + 1 Tier B + 1 Tier C por time.
  *
  * Ordem de picks:
- *   Round B: seed N → N-1 → ... → 1  (último capitão escolhe primeiro)
- *   Round C: seed 1 → 2  → ... → N   (primeiro capitão retoma)
+ * Round B: seed N → N-1 → ... → 1  (último capitão escolhe primeiro)
+ * Round C: seed 1 → 2  → ... → N   (primeiro capitão retoma)
  *
  * @param captainIds — discord_ids dos capitães, ordenados seed 1..N (melhor ELO primeiro)
  */

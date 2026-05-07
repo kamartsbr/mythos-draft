@@ -2,22 +2,21 @@
 
 /**
  * ============================================================
- *  MYTHOS DRAFT — Cloud Functions (Refatorado)
+ * MYTHOS DRAFT — Cloud Functions (Refatorado)
  *
- *  Arquitetura "Frankenstein" mantida por design:
- *    - aomstats.io → scraping (Cheerio) para foto de perfil
- *    - aom.gg      → API pública para ELO 1v1 / TG em real-time
+ * Arquitetura "Frankenstein" mantida por design:
+ * - aomstats.io → scraping (Cheerio) para foto de perfil
+ * - aom.gg      → API pública para ELO 1v1 / TG em real-time
  *
- *  Melhorias aplicadas:
- *    1. [CRÍTICO] updateEloSnapshot agora processa em lotes (chunks)
- *       com delay entre eles para evitar rate limit nos dois sites.
- *    2. [CRÍTICO] Nunca sobrescreve ELO com 0 — se a API falhar,
- *       mantém o valor anterior do Firestore.
- *    3. [MÉDIO]   Timeout global via race() contra Promise global de 300s.
- *    4. [MÉDIO]   fetchAomProfile valida API Key via header/query.
- *    5. [BAIXO]   Scraping com verificação de status HTTP + seletor aprimorado.
- *    6. [BAIXO]   fetchHybridAomData com Promise.allSettled paralelo interno
- *                 (foto e elo em paralelo, mas os dois aguardados antes de retornar).
+ * Melhorias aplicadas:
+ * 1. [CRÍTICO] updateEloSnapshot agora processa em lotes (chunks)
+ * com delay entre eles para evitar rate limit nos dois sites.
+ * 2. [CRÍTICO] Nunca sobrescreve ELO com 0 — se a API falhar,
+ * mantém o valor anterior do Firestore.
+ * 3. [MÉDIO]   Timeout global via race() contra Promise global de 300s.
+ * 4. [BAIXO]   Scraping com verificação de status HTTP + seletor aprimorado.
+ * 5. [BAIXO]   fetchHybridAomData com Promise.allSettled paralelo interno
+ * (foto e elo em paralelo, mas os dois aguardados antes de retornar).
  * ============================================================
  */
 
@@ -48,13 +47,9 @@ const DELAY_BETWEEN_CHUNKS_MS = 1200;
 /** Timeout por requisição HTTP individual (ms). */
 const HTTP_TIMEOUT_MS = 7000;
 
-/**
- * API Key interna para o endpoint público fetchAomProfile.
- * Defina em Firebase Functions Config:
- *   firebase functions:config:set forja.api_key="SEU_TOKEN_AQUI"
- * Em dev, a variável pode ser "dev" para facilitar testes locais.
- */
-const INTERNAL_API_KEY = (functions.config().forja || {}).api_key || "dev";
+// NOTA: A validação de API Key via functions.config() foi removida
+// temporariamente para garantir que as inscrições de sábado não quebrem
+// e por compatibilidade com a v7 do firebase-functions.
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -77,8 +72,8 @@ function chunk(arr, size) {
 
 /**
  * Busca dados de um jogador em paralelo:
- *  - aomstats.io → foto de perfil via scraping (Cheerio)
- *  - aom.gg      → ELO 1v1 e TG via API
+ * - aomstats.io → foto de perfil via scraping (Cheerio)
+ * - aom.gg      → ELO 1v1 e TG via API
  *
  * Ambas as partes rodam em paralelo (Promise.allSettled).
  * Falhas individuais são isoladas — uma não cancela a outra.
@@ -189,28 +184,18 @@ async function fetchHybridAomData(profileId) {
 
 /**
  * Endpoint HTTP para o formulário de inscrição.
- * Protegido por API Key interna (header X-Forja-Key ou query ?key=).
+ * Público.
  *
- * GET /fetchAomProfile?id=12345&key=SEU_TOKEN
+ * GET /fetchAomProfile?id=12345
  */
 exports.fetchAomProfile = functions.https.onRequest(async (req, res) => {
   // CORS
   res.set("Access-Control-Allow-Origin", "*");
   if (req.method === "OPTIONS") {
     res.set("Access-Control-Allow-Methods", "GET");
-    res.set("Access-Control-Allow-Headers", "Content-Type, X-Forja-Key");
+    res.set("Access-Control-Allow-Headers", "Content-Type");
     res.status(204).send("");
     return;
-  }
-
-  // ── Validação da API Key ───────────────────────────────────────────────────
-  // TODO (pós-torneio): Reativar após configurar o forjaService.ts para enviar
-  // o header X-Forja-Key em todas as chamadas do formulário de inscrição.
-  //
-  const providedKey = req.headers["x-forja-key"] || req.query.key;
-  if (INTERNAL_API_KEY !== "dev" && providedKey !== INTERNAL_API_KEY) {
-    console.warn(`[Auth] Chave inválida: ${providedKey}`);
-    return res.status(401).json({ error: "Não autorizado." });
   }
 
   // ── Validação do ID ────────────────────────────────────────────────────────
@@ -242,23 +227,22 @@ exports.fetchAomProfile = functions.https.onRequest(async (req, res) => {
  * Callable do painel Admin para atualizar ELO de todos os inscritos.
  *
  * Estratégia:
- *   1. Lê todos os players do Firestore.
- *   2. Divide em lotes de CHUNK_SIZE.
- *   3. Processa cada lote em paralelo (Promise.allSettled).
- *   4. Aguarda DELAY_BETWEEN_CHUNKS_MS entre cada lote.
- *   5. NUNCA sobrescreve elo_1v1/elo_tg com null (API falhou).
- *   6. Relata quantos foram atualizados, ignorados e falharam.
+ * 1. Lê todos os players do Firestore.
+ * 2. Divide em lotes de CHUNK_SIZE.
+ * 3. Processa cada lote em paralelo (Promise.allSettled).
+ * 4. Aguarda DELAY_BETWEEN_CHUNKS_MS entre cada lote.
+ * 5. NUNCA sobrescreve elo_1v1/elo_tg com null (API falhou).
+ * 6. Relata quantos foram atualizados, ignorados e falharam.
  *
  * Limites de tempo:
- *   60 players ÷ 6 chunk = 10 lotes × (7s timeout + 1.2s delay) ≈ 82s máx.
- *   Está confortavelmente abaixo do limite de 540s das Functions Gen 1.
+ * 60 players ÷ 6 chunk = 10 lotes × (7s timeout + 1.2s delay) ≈ 82s máx.
+ * Está confortavelmente abaixo do limite de 540s das Functions Gen 1.
  */
-exports.updateEloSnapshot = functions
-  .runWith({ timeoutSeconds: 300, memory: "256MB" })
-  .https.onCall(async (data, context) => {
-
-    // Opcional: exigir autenticação do chamador via Firebase Auth
-    // if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Login necessário.");
+exports.updateEloSnapshot = functions.https.onCall(
+  { timeoutSeconds: 300, memory: "256MB" },
+  async (request) => {
+    // request.data contém os dados passados pelo cliente
+    // request.auth contém informações de autenticação (se disponível)
 
     const db = admin.firestore();
     const snapshot = await db.collection("forja_players").get();

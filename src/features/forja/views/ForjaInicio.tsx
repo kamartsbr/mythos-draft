@@ -1,6 +1,7 @@
 /**
  * Forja de Hefesto — Aba: Início
- * Fase 1: Auto-sort por effectiveElo + Tiers dinâmicos (A/B/C por posição).
+ * Versão Final Consolidada: Banner Inteligente + Elo Efetivo (Média)
+ * FOCO: Preservação total de Disponibilidade, Frases e Lógica Admin.
  */
 
 import React, { useState, useMemo } from 'react';
@@ -87,6 +88,9 @@ function PlayerCard({
   const isOwnCard = currentUserId === player.discord_id;
   const canClick  = isAdmin || isOwnCard;
 
+  // Lógica da Média (Ponto 3)
+  const effectiveElo = player.elo_efetivo || Math.round(((player.elo_1v1 || 0) + (player.elo_tg || 0)) / 2);
+
   const handleRemove = async () => {
     if (!window.confirm(`Remover a inscrição de ${player.nick}?`)) return;
     setRemoving(true);
@@ -115,7 +119,7 @@ function PlayerCard({
         }}>CAPITÃO</div>
       )}
 
-      {/* Admin Remove - stopPropagation para não acionar o modal */}
+      {/* Admin Remove */}
       {isAdmin && (
         <button className="forja-card-remove-btn" onClick={e => { e.stopPropagation(); handleRemove(); }}
           disabled={removing} title="Remover inscrição" id={`forja-remove-${player.discord_id}`}>
@@ -166,27 +170,25 @@ function PlayerCard({
         </div>
       </div>
 
-      {/* ELO Stats */}
-      <div className="forja-player-elos">
-        {esportsEloValue && (
-          <>
-            <div className="forja-elo-block" style={{ background: 'rgba(245,158,11,0.08)' }}>
-              <span className="forja-elo-label" style={{ color: '#f59e0b' }}>ESPORTS ELO</span>
-              <span className="forja-elo-value" style={{ color: '#facc15' }}>{esportsEloValue.toLocaleString()}</span>
-            </div>
-            <div className="forja-elo-divider" />
-          </>
-        )}
+      {/* ELO Stats com Média Centralizada */}
+      <div className="forja-player-elos" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.4rem' }}>
         <div className="forja-elo-block">
           <span className="forja-elo-label">1v1 ELO</span>
-          <span className="forja-elo-value" style={{ color: eloColor(player.elo_1v1) }}>
+          <span className="forja-elo-value" style={{ color: eloColor(player.elo_1v1), fontSize: '0.8rem' }}>
             {player.elo_1v1 > 0 ? player.elo_1v1.toLocaleString() : '—'}
           </span>
         </div>
-        <div className="forja-elo-divider" />
+
+        <div className="forja-elo-block" style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '0.4rem' }}>
+          <span className="forja-elo-label" style={{ color: '#f59e0b', fontWeight: 800 }}>MÉDIA</span>
+          <span className="forja-elo-value" style={{ fontWeight: 900 }}>
+            {effectiveElo > 0 ? effectiveElo.toLocaleString() : '—'}
+          </span>
+        </div>
+
         <div className="forja-elo-block">
           <span className="forja-elo-label">TG ELO</span>
-          <span className="forja-elo-value" style={{ color: eloColor(player.elo_tg) }}>
+          <span className="forja-elo-value" style={{ color: eloColor(player.elo_tg), fontSize: '0.8rem' }}>
             {player.elo_tg > 0 ? player.elo_tg.toLocaleString() : '—'}
           </span>
         </div>
@@ -202,7 +204,7 @@ function PlayerCard({
         </div>
       )}
 
-      {/* Availability */}
+      {/* Disponibilidade */}
       {player.availability?.length > 0 && (
         <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '1rem', justifyContent: 'center' }}>
           {[...player.availability].sort((a, b) => {
@@ -220,7 +222,7 @@ function PlayerCard({
         </div>
       )}
 
-      {/* Catchphrase / Pitch Quote */}
+      {/* Catchphrase */}
       {(player.catchphrase || player.pitch_quote) && (
         <div className="forja-player-pitch" style={{ marginTop: '0.75rem' }}>
           <span className="forja-pitch-quote">"{player.catchphrase || player.pitch_quote}"</span>
@@ -296,6 +298,7 @@ function PlayerTable({ players, isAdmin }: { players: RankedPlayer[]; isAdmin: b
           <tr>
             <th style={{ padding: '1rem' }}>#</th>
             <th style={{ padding: '1rem' }}>Jogador</th>
+            <th style={{ padding: '1rem', textAlign: 'center' }}>ELO MÉDIO</th>
             <th style={{ padding: '1rem' }}>Tier</th>
             <th style={{ padding: '1rem' }}>Esports ELO</th>
             <th style={{ padding: '1rem' }}>1v1 ELO</th>
@@ -306,7 +309,7 @@ function PlayerTable({ players, isAdmin }: { players: RankedPlayer[]; isAdmin: b
         <tbody>
           {players.map((p, idx) => {
             const esportsEloValue = getEsportsEloDisplay(p);
-            // Insert tier separator row before first player of each tier
+            const effectiveElo = p.elo_efetivo || Math.round(((p.elo_1v1 || 0) + (p.elo_tg || 0)) / 2);
             const prevTier = idx > 0 ? players[idx - 1].computedTier : null;
             const needsSep = p.computedTier && p.computedTier !== prevTier && !p.is_reserve;
 
@@ -314,11 +317,8 @@ function PlayerTable({ players, isAdmin }: { players: RankedPlayer[]; isAdmin: b
               <React.Fragment key={p.discord_id}>
                 {needsSep && (
                   <tr>
-                    <td colSpan={7} style={{ padding: '0.25rem 0' }}>
-                      <div style={{
-                        display: 'flex', alignItems: 'center', gap: '0.75rem',
-                        padding: '0.4rem 1rem',
-                      }}>
+                    <td colSpan={8} style={{ padding: '0.25rem 0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.4rem 1rem' }}>
                         <div style={{ flex: 1, height: '1px', background: TIER_META[p.computedTier!].border, opacity: 0.4 }} />
                         <span style={{
                           color: TIER_META[p.computedTier!].text, fontSize: '0.65rem',
@@ -347,9 +347,11 @@ function PlayerTable({ players, isAdmin }: { players: RankedPlayer[]; isAdmin: b
                     {p.is_reserve && (
                       <span style={{ background: '#1e293b', color: '#64748b', padding: '0.1rem 0.3rem', borderRadius: '0.2rem', fontSize: '0.6rem' }}>RESERVA</span>
                     )}
-                    {esportsEloValue && (
-                      <span style={{ background: 'rgba(245,158,11,0.2)', color: '#f59e0b', padding: '0.1rem 0.3rem', borderRadius: '0.2rem', fontSize: '0.6rem', fontWeight: 'bold' }}>CAP</span>
-                    )}
+                  </td>
+                  <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
+                    <span style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b', padding: '0.2rem 0.6rem', borderRadius: '0.4rem', fontWeight: 900, border: '1px solid rgba(245,158,11,0.3)' }}>
+                      {effectiveElo > 0 ? effectiveElo.toLocaleString() : '—'}
+                    </span>
                   </td>
                   <td style={{ padding: '0.75rem 1rem' }}><TierBadge tier={p.computedTier} /></td>
                   <td style={{ padding: '0.75rem 1rem', color: '#facc15', fontWeight: 'bold' }}>
@@ -377,7 +379,7 @@ function PlayerTable({ players, isAdmin }: { players: RankedPlayer[]; isAdmin: b
   );
 }
 
-// ─── PlayerCardsGrid — com separadores de Tier ────────────────────────────────
+// ─── PlayerCardsGrid ──────────────────────────────────────────────────────────
 
 function PlayerCardsGrid({
   players, isAdmin, currentUserId, onCardClick,
@@ -422,17 +424,33 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
   const [filter, setFilter]    = useState<'all' | 'A' | 'B' | 'C' | 'reserve'>('all');
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
 
-  // Modal state
   const [adminModalPlayer,      setAdminModalPlayer]      = useState<RankedPlayer | null>(null);
   const [selfServiceModalPlayer, setSelfServiceModalPlayer] = useState<RankedPlayer | null>(null);
 
   const currentUserId = discordUser?.discord_id ?? null;
+
+  const isRegistered = useMemo(() => 
+    rankedPlayers.some(p => p.discord_id === currentUserId),
+    [rankedPlayers, currentUserId]
+  );
 
   const handleCardClick = (player: RankedPlayer) => {
     if (isAdmin) {
       setAdminModalPlayer(player);
     } else if (currentUserId === player.discord_id) {
       setSelfServiceModalPlayer(player);
+    }
+  };
+
+  const handleLeaveTournament = async () => {
+    if (!discordUser) return;
+    const confirm = window.confirm("Deseja realmente sair do torneio? Sua inscrição será removida imediatamente.");
+    if (confirm) {
+      try {
+        await removeForjaPlayer(discordUser.discord_id);
+      } catch (err) {
+        alert("Erro ao remover inscrição. Tente novamente.");
+      }
     }
   };
 
@@ -446,71 +464,66 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
 
   return (
     <section className="forja-view forja-view--inicio">
+      <AdminPlayerModal player={adminModalPlayer} onClose={() => setAdminModalPlayer(null)} />
+      <PlayerSelfServiceModal player={selfServiceModalPlayer} onClose={() => setSelfServiceModalPlayer(null)} />
 
-      {/* Modais */}
-      <AdminPlayerModal
-        player={adminModalPlayer}
-        onClose={() => setAdminModalPlayer(null)}
-      />
-      <PlayerSelfServiceModal
-        player={selfServiceModalPlayer}
-        onClose={() => setSelfServiceModalPlayer(null)}
-      />
-
-      {/* Hero CTA */}
-      <div className="forja-inicio-hero">
-        <div className="forja-inicio-hero__text">
-          <div className="flex justify-center md:justify-start mb-6">
-            <img src="/logo-forja.png" alt="Logo Forja de Hefesto"
-              className="w-64 md:w-80 lg:w-[400px] drop-shadow-[0_0_25px_rgba(255,165,0,0.4)] hover:scale-105 transition-transform duration-300" />
+      {isRegistered ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(30,41,59,0.5)', border: '1px solid #1e293b', borderRadius: '1rem', padding: '1rem 1.5rem', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <img src="/logo-forja.png" alt="Logo" style={{ width: '40px', filter: 'drop-shadow(0 0 5px rgba(245,158,11,0.5))' }} />
+            <div>
+              <h3 style={{ color: '#f8fafc', fontSize: '0.9rem', margin: 0, fontWeight: 700 }}>Inscrição Confirmada</h3>
+              <p style={{ color: '#94a3b8', fontSize: '0.75rem', margin: 0 }}>Você faz parte da Forja de Hefesto!</p>
+            </div>
           </div>
-          <h2 className="forja-inicio-hero__title">
-            Forje seu legado.<br />
-            <span style={{ color: '#f59e0b' }}>A batalha está chegando.</span>
-          </h2>
-          <p className="forja-inicio-hero__desc">
-            O maior torneio 3v3 de Age of Mythology: Retold da comunidade BR/PT.
-            Inscreva-se, seja triado por um Capitão e represente sua forja.
-          </p>
-        </div>
-        <div className="forja-inicio-hero__cta">
-          <button id="forja-cta-register-btn"
-            className="forja-btn forja-btn--primary forja-btn--lg forja-btn--glow"
-            onClick={onRegisterClick}>
-            <span>🔥</span> Inscreva-se no Torneio
+          <button className="forja-btn" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)', fontSize: '0.75rem', padding: '0.4rem 1rem' }} onClick={handleLeaveTournament}>
+            Sair do Torneio
           </button>
-          <span className="forja-cta-note">
-            {discordUser ? `Logado como ${discordUser.username}` : 'Necessário login com Discord'}
-          </span>
         </div>
-      </div>
+      ) : (
+        <div className="forja-inicio-hero">
+          <div className="forja-inicio-hero__text">
+            <div className="flex justify-center md:justify-start mb-6">
+              <img src="/logo-forja.png" alt="Logo Forja de Hefesto" className="w-64 md:w-80 lg:w-[400px] drop-shadow-[0_0_25px_rgba(255,165,0,0.4)] hover:scale-105 transition-transform duration-300" />
+            </div>
+            <h2 className="forja-inicio-hero__title">
+              Forje seu legado.<br />
+              <span style={{ color: '#f59e0b' }}>A batalha está chegando.</span>
+            </h2>
+            <p className="forja-inicio-hero__desc">
+              O maior torneio 3v3 de Age of Mythology: Retold da comunidade BR/PT.
+              Inscreva-se, seja triado por um Capitão e represente sua forja.
+            </p>
+          </div>
+          <div className="forja-inicio-hero__cta">
+            <button id="forja-cta-register-btn" className="forja-btn forja-btn--primary forja-btn--lg forja-btn--glow" onClick={onRegisterClick}>
+              <span>🔥</span> Inscreva-se no Torneio
+            </button>
+            <span className="forja-cta-note">
+              {discordUser ? `Logado como ${discordUser.username}` : 'Necessário login com Discord'}
+            </span>
+          </div>
+        </div>
+      )}
 
-      {/* Error banner */}
       {error && (
         <div className="forja-admin-banner" style={{ borderColor: 'rgba(251,191,36,0.3)', marginBottom: '1rem' }}>
           ⚠️ {error}
         </div>
       )}
 
-      {/* Live Stats Bar */}
       {!loading && <StatsBar players={rankedPlayers} isLive={isLive} />}
 
-      {/* Filter Tabs & View Toggle */}
       <div className="forja-filter-row" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="forja-filter-label">Filtrar:</span>
           {(['all', 'A', 'B', 'C'] as const).map(f => (
-            <button key={f} id={`forja-filter-${f}`}
-              className={`forja-filter-btn ${filter === f ? 'forja-filter-btn--active' : ''}`}
-              onClick={() => setFilter(f)}>
+            <button key={f} id={`forja-filter-${f}`} className={`forja-filter-btn ${filter === f ? 'forja-filter-btn--active' : ''}`} onClick={() => setFilter(f)}>
               {f === 'all' ? 'Todos' : `Tier ${f}`}
             </button>
           ))}
           {hasReserves && (
-            <button id="forja-filter-reserve"
-              className={`forja-filter-btn ${filter === 'reserve' ? 'forja-filter-btn--active' : ''}`}
-              style={{ color: '#94a3b8', borderColor: '#334155' }}
-              onClick={() => setFilter('reserve')}>
+            <button id="forja-filter-reserve" className={`forja-filter-btn ${filter === 'reserve' ? 'forja-filter-btn--active' : ''}`} style={{ color: '#94a3b8', borderColor: '#334155' }} onClick={() => setFilter('reserve')}>
               🪑 Reservas
             </button>
           )}
@@ -521,22 +534,18 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
           )}
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className={`forja-btn ${viewMode === 'cards' ? 'forja-btn--primary' : 'forja-btn--ghost'}`}
-            style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }} onClick={() => setViewMode('cards')}>🃏 Cards</button>
-          <button className={`forja-btn ${viewMode === 'table' ? 'forja-btn--primary' : 'forja-btn--ghost'}`}
-            style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }} onClick={() => setViewMode('table')}>📋 Tabela</button>
+          <button className={`forja-btn ${viewMode === 'cards' ? 'forja-btn--primary' : 'forja-btn--ghost'}`} style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }} onClick={() => setViewMode('cards')}>🃏 Cards</button>
+          <button className={`forja-btn ${viewMode === 'table' ? 'forja-btn--primary' : 'forja-btn--ghost'}`} style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }} onClick={() => setViewMode('table')}>📋 Tabela</button>
         </div>
       </div>
 
-      {/* Player Grid / Table */}
       {loading ? (
         <div className="forja-players-grid">
           {[1, 2, 3, 4, 5, 6].map(i => <PlayerSkeleton key={i} />)}
         </div>
       ) : filtered.length > 0 ? (
         viewMode === 'cards'
-          ? <PlayerCardsGrid players={filtered} isAdmin={isAdmin}
-              currentUserId={currentUserId} onCardClick={handleCardClick} />
+          ? <PlayerCardsGrid players={filtered} isAdmin={isAdmin} currentUserId={currentUserId} onCardClick={handleCardClick} />
           : <PlayerTable players={filtered} isAdmin={isAdmin} />
       ) : (
         <div className="forja-empty">
@@ -545,7 +554,6 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
         </div>
       )}
 
-      {/* Admin Banner */}
       {isAdmin && !loading && (
         <div className="forja-admin-banner">
           🛡️ Modo Admin ativo — tiers calculados dinamicamente por ELO efetivo

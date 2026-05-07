@@ -1,9 +1,9 @@
 /**
  * ============================================================
- *  ForjaRulesEditor — Fase 3
- *  Editor de blocos de regras com drag & drop para reordenar.
- *  Admin: drag to reorder + edit inline + add/delete blocks.
- *  Público: exibição estática limpa.
+ * ForjaRulesEditor — Fase 3
+ * Editor de blocos de regras com drag & drop para reordenar.
+ * Admin: drag to reorder + edit inline + add/delete blocks.
+ * Público: exibição estática limpa.
  * ============================================================
  */
 import React, { useState, useEffect, useCallback } from 'react';
@@ -162,7 +162,16 @@ export default function ForjaRulesEditor({ discordUser, isAdmin }: ForjaViewProp
   // Subscribe to blocks
   useEffect(() => {
     const unsub = subscribeToForjaRulesBlocks(
-      (data) => { setBlocks(data); setLoading(false); },
+      (data) => {
+        // CORREÇÃO AQUI: Garantindo que todos os blocos antigos tenham um 'id'
+        const safeData = data.map((block, index) => ({
+          ...block,
+          id: block.id || `legacy-block-${index}`,
+          order: block.order ?? index
+        }));
+        setBlocks(safeData);
+        setLoading(false);
+      },
       (err)  => { setError(err.message); setLoading(false); }
     );
     return unsub;

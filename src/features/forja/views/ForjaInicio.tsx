@@ -1,7 +1,7 @@
 /**
  * Forja de Hefesto — Aba: Início
- * Versão Final Consolidada: Banner Inteligente + Elo Efetivo (Média)
- * FOCO: Preservação total de Disponibilidade, Frases e Lógica Admin.
+ * Fase 2: Banner Inteligente + Botão Sair do Torneio
+ * Fase 3: Elo Efetivo (Média) Integrado
  */
 
 import React, { useState, useMemo } from 'react';
@@ -57,15 +57,17 @@ function TierSeparator({ tier }: { tier: 'A' | 'B' | 'C' }) {
 
 // ─── GodIcon ──────────────────────────────────────────────────────────────────
 
-function GodIcon({ god, godName, winRate }: ForjaGodStat) {
+function GodIcon({ god }: { god: string }) {
+  if (!god) return null;
+  // Procura o deus ignorando se é maiúsculo ou minúsculo
   const godData = MAJOR_GODS.find(g => g.id.toLowerCase() === god.toLowerCase());
+  
   return (
-    <div className="forja-god-icon" title={`${godName ?? god} — ${winRate}% WR`}>
+    <div className="forja-god-icon" title={god}>
       {godData?.image
-        ? <img src={godData.image} alt={godName ?? god} referrerPolicy="no-referrer" loading="lazy" />
+        ? <img src={godData.image} alt={god} referrerPolicy="no-referrer" loading="lazy" />
         : <span style={{ fontSize: '1.1rem' }}>⚡</span>
       }
-      <span className="forja-god-wr">{winRate}%</span>
     </div>
   );
 }
@@ -88,7 +90,7 @@ function PlayerCard({
   const isOwnCard = currentUserId === player.discord_id;
   const canClick  = isAdmin || isOwnCard;
 
-  // Lógica da Média (Ponto 3)
+  // CÁLCULO ELO EFETIVO (MÉDIA)
   const effectiveElo = player.elo_efetivo || Math.round(((player.elo_1v1 || 0) + (player.elo_tg || 0)) / 2);
 
   const handleRemove = async () => {
@@ -170,7 +172,7 @@ function PlayerCard({
         </div>
       </div>
 
-      {/* ELO Stats com Média Centralizada */}
+      {/* ELO Stats com Média Centralizada (Ponto 3) */}
       <div className="forja-player-elos" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.4rem' }}>
         <div className="forja-elo-block">
           <span className="forja-elo-label">1v1 ELO</span>
@@ -199,12 +201,14 @@ function PlayerCard({
         <div className="forja-player-gods">
           <span className="forja-player-gods__label">TOP DEUSES MAIS JOGADOS</span>
           <div className="forja-player-gods__row">
-            {player.top_gods.slice(0, 5).map(g => <GodIcon key={g.god} {...g} />)}
+            {player.top_gods.slice(0, 5).map((g: any, i: number) => (
+              <GodIcon key={i} god={typeof g === 'string' ? g : g.god} />
+              ))}
           </div>
         </div>
       )}
 
-      {/* Disponibilidade */}
+      {/* Availability (Recuperado) */}
       {player.availability?.length > 0 && (
         <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '1rem', justifyContent: 'center' }}>
           {[...player.availability].sort((a, b) => {
@@ -222,7 +226,7 @@ function PlayerCard({
         </div>
       )}
 
-      {/* Catchphrase */}
+      {/* Catchphrase (Recuperado) */}
       {(player.catchphrase || player.pitch_quote) && (
         <div className="forja-player-pitch" style={{ marginTop: '0.75rem' }}>
           <span className="forja-pitch-quote">"{player.catchphrase || player.pitch_quote}"</span>
@@ -348,11 +352,13 @@ function PlayerTable({ players, isAdmin }: { players: RankedPlayer[]; isAdmin: b
                       <span style={{ background: '#1e293b', color: '#64748b', padding: '0.1rem 0.3rem', borderRadius: '0.2rem', fontSize: '0.6rem' }}>RESERVA</span>
                     )}
                   </td>
+
                   <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
                     <span style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b', padding: '0.2rem 0.6rem', borderRadius: '0.4rem', fontWeight: 900, border: '1px solid rgba(245,158,11,0.3)' }}>
                       {effectiveElo > 0 ? effectiveElo.toLocaleString() : '—'}
                     </span>
                   </td>
+
                   <td style={{ padding: '0.75rem 1rem' }}><TierBadge tier={p.computedTier} /></td>
                   <td style={{ padding: '0.75rem 1rem', color: '#facc15', fontWeight: 'bold' }}>
                     {esportsEloValue ? esportsEloValue.toLocaleString() : '—'}

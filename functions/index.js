@@ -29,7 +29,7 @@ async function fetchVercelData(profileId, nick = null) {
     };
 
     // Alterado para /api/stats/ conforme instrução do Scooby (evita erro 403)
-    let url = `https://form-retold.vercel.app/api/stats/${profileId}`;
+    let url = `https://form-retold.vercel.app/api/stats-by-id/${profileId}`;
     
     let statsRes;
     try {

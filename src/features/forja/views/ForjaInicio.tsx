@@ -57,17 +57,31 @@ function TierSeparator({ tier }: { tier: 'A' | 'B' | 'C' }) {
 
 // ─── GodIcon ──────────────────────────────────────────────────────────────────
 
-function GodIcon({ god }: { god: string }) {
+function GodIcon({ god }: { god: any }) {
+  // LOG PARA TESTE DE DEPLOY - Se isso não aparecer no console, o deploy não entrou
+  console.log("DEBUG: GodIcon processando:", god); 
+
   if (!god) return null;
-  // Procura o deus ignorando se é maiúsculo ou minúsculo
-  const godData = MAJOR_GODS.find(g => g.id.toLowerCase() === god.toLowerCase());
+
+  const godName = typeof god === 'string' ? god : (god && typeof god === 'object' && 'god' in god ? god.god : null);
   
+  if (!godName || typeof godName !== 'string') return null;
+
+  // Busca ultra segura
+  const godData = (MAJOR_GODS || []).find(g => {
+    if (g && typeof g.id === 'string') {
+      return g.id.toLowerCase() === godName.toLowerCase();
+    }
+    return false;
+  });
+
   return (
-    <div className="forja-god-icon" title={god}>
-      {godData?.image
-        ? <img src={godData.image} alt={god} referrerPolicy="no-referrer" loading="lazy" />
-        : <span style={{ fontSize: '1.1rem' }}>⚡</span>
-      }
+    <div className="forja-god-icon" title={godName}>
+      {godData?.image ? (
+        <img src={godData.image} alt={godName} referrerPolicy="no-referrer" loading="lazy" />
+      ) : (
+        <span style={{ fontSize: '1.1rem' }}>⚡</span>
+      )}
     </div>
   );
 }
@@ -197,12 +211,12 @@ function PlayerCard({
       </div>
 
       {/* Top Gods */}
-      {player.top_gods.length > 0 && (
+      {Array.isArray(player.top_gods) && player.top_gods.length > 0 && (
         <div className="forja-player-gods">
           <span className="forja-player-gods__label">TOP DEUSES MAIS JOGADOS</span>
           <div className="forja-player-gods__row">
             {player.top_gods.slice(0, 5).map((g: any, i: number) => (
-              <GodIcon key={i} god={typeof g === 'string' ? g : g.god} />
+              <GodIcon key={i} god={g} />
               ))}
           </div>
         </div>

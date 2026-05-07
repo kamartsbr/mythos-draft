@@ -22,9 +22,9 @@
  */
 
 const functions = require("firebase-functions");
-const admin     = require("firebase-admin");
-const axios     = require("axios");
-const cheerio   = require("cheerio");
+const admin = require("firebase-admin");
+const axios = require("axios");
+const cheerio = require("cheerio");
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -87,10 +87,10 @@ function chunk(arr, size) {
  * @returns {{ alias, avatar_url, elo_1v1, elo_tg, top_gods }}
  */
 async function fetchHybridAomData(profileId) {
-  let alias     = `Player #${profileId}`;
+  let alias = `Player #${profileId}`;
   let avatar_url = "";
-  let elo_1v1   = null; // null = "não encontrado" (diferente de 0)
-  let elo_tg    = null;
+  let elo_1v1 = null; // null = "não encontrado" (diferente de 0)
+  let elo_tg = null;
 
   // ── Parte 1 e 2 em paralelo ──────────────────────────────────────────────
   const [photoResult, eloResult] = await Promise.allSettled([
@@ -168,13 +168,13 @@ async function fetchHybridAomData(profileId) {
     // Backup: pega ELO da última partida se ainda null
     if (elo_1v1 === null && data.matches && data.matches.length > 0) {
       const players = data.matches[0].players || data.matches[0].matchPlayers || [];
-      const pInfo   = players.find((p) => String(p.profileId) === String(profileId));
+      const pInfo = players.find((p) => String(p.profileId) === String(profileId));
       if (pInfo) elo_1v1 = pInfo.postMatchRating || pInfo.rating || pInfo.elo || 0;
     }
 
     // Normaliza null → 0 após todos os fallbacks
     if (elo_1v1 === null) elo_1v1 = 0;
-    if (elo_tg  === null) elo_tg  = 0;
+    if (elo_tg === null) elo_tg = 0;
 
   } else {
     console.error(`[ELO] Falha para ${profileId}: ${eloResult.reason?.message}`);
@@ -207,11 +207,11 @@ exports.fetchAomProfile = functions.https.onRequest(async (req, res) => {
   // TODO (pós-torneio): Reativar após configurar o forjaService.ts para enviar
   // o header X-Forja-Key em todas as chamadas do formulário de inscrição.
   //
-  // const providedKey = req.headers["x-forja-key"] || req.query.key;
-  // if (INTERNAL_API_KEY !== "dev" && providedKey !== INTERNAL_API_KEY) {
-  //   console.warn(`[Auth] Chave inválida: ${providedKey}`);
-  //   return res.status(401).json({ error: "Não autorizado." });
-  // }
+  const providedKey = req.headers["x-forja-key"] || req.query.key;
+  if (INTERNAL_API_KEY !== "dev" && providedKey !== INTERNAL_API_KEY) {
+    console.warn(`[Auth] Chave inválida: ${providedKey}`);
+    return res.status(401).json({ error: "Não autorizado." });
+  }
 
   // ── Validação do ID ────────────────────────────────────────────────────────
   const profileId = req.query.id;
@@ -226,9 +226,9 @@ exports.fetchAomProfile = functions.https.onRequest(async (req, res) => {
   try {
     const stats = await fetchHybridAomData(profileId);
     return res.json({
-      success:    true,
+      success: true,
       profile_id: parseInt(profileId, 10),
-      data:       stats,
+      data: stats,
     });
   } catch (error) {
     console.error(`[fetchAomProfile] Erro inesperado para ${profileId}:`, error.message);
@@ -267,7 +267,7 @@ exports.updateEloSnapshot = functions
       .map((doc) => ({ ref: doc.ref, data: doc.data(), id: doc.id }))
       .filter((p) => p.data.aom_profile_id || p.data.aom_id); // Ignora sem ID
 
-    const lotes  = chunk(players, CHUNK_SIZE);
+    const lotes = chunk(players, CHUNK_SIZE);
     const report = { updated: 0, skipped: 0, failed: 0, errors: [] };
 
     console.log(`[Snapshot] Iniciando: ${players.length} jogadores em ${lotes.length} lotes de ${CHUNK_SIZE}.`);
@@ -305,10 +305,10 @@ exports.updateEloSnapshot = functions
 
           // Tudo certo: atualiza ELO + foto (foto só se scraping achou algo)
           const updates = {
-            elo_1v1:      stats.elo_1v1,
-            elo_tg:       stats.elo_tg,
+            elo_1v1: stats.elo_1v1,
+            elo_tg: stats.elo_tg,
             elo_snapshot: stats.elo_1v1,
-            last_update:  admin.firestore.FieldValue.serverTimestamp(),
+            last_update: admin.firestore.FieldValue.serverTimestamp(),
           };
 
           // Só substitui a foto se o scraping devolveu URL válida

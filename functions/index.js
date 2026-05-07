@@ -7,35 +7,60 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
+// Configurações para não derrubar a API do Vercel (Rate Limit)
+const CHUNK_SIZE = 5;
+const DELAY_MS = 1000;
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function chunk(arr, size) {
+  const result = [];
+  for (let i = 0; i < arr.length; i += size) result.push(arr.slice(i, i + size));
+  return result;
+}
+
 /**
- * Função Auxiliar: Busca os dados atualizados em tempo real da API do aom.gg
+ * Função Auxiliar: Busca os dados na nova API Vercel (form-retold)
  */
-async function fetchAomDataFromGG(profileId) {
-  const url = `https://www.aom.gg/api/profiles/${profileId}/recent`;
-  
-  const { data } = await axios.get(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-      'Accept': 'application/json'
-    },
-    timeout: 12000 
-  });
+async function fetchVercelData(profileId) {
+  try {
+    // Busca estatísticas e deuses em paralelo
+    const [statsRes, godsRes] = await Promise.allSettled([
+      axios.get(`https://form-retold.vercel.app/api/stats-by-id/${profileId}`, { timeout: 10000 }),
+      axios.get(`https://form-retold.vercel.app/api/gods/${profileId}`, { timeout: 10000 })
+    ]);
 
-  let elo_1v1 = 0;
+    let elo_1v1 = 0;
+    let elo_tg = 0;
+    let avatar_url = "";
+    let top_gods = [];
+    let alias = `Player #${profileId}`;
 
-  // Pegamos a partida mais recente para extrair o ELO/Rating atualizado
-  if (data.matches && data.matches.length > 0) {
-    const lastMatch = data.matches[0];
-    elo_1v1 = lastMatch.rating || lastMatch.elo || lastMatch.postMatchRating || 0; 
+    // 1. Extrai ELO e Foto da Steam
+    if (statsRes.status === "fulfilled" && statsRes.value.data) {
+      const data = statsRes.value.data;
+      alias = data.profileName || alias;
+      avatar_url = data.playerAvatarUrl || "";
+      
+      const stats = data.profileStats || [];
+      const sup1v1 = stats.find(s => s.mode === "Sup 1v1");
+      const supTeam = stats.find(s => s.mode === "Sup Team" || s.mode === "Team"); // Fallback caso mudem o nome
+      
+      if (sup1v1) elo_1v1 = parseInt(sup1v1.elo, 10) || 0;
+      if (supTeam) elo_tg = parseInt(supTeam.elo, 10) || 0;
+    }
+
+    // 2. Extrai Top Deuses (Pegando até os 5 mais jogados)
+    if (godsRes.status === "fulfilled" && Array.isArray(godsRes.value.data)) {
+      // O slice(0, 5) garante que vai pegar no máximo 5. 
+      // Se o array tiver menos que 5, ele pega o que tiver sem dar erro.
+      top_gods = godsRes.value.data.slice(0, 5).map(g => g.god);
+    }
+
+    return { alias, avatar_url, elo_1v1, elo_tg, top_gods };
+  } catch (error) {
+    console.error(`Erro ao buscar dados do Vercel para ${profileId}:`, error.message);
+    return null;
   }
-
-  return { 
-    alias: data.alias || `Player #${profileId}`, 
-    avatar_url: "", // Mantemos vazio para o front-end acionar o fallback do Discord
-    elo_1v1: elo_1v1, 
-    elo_tg: 0, 
-    top_gods: [] 
-  };
 }
 
 /**
@@ -55,8 +80,12 @@ exports.fetchAomProfile = functions.https.onRequest(async (req, res) => {
   if (!profileId) return res.status(400).json({ error: "ID do perfil ausente." });
 
   try {
-    const stats = await fetchAomDataFromGG(profileId);
+    const stats = await fetchVercelData(profileId);
     
+    if (!stats) {
+       return res.status(500).json({ success: false, error: "Falha ao conectar com a API." });
+    }
+
     // O seu front-end (forjaService.ts) espera receber o profile_id de volta
     res.json({ 
       success: true, 
@@ -65,41 +94,57 @@ exports.fetchAomProfile = functions.https.onRequest(async (req, res) => {
     });
   } catch (error) {
     console.error(`Erro na API fetchAomProfile para ID ${profileId}:`, error.message);
-    const status = (error.response && error.response.status === 404) ? 404 : 500;
-    res.status(status).json({ success: false, error: "Falha ao conectar com a API do aom.gg." });
+    res.status(500).json({ success: false, error: "Falha ao processar a requisição." });
   }
 });
 
 /**
  * Função de Snapshot Automático para o Painel Admin
  */
-exports.updateEloSnapshot = functions.https.onCall(async (data, context) => {
-  const db = admin.firestore();
-  
-  // Utilizando a coleção 'forja_players' conforme definido no seu forjaService.ts
-  const snapshot = await db.collection("forja_players").get();
-
-  const updates = snapshot.docs.map(async (doc) => {
-    const p = doc.data();
-    const profileId = p.aom_profile_id || p.aom_id;
+exports.updateEloSnapshot = functions
+  .runWith({ timeoutSeconds: 300, memory: "256MB" })
+  .https.onCall(async (data, context) => {
+    const db = admin.firestore();
     
-    if (!profileId) return null;
+    // Utilizando a coleção 'forja_players' conforme definido no seu forjaService.ts
+    const snapshot = await db.collection("forja_players").get();
 
-    try {
-      const stats = await fetchAomDataFromGG(profileId);
+    const players = snapshot.docs
+      .map((doc) => ({ ref: doc.ref, data: doc.data(), id: doc.id }))
+      .filter((p) => p.data.aom_profile_id || p.data.aom_id);
+
+    const lotes = chunk(players, CHUNK_SIZE);
+    let updated = 0;
+
+    for (let i = 0; i < lotes.length; i++) {
+      await Promise.allSettled(
+        lotes[i].map(async ({ ref, data: p }) => {
+          const profileId = p.aom_profile_id || p.aom_id;
+          
+          const stats = await fetchVercelData(profileId);
+          
+          if (stats) {
+            // Atualiza os campos puxando tudo de novo (ELO, TG, Deuses)
+            const updates = {
+              elo_1v1: stats.elo_1v1,
+              elo_tg: stats.elo_tg,
+              top_gods: stats.top_gods,
+              elo_snapshot: stats.elo_1v1, // Crava o ELO Snapshot oficial
+              last_update: admin.firestore.FieldValue.serverTimestamp()
+            };
+            
+            // Só salva avatar novo se a API achar algum
+            if (stats.avatar_url) updates.avatar_url = stats.avatar_url;
+
+            await ref.update(updates);
+            updated++;
+          }
+        })
+      );
       
-      // Atualiza apenas os campos necessários, cravando o elo_snapshot oficial
-      return doc.ref.update({
-        elo_1v1: stats.elo_1v1,
-        elo_snapshot: stats.elo_1v1, 
-        last_update: admin.firestore.FieldValue.serverTimestamp()
-      });
-    } catch (err) {
-      console.error(`Erro no Snapshot do player ${p.nick} (ID: ${profileId}):`, err.message);
-      return null;
+      // Delay entre os lotes para não sobrecarregar a API
+      if (i < lotes.length - 1) await delay(DELAY_MS);
     }
-  });
 
-  await Promise.all(updates);
-  return { success: true, message: "Snapshot de ELO finalizado com sucesso!" };
-});
+    return { success: true, message: `Snapshot de ELO finalizado com sucesso! ${updated} jogadores atualizados.` };
+  });

@@ -1,16 +1,8 @@
-/* eslint-disable */ // Build corrigido para a API do Vercel - 07/05/2026
+/* eslint-disable */
+// Build corrigido para a API do Vercel - 07/05/2026
 
-/**
- * ============================================================
- * MYTHOS DRAFT — Cloud Functions (Vercel API)
- *
- * Arquitetura Atualizada:
- * - Utiliza a API pública do form-retold.vercel.app para buscar
- * dados oficiais (Avatar, ELO 1v1, ELO TG, Top Gods).
- * ============================================================
- */
-
-const functions = require("firebase-functions");
+const { onCall, onRequest } = require("firebase-functions/v2/https");
+const { setGlobalOptions } = require("firebase-functions/v2");
 const admin = require("firebase-admin");
 const axios = require("axios");
 
@@ -18,26 +10,23 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-// ─── Configurações ────────────────────────────────────────────────────────────
+// Configura a região global para evitar erros de localidade
+setGlobalOptions({ region: "us-central1" });
 
+// ─── Configurações ────────────────────────────────────────────────────────────
 const CHUNK_SIZE = 6;
 const DELAY_BETWEEN_CHUNKS_MS = 1200;
 const HTTP_TIMEOUT_MS = 10000;
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function chunk(arr, size) {
   const result = [];
-  for (let i = 0; i < arr.length; i += size) {
-    result.push(arr.slice(i, i + size));
-  }
+  for (let i = 0; i < arr.length; i += size) result.push(arr.slice(i, i + size));
   return result;
 }
 
-// ─── fetchVercelData ─────────────────────────────────────────────────────────
-
+// ─── Lógica de Busca no Vercel ───────────────────────────────────────────────
 async function fetchVercelData(profileId) {
   try {
     const [statsRes, godsRes] = await Promise.allSettled([
@@ -46,153 +35,66 @@ async function fetchVercelData(profileId) {
     ]);
 
     if (statsRes.status === "rejected") {
-      console.error(`[Vercel] Falha na API de Stats para ${profileId}:`, statsRes.reason?.message);
+      console.error(`[Vercel] Falha ID ${profileId}:`, statsRes.reason?.message);
       return null;
     }
 
-    let alias = `Player #${profileId}`;
-    let avatar_url = "";
-    let elo_1v1 = 0;
-    let elo_tg = 0;
-    let top_gods = [];
+    const data = statsRes.value.data || {};
+    const stats = data.profileStats || [];
+    const s1v1 = stats.find(s => s.mode === "Sup 1v1");
+    const sTG = stats.find(s => s.mode === "Sup Team" || s.mode === "Team" || s.mode === "Sup TG");
 
-    if (statsRes.value.data) {
-      const data = statsRes.value.data;
-      alias = data.profileName || alias;
-      avatar_url = data.playerAvatarUrl || "";
-      
-      const stats = data.profileStats || [];
-      const sup1v1 = stats.find(s => s.mode === "Sup 1v1");
-      const supTeam = stats.find(s => s.mode === "Sup Team" || s.mode === "Team");
-      
-      if (sup1v1) elo_1v1 = parseInt(sup1v1.elo, 10) || 0;
-      if (supTeam) elo_tg = parseInt(supTeam.elo, 10) || 0;
-    }
-
-    if (godsRes.status === "fulfilled" && Array.isArray(godsRes.value.data)) {
-      top_gods = godsRes.value.data.slice(0, 5).map(g => g.god);
-    }
-
-    return { alias, avatar_url, elo_1v1, elo_tg, top_gods };
+    return {
+      avatar_url: data.playerAvatarUrl || "",
+      elo_1v1: s1v1 ? parseInt(s1v1.elo, 10) : 0,
+      elo_tg: sTG ? parseInt(sTG.elo, 10) : 0,
+      top_gods: (godsRes.status === "fulfilled" && Array.isArray(godsRes.value.data)) 
+                 ? godsRes.value.data.slice(0, 5).map(g => g.god) 
+                 : []
+    };
   } catch (error) {
-    console.error(`Erro ao buscar dados do Vercel para ${profileId}:`, error.message);
     return null;
   }
 }
 
-// ─── fetchAomProfile ──────────────────────────────────────────────────────────
-
-exports.fetchAomProfile = functions.https.onRequest(async (req, res) => {
-  res.set("Access-Control-Allow-Origin", "*");
-  
-  if (req.method === "OPTIONS") {
-    res.set("Access-Control-Allow-Methods", "GET");
-    res.set("Access-Control-Allow-Headers", "Content-Type");
-    res.status(204).send("");
-    return;
-  }
-
-  const profileId = req.query.id;
-  if (!profileId) {
-    return res.status(400).json({ error: "Parâmetro 'id' ausente." });
-  }
-  if (!/^\d{1,12}$/.test(String(profileId))) {
-    return res.status(400).json({ error: "ID inválido." });
-  }
-
-  try {
-    const stats = await fetchVercelData(profileId);
-    
-    if (!stats) {
-      return res.status(500).json({ success: false, error: "Falha ao buscar dados na API Vercel." });
-    }
-
-    return res.json({
-      success: true,
-      profile_id: parseInt(profileId, 10),
-      data: stats,
-    });
-  } catch (error) {
-    console.error(`[fetchAomProfile] Erro inesperado para ${profileId}:`, error.message);
-    return res.status(500).json({ success: false, error: "Falha ao buscar dados." });
-  }
-});
-
-// ─── updateEloSnapshot ────────────────────────────────────────────────────────
-
-/**
- * Callable do painel Admin para atualizar ELO de todos os inscritos.
- * Sintaxe Universal para evitar problemas de versão e CORS.
- */
-exports.updateEloSnapshot = functions.https.onCall(async (data, context) => {
+// ─── updateEloSnapshot (O Coração do Admin) ──────────────────────────────────
+exports.updateEloSnapshot = onCall({ timeoutSeconds: 300, memory: "256MiB" }, async (request) => {
+  // ACESSANDO O BANCO PROD DIRETAMENTE
   const db = admin.firestore("mythosdraft-prod");
+  
   const snapshot = await db.collection("forja_players").get();
-
   const players = snapshot.docs
-    .map((doc) => ({ ref: doc.ref, data: doc.data(), id: doc.id }))
-    .filter((p) => p.data.aom_profile_id || p.data.aom_id); 
+    .map(doc => ({ ref: doc.ref, data: doc.data() }))
+    .filter(p => p.data.aom_profile_id || p.data.aom_id);
 
   const lotes = chunk(players, CHUNK_SIZE);
-  const report = { updated: 0, skipped: 0, failed: 0, errors: [] };
-
-  console.log(`[Snapshot] Iniciando: ${players.length} jogadores em ${lotes.length} lotes de ${CHUNK_SIZE}.`);
+  let updatedCount = 0;
 
   for (let i = 0; i < lotes.length; i++) {
-    const lote = lotes[i];
-    console.log(`[Snapshot] Lote ${i + 1}/${lotes.length} — ${lote.length} players`);
-
-    const results = await Promise.allSettled(
-      lote.map(async ({ ref, data: p }) => {
-        const profileId = p.aom_profile_id || p.aom_id;
-        const stats = await fetchVercelData(profileId);
-
-        if (!stats) {
-          console.warn(`[Snapshot] Pulando ${p.nick} — API falhou.`);
-          throw new Error(`ELO API falhou para ${p.nick}`);
-        }
-
-        const updates = {
+    await Promise.allSettled(lotes[i].map(async (player) => {
+      const stats = await fetchVercelData(player.data.aom_profile_id || player.data.aom_id);
+      if (stats) {
+        await player.ref.update({
           elo_1v1: stats.elo_1v1,
           elo_tg: stats.elo_tg,
           top_gods: stats.top_gods,
           elo_snapshot: stats.elo_1v1,
-          last_update: admin.firestore.FieldValue.serverTimestamp(),
-        };
-
-        if (stats.avatar_url) {
-          updates.avatar_url = stats.avatar_url;
-        }
-
-        await ref.update(updates);
-        console.log(`[Snapshot] ✅ ${p.nick} → 1v1:${stats.elo_1v1} TG:${stats.elo_tg} Deuses:${stats.top_gods.length}`);
-      })
-    );
-
-    results.forEach((r) => {
-      if (r.status === "fulfilled") {
-        report.updated++;
-      } else {
-        const msg = r.reason?.message || "Erro desconhecido";
-        if (msg.includes("ELO API falhou")) {
-          report.skipped++;
-        } else {
-          report.failed++;
-          report.errors.push(msg);
-          console.error(`[Snapshot] ❌ Falha no lote: ${msg}`);
-        }
+          avatar_url: stats.avatar_url || player.data.avatar_url || "",
+          last_update: admin.firestore.FieldValue.serverTimestamp()
+        });
+        updatedCount++;
       }
-    });
-
-    if (i < lotes.length - 1) {
-      await delay(DELAY_BETWEEN_CHUNKS_MS);
-    }
+    }));
+    if (i < lotes.length - 1) await delay(DELAY_BETWEEN_CHUNKS_MS);
   }
 
-  console.log(`[Snapshot] Concluído: ${JSON.stringify(report)}`);
+  return { success: true, updated: updatedCount };
+});
 
-  return {
-    success: true,
-    message: `Snapshot concluído: ${report.updated} atualizados, ${report.skipped} ignorados (API falhou), ${report.failed} com erro.`,
-    report,
-  };
+// ─── fetchAomProfile (Para Inscrições) ────────────────────────────────────────
+exports.fetchAomProfile = onRequest({ cors: true }, async (req, res) => {
+  const profileId = req.query.id;
+  if (!profileId) return res.status(400).send("ID ausente");
+  const stats = await fetchVercelData(profileId);
+  res.json({ success: !!stats, data: stats });
 });

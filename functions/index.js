@@ -148,10 +148,11 @@ exports.fetchAomProfile = functions.https.onRequest(async (req, res) => {
 
 /**
  * Callable do painel Admin para atualizar ELO de todos os inscritos.
+ * Sintaxe CORRIGIDA para Firebase Functions v1 (usando runWith)
  */
-exports.updateEloSnapshot = functions.https.onCall(
-  { timeoutSeconds: 300, memory: "256MB" },
-  async (request) => {
+exports.updateEloSnapshot = functions
+  .runWith({ timeoutSeconds: 300, memory: "256MB" })
+  .https.onCall(async (data, context) => {
 
     const db = admin.firestore();
     const snapshot = await db.collection("forja_players").get();
@@ -223,5 +224,4 @@ exports.updateEloSnapshot = functions.https.onCall(
       message: `Snapshot concluído: ${report.updated} atualizados, ${report.skipped} ignorados (API falhou), ${report.failed} com erro.`,
       report,
     };
-  }
-);
+  });

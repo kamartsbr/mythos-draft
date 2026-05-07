@@ -10,6 +10,7 @@ export type FirestoreTimestamp = { seconds: number; nanoseconds: number } | numb
 // ─── Jogador ─────────────────────────────────────────────────────────────────
 export type ForjaPlayerStatus = 'available' | 'drafted' | 'reserve' | 'rejected' | 'pending';
 export type ForjaTier = 'A' | 'B' | 'C' | null;
+export type ForjaRole = 'player' | 'admin';
 
 export interface ForjaGodStat {
   god: string;
@@ -35,12 +36,36 @@ export interface ForjaPlayer {
   elo_tg: number;
   /** ELO 1v1 no momento do snapshot (sábado 14h) */
   elo_snapshot?: number;
+  /** ELO automático legado (mantido para compatibilidade com registros antigos) */
   esports_elo?: number;
+  /**
+   * [Schema v2] Toggle Admin: habilita override de ELO via esports_elo_value.
+   * Quando true, effectiveElo = esports_elo_value (ex-profissionais).
+   */
+  esports_elo_enabled?: boolean;
+  /**
+   * [Schema v2] Valor manual do Esports ELO definido pelo Admin.
+   * Só é usado como effectiveElo quando esports_elo_enabled === true.
+   */
+  esports_elo_value?: number | null;
+  /**
+   * [Schema v2] Top Deuses definidos pelo Admin (array flexível de god IDs, 1–5).
+   * Sobrepõe top_gods_auto (scraped) quando presente.
+   */
+  top_gods_admin?: string[];
+  /** Top deuses scraped automaticamente pelo backend */
   top_gods: ForjaGodStat[];
   status: ForjaPlayerStatus;
+  /**
+   * Tier calculado dinamicamente no frontend por posição no rank.
+   * Não deve ser escrito pelo Admin — é computado.
+   * Mantido no type por compatibilidade com dados legados.
+   */
   tier: ForjaTier;
   team_id: string | null;
-  seed?: number;
+  /** true = está no Banco de Reservas (não participa do draft principal) */
+  is_reserve?: boolean;
+  seed?: number | null;
   registered_at: FirestoreTimestamp;
   /** Consentimento com as Regras */
   consent_rules: boolean;
@@ -48,6 +73,12 @@ export interface ForjaPlayer {
   consent_format: boolean;
   /** Horários de disponibilidade do jogador */
   availability: string[];
+  /** [Schema v2] Permissão granular do usuário */
+  role?: ForjaRole;
+  /** [Schema v2] Self-service: link do perfil (ex: AoMStats) */
+  profile_link?: string;
+  /** [Schema v2] Self-service: frase de efeito */
+  catchphrase?: string;
 }
 
 // ─── Time ────────────────────────────────────────────────────────────────────
@@ -100,6 +131,41 @@ export interface ForjaContentSection {
   title: string;
   /** Corpo em texto simples / markdown básico */
   content: string;
+}
+
+/**
+ * [Schema v2] Bloco de regra reordenável (drag & drop).
+ * Salvo em forja_content/rules como array `blocks`.
+ */
+export interface ForjaRulesBlock {
+  id: string;          // UUID gerado no cliente
+  title: string;
+  content: string;     // texto simples ou markdown básico
+  order: number;       // índice de ordenação (0, 1, 2…)
+}
+
+/**
+ * [Schema v2] Configuração do torneio — documento único forja_content/tournament.
+ */
+export interface ForjaTournamentConfig {
+  groupCount: number;  // 2, 3 ou 4
+  groups: Array<{
+    id: string;        // 'group_a', 'group_b', …
+    name: string;      // 'Grupo A', 'Grupo B', …
+    teamIds: string[]; // FKs → forja_teams
+  }>;
+  updated_at?: FirestoreTimestamp;
+  updated_by?: string;
+}
+
+/** Pool dinâmica de mapas gerida pelo Admin no Firestore */
+export interface ForjaMapPool {
+  /** IDs dos mapas na pool ativa (subset de MAPS[]) */
+  active_map_ids: string[];
+  /** Tamanho máximo da pool (8–15) */
+  pool_size: number;
+  updated_at?: FirestoreTimestamp;
+  updated_by?: string;
 }
 
 /** Documento genérico de conteúdo editável (regras, formato) */

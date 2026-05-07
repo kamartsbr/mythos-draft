@@ -7,14 +7,16 @@
 import {
   collection, doc, setDoc, addDoc, updateDoc, deleteDoc,
   onSnapshot, query, orderBy, serverTimestamp, Unsubscribe,
-  getDoc, getDocs, writeBatch, arrayUnion,
+  getDoc, getDocs, writeBatch, arrayUnion, arrayRemove,
 } from 'firebase/firestore';
 import { db } from '../../../firebase';
 import {
   ForjaPlayer, ForjaRegistrationForm, ForjaDiscordUser,
   ForjaScheduleEntry, ForjaTeam, ForjaDraftSession, ForjaDraftPick,
   ForjaTier, ForjaContentDoc, ForjaPrizeConfig, ForjaSettings,
+  ForjaRole, ForjaTournamentConfig, ForjaRulesBlock, ForjaMapPool,
 } from '../types';
+import { FORJA_MAP_POOL } from '../../../data/maps';
 
 const PLAYERS_COL  = 'forja_players';
 const TEAMS_COL    = 'forja_teams';
@@ -152,6 +154,77 @@ export async function updatePlayerStatsSnapshot(discordId: string, updates: Part
   await updateDoc(doc(db, PLAYERS_COL, discordId), updates);
 }
 
+// ─── Admin Player Management (Schema v2) ──────────────────────────────────────
+
+/**
+ * Campos que o Admin pode alterar via modal.
+ * NÃO inclui elo_1v1, elo_tg, avatar_url (esses são do backend).
+ */
+export interface AdminPlayerFields {
+  top_gods_admin?: string[];          // Array flexível de god IDs (1–5)
+  esports_elo_enabled?: boolean;      // Toggle Esports ELO
+  esports_elo_value?: number | null;  // Valor manual (só usado quando enabled)
+  is_reserve?: boolean;               // Banco de Reservas
+}
+
+/** Atualiza os campos de gestão Admin de um jogador específico. */
+export async function updatePlayerAdminFields(
+  discordId: string,
+  fields: AdminPlayerFields
+): Promise<void> {
+  const payload: Record<string, unknown> = {};
+  if (fields.top_gods_admin !== undefined)   payload['top_gods_admin']    = fields.top_gods_admin;
+  if (fields.esports_elo_enabled !== undefined) payload['esports_elo_enabled'] = fields.esports_elo_enabled;
+  if (fields.esports_elo_value   !== undefined) payload['esports_elo_value']   = fields.esports_elo_value;
+  if (fields.is_reserve          !== undefined) payload['is_reserve']           = fields.is_reserve;
+  if (Object.keys(payload).length === 0) return;
+  await updateDoc(doc(db, PLAYERS_COL, discordId), payload);
+}
+
+/**
+ * Campos que o próprio jogador pode alterar (self-service).
+ * Não inclui ELOs, avatar, deuses ou time.
+ */
+export interface SelfServiceFields {
+  profile_link?: string;   // Link AoMStats ou outro
+  availability?: string[]; // Horários
+  catchphrase?: string;    // Frase de efeito (até 80 chars)
+}
+
+/** Jogador atualiza seu próprio perfil (restrito). */
+export async function updatePlayerSelfService(
+  discordId: string,
+  fields: SelfServiceFields
+): Promise<void> {
+  const payload: Record<string, unknown> = {};
+  if (fields.profile_link !== undefined)  payload['profile_link']  = fields.profile_link;
+  if (fields.availability !== undefined)  payload['availability']  = fields.availability;
+  if (fields.catchphrase  !== undefined)  payload['catchphrase']   = fields.catchphrase.slice(0, 80);
+  if (Object.keys(payload).length === 0) return;
+  await updateDoc(doc(db, PLAYERS_COL, discordId), payload);
+}
+
+/**
+ * Promove um jogador para Admin ou rebaixa para player.
+ * Apenas um Admin pode chamar isso (enforced via Firestore Rules).
+ */
+export async function setPlayerRole(discordId: string, role: ForjaRole): Promise<void> {
+  await updateDoc(doc(db, PLAYERS_COL, discordId), { role });
+}
+
+/** Subscrição em tempo real a um único jogador (ex: painel self-service). */
+export function subscribeToForjaPlayer(
+  discordId: string,
+  onData: (player: ForjaPlayer | null) => void,
+  onError?: (err: Error) => void
+): () => void {
+  return onSnapshot(
+    doc(db, PLAYERS_COL, discordId),
+    snap => onData(snap.exists() ? ({ ...(snap.data() as ForjaPlayer), discord_id: snap.id }) : null),
+    err  => { console.error('[Forja] player doc:', err); onError?.(err); }
+  );
+}
+
 // ─── Schedule ─────────────────────────────────────────────────────────────────
 
 export function subscribeToForjaSchedule(
@@ -191,8 +264,12 @@ export function subscribeToForjaTeams(
   );
 }
 
-export async function updateTeamName(teamId: string, name: string): Promise<void> {
-  await updateDoc(doc(db, TEAMS_COL, teamId), { team_name: name });
+export async function updateTeamName(teamId: string, name?: string, captainId?: string): Promise<void> {
+  const updates: Record<string, string> = {};
+  if (name !== undefined && name.trim()) updates.team_name = name.trim();
+  if (captainId !== undefined) updates.captain_id = captainId;
+  if (Object.keys(updates).length === 0) return;
+  await updateDoc(doc(db, TEAMS_COL, teamId), updates);
 }
 
 // ─── Draft Session ────────────────────────────────────────────────────────────
@@ -429,11 +506,8 @@ export async function seedDefaultContent(updatedBy: string): Promise<void> {
     },
     settings: {
       registration_open: true,
-      // Sábado 09/05/2026 13:59 BRT = 16:59 UTC
       registration_deadline_ms: new Date('2026-05-09T16:59:00Z').getTime(),
-      // Sábado 09/05/2026 14:00 BRT = 17:00 UTC
       elo_snapshot_ms: new Date('2026-05-09T17:00:00Z').getTime(),
-      // Sábado 09/05/2026 15:00 BRT = 18:00 UTC
       draft_start_ms: new Date('2026-05-09T18:00:00Z').getTime(),
     },
   };
@@ -445,4 +519,262 @@ export async function seedDefaultContent(updatedBy: string): Promise<void> {
       await setDoc(ref, { ...data, updated_at: serverTimestamp(), updated_by: updatedBy });
     }
   }
+}
+
+// ─── Fase 3: Regras Reordenáveis (blocks) ────────────────────────────────────
+
+const RULES_DOC_ID = 'rules_v2';
+
+export function subscribeToForjaRulesBlocks(
+  onData: (blocks: ForjaRulesBlock[]) => void,
+  onError?: (err: Error) => void
+): () => void {
+  return onSnapshot(
+    doc(db, CONTENT_COL, RULES_DOC_ID),
+    snap => {
+      if (snap.exists()) {
+        const raw = snap.data();
+        const blocks: ForjaRulesBlock[] = (raw.blocks ?? []);
+        onData([...blocks].sort((a, b) => a.order - b.order));
+      } else {
+        onData([]);
+      }
+    },
+    err => { console.error('[Forja] rules_v2:', err); onError?.(err); }
+  );
+}
+
+/** Salva o array completo de blocos (após reordenação drag&drop). */
+export async function saveRulesBlocks(
+  blocks: ForjaRulesBlock[],
+  updatedBy: string
+): Promise<void> {
+  const normalized = blocks.map((b, i) => ({ ...b, order: i }));
+  await setDoc(doc(db, CONTENT_COL, RULES_DOC_ID), {
+    blocks: normalized,
+    updated_at: serverTimestamp(),
+    updated_by: updatedBy,
+  }, { merge: false });
+}
+
+/** Adiciona um novo bloco vazio. */
+export async function addRulesBlock(updatedBy: string): Promise<void> {
+  const snap = await getDoc(doc(db, CONTENT_COL, RULES_DOC_ID));
+  const existing: ForjaRulesBlock[] = snap.exists() ? (snap.data().blocks ?? []) : [];
+  const newBlock: ForjaRulesBlock = {
+    id: `block_${Date.now()}`,
+    title: 'Novo Bloco',
+    content: 'Escreva o conteúdo aqui...',
+    order: existing.length,
+  };
+  await setDoc(doc(db, CONTENT_COL, RULES_DOC_ID), {
+    blocks: [...existing, newBlock],
+    updated_at: serverTimestamp(),
+    updated_by: updatedBy,
+  }, { merge: false });
+}
+
+/** Remove um bloco por id e reordena. */
+export async function deleteRulesBlock(blockId: string, updatedBy: string): Promise<void> {
+  const snap = await getDoc(doc(db, CONTENT_COL, RULES_DOC_ID));
+  if (!snap.exists()) return;
+  const filtered = (snap.data().blocks as ForjaRulesBlock[])
+    .filter(b => b.id !== blockId)
+    .map((b, i) => ({ ...b, order: i }));
+  await setDoc(doc(db, CONTENT_COL, RULES_DOC_ID), {
+    blocks: filtered,
+    updated_at: serverTimestamp(),
+    updated_by: updatedBy,
+  }, { merge: false });
+}
+
+// ─── Fase 3: Configuração do Torneio (grupos) ────────────────────────────────
+
+const TOURNAMENT_DOC_ID = 'tournament';
+
+export function subscribeToTournamentConfig(
+  onData: (config: ForjaTournamentConfig | null) => void,
+  onError?: (err: Error) => void
+): () => void {
+  return onSnapshot(
+    doc(db, CONTENT_COL, TOURNAMENT_DOC_ID),
+    snap => onData(snap.exists() ? (snap.data() as ForjaTournamentConfig) : null),
+    err => { console.error('[Forja] tournament:', err); onError?.(err); }
+  );
+}
+
+export async function saveTournamentConfig(
+  config: Omit<ForjaTournamentConfig, 'updated_at' | 'updated_by'>,
+  updatedBy: string
+): Promise<void> {
+  await setDoc(doc(db, CONTENT_COL, TOURNAMENT_DOC_ID), {
+    ...config,
+    updated_at: serverTimestamp(),
+    updated_by: updatedBy,
+  });
+}
+
+// ─── Fase 3: Gestão de Times v2 (drag & drop) ────────────────────────────────
+
+/** Cria um time vazio manualmente (sem draft automático). */
+export async function createForjaTeam(name: string): Promise<string> {
+  if (!name.trim()) throw new Error('Nome do time obrigatório.');
+  const ref = await addDoc(collection(db, TEAMS_COL), {
+    team_name: name.trim(),
+    captain_id: '',
+    members: [],
+    pick_order: 0,
+  });
+  return ref.id;
+}
+
+/** Remove um time e libera todos os seus jogadores. */
+export async function deleteForjaTeam(teamId: string): Promise<void> {
+  const batch = writeBatch(db);
+  // Libera jogadores
+  const playersSnap = await getDocs(collection(db, PLAYERS_COL));
+  playersSnap.docs.forEach(d => {
+    if (d.data().team_id === teamId) {
+      batch.update(d.ref, { team_id: null, status: 'available' });
+    }
+  });
+  batch.delete(doc(db, TEAMS_COL, teamId));
+  await batch.commit();
+}
+
+/**
+ * Move um jogador para um time (drag & drop).
+ * Remove do time anterior (se houver) e adiciona ao novo.
+ */
+export async function movePlayerToTeam(
+  playerId: string,
+  targetTeamId: string,
+  previousTeamId: string | null
+): Promise<void> {
+  const batch = writeBatch(db);
+
+  if (previousTeamId && previousTeamId !== targetTeamId) {
+    batch.update(doc(db, TEAMS_COL, previousTeamId), {
+      members: arrayRemove(playerId),
+    });
+  }
+  batch.update(doc(db, TEAMS_COL, targetTeamId), {
+    members: arrayUnion(playerId),
+  });
+  batch.update(doc(db, PLAYERS_COL, playerId), {
+    team_id: targetTeamId,
+    is_reserve: false,
+    status: 'drafted',
+  });
+  await batch.commit();
+}
+
+/**
+ * Move um jogador para o Banco de Reservas.
+ * Remove do time se estava em algum.
+ */
+export async function movePlayerToReserve(
+  playerId: string,
+  previousTeamId: string | null
+): Promise<void> {
+  const batch = writeBatch(db);
+  if (previousTeamId) {
+    batch.update(doc(db, TEAMS_COL, previousTeamId), {
+      members: arrayRemove(playerId),
+    });
+  }
+  batch.update(doc(db, PLAYERS_COL, playerId), {
+    team_id: null,
+    is_reserve: true,
+    status: 'available',
+  });
+  await batch.commit();
+}
+
+/**
+ * Remove um jogador de qualquer time e volta ao pool principal.
+ */
+export async function movePlayerToPool(
+  playerId: string,
+  previousTeamId: string | null
+): Promise<void> {
+  const batch = writeBatch(db);
+  if (previousTeamId) {
+    batch.update(doc(db, TEAMS_COL, previousTeamId), {
+      members: arrayRemove(playerId),
+    });
+  }
+  batch.update(doc(db, PLAYERS_COL, playerId), {
+    team_id: null,
+    is_reserve: false,
+    status: 'available',
+  });
+  await batch.commit();
+}
+
+// ─── Fase 3+: Pool de Mapas Dinâmica ─────────────────────────────────────────
+
+const MAP_POOL_DOC_ID = 'map_pool';
+const MIN_POOL_SIZE   = 8;
+const MAX_POOL_SIZE   = 15;
+
+/**
+ * Subscription em tempo real ao documento da pool ativa de mapas.
+ * Fallback: se não existir no Firestore, retorna null e o
+ * cliente pode usar FORJA_MAP_POOL local como padrão.
+ */
+export function subscribeToForjaMapPool(
+  onData: (pool: ForjaMapPool | null) => void,
+  onError?: (err: Error) => void
+): () => void {
+  return onSnapshot(
+    doc(db, CONTENT_COL, MAP_POOL_DOC_ID),
+    snap => onData(snap.exists() ? (snap.data() as ForjaMapPool) : null),
+    err  => { console.error('[Forja] map_pool:', err); onError?.(err); }
+  );
+}
+
+/**
+ * Salva a pool ativa completa.
+ * Valida tamanho antes de persistir.
+ */
+export async function saveForjaMapPool(
+  activeMapIds: string[],
+  poolSize: number,
+  updatedBy: string
+): Promise<void> {
+  if (poolSize < MIN_POOL_SIZE || poolSize > MAX_POOL_SIZE) {
+    throw new Error(`Tamanho da pool deve ser entre ${MIN_POOL_SIZE} e ${MAX_POOL_SIZE}.`);
+  }
+  if (activeMapIds.length > poolSize) {
+    throw new Error(`A pool tem ${activeMapIds.length} mapas, mas o limite é ${poolSize}.`);
+  }
+
+  const payload: ForjaMapPool = {
+    active_map_ids: activeMapIds,
+    pool_size: poolSize,
+    updated_by: updatedBy,
+  };
+
+  await setDoc(doc(db, CONTENT_COL, MAP_POOL_DOC_ID), {
+    ...payload,
+    updated_at: serverTimestamp(),
+  });
+}
+
+/**
+ * Inicializa a pool no Firestore com os valores do FORJA_MAP_POOL local
+ * (sem sobrescrever se já existir).
+ */
+export async function seedDefaultMapPool(updatedBy: string): Promise<void> {
+  const ref  = doc(db, CONTENT_COL, MAP_POOL_DOC_ID);
+  const snap = await getDoc(ref);
+  if (snap.exists()) return; // Já configurado, não sobrescreve
+
+  await setDoc(ref, {
+    active_map_ids: FORJA_MAP_POOL,
+    pool_size: FORJA_MAP_POOL.length,
+    updated_at: serverTimestamp(),
+    updated_by: updatedBy,
+  });
 }

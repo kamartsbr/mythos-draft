@@ -1,10 +1,32 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Globals
-    function isSignedIn() { return request.auth != null; }
-    
+
+    // ─── Helpers globais ─────────────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * Verifica se o usuário autenticado tem role == 'admin' no Firestore.
+     * Usado para proteger operações administrativas sem ir ao console.
+     */
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/forja_players/$(request.auth.uid))
+        && get(/databases/$(database)/documents/forja_players/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    /**
+     * Campos que apenas o Admin pode alterar num documento forja_players.
+     * Retorna true se NENHUM campo proibido está sendo alterado pelo não-Admin.
+     */
+    function onlyPlayerSelfServiceFields() {
+      let allowed = ['profile_link', 'availability', 'catchphrase'];
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
+    }
+
+    // ─── /lobbies ────────────────────────────────────────────────────────────
     match /lobbies/{lobbyId} {
       function isParticipantOrAdmin(res) {
         return isSignedIn() && (
@@ -13,57 +35,82 @@ service cloud.firestore {
           res.data.captain2 == request.auth.uid
         );
       }
-      
+
       allow read: if true;
       allow create: if isSignedIn();
-      
-      // Update is allowed ONLY if the user is a participant OR admin.
-      // ESTRUTURA ANTI-UPDATE-GAP + IMUTABILIDADE:
-      // Se o draft já estava 'finished' antes da edição, rejeitamos qualquer nova alteração (imutável).
-      // Isso impede que um draft finalizado seja adulterado por trás.
       allow update: if isParticipantOrAdmin(resource)
-                    && resource.data.status != 'finished'; 
-
+                    && resource.data.status != 'finished';
       allow delete: if isSignedIn() && resource.data.adminId == request.auth.uid;
-      
-      // Messages match
+
       match /messages/{messageId} {
         allow read: if true;
         allow create: if isSignedIn();
         allow update, delete: if isSignedIn() && resource.data.senderId == request.auth.uid;
       }
-      
-      // Admin overrides (if necessary - checking if the requester has some admin privileges is out of scope unless implemented)
     }
 
+    // ─── /metadata ───────────────────────────────────────────────────────────
     match /metadata/{docId} {
       allow read: if true;
-      // Index is updated securely by the client (since this is currently the client-side architecture)
       allow write: if isSignedIn();
     }
-    
+
+    // ─── /presets ────────────────────────────────────────────────────────────
     match /presets/{presetId} {
       allow read: if true;
       allow create: if isSignedIn();
       allow update, delete: if isSignedIn() && resource.data.createdBy == request.auth.uid;
     }
-    
+
+    // ─── /test ───────────────────────────────────────────────────────────────
     match /test/connection {
       allow read: if true;
     }
-    
-    // Forja de Hefesto
+
+    // ─── /forja_players ──────────────────────────────────────────────────────
     match /forja_players/{playerId} {
+      // Qualquer um pode ler a lista de jogadores (tabela pública)
       allow read: if true;
-      allow write: if true; // Em prod, você pode restringir se usar Firebase Auth
+
+      // Criação: jogador cria seu próprio documento via registro
+      allow create: if isSignedIn() && request.auth.uid == playerId;
+
+      // Update:
+      //   - Admin pode atualizar tudo (modal, role, esports_elo, top_gods_admin, is_reserve)
+      //   - Jogador só pode atualizar seus próprios campos self-service
+      allow update: if isAdmin()
+                    || (isSignedIn()
+                        && request.auth.uid == playerId
+                        && onlyPlayerSelfServiceFields());
+
+      // Delete: apenas Admin pode remover inscrições
+      allow delete: if isAdmin()
+                    || (isSignedIn() && request.auth.uid == playerId);
     }
-    match /forja_draft/{draftId} {
+
+    // ─── /forja_teams ────────────────────────────────────────────────────────
+    match /forja_teams/{teamId} {
       allow read: if true;
-      allow write: if true;
+      allow write: if isAdmin();
     }
+
+    // ─── /forja_content ──────────────────────────────────────────────────────
     match /forja_content/{contentId} {
       allow read: if true;
-      allow write: if true;
+      // Regras, formato, premiação, torneio: apenas Admin edita
+      allow write: if isAdmin();
+    }
+
+    // ─── /forja_schedule ─────────────────────────────────────────────────────
+    match /forja_schedule/{entryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ─── /forja_meta (draft session) ─────────────────────────────────────────
+    match /forja_meta/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
   }
 }

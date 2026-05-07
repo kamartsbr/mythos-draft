@@ -1,43 +1,43 @@
 /**
  * ============================================================
  *  useForjaPlayers — Hook de listagem em tempo real
- *  Subscrição ao Firestore com fallback para dados mockados
- *  durante desenvolvimento (VITE_VIBE_MODE === 'DEVELOPMENT').
+ *  Retorna players rankeados (computedTier + effectiveElo)
+ *  com subscrição ao Firestore e fallback para mock em dev.
  * ============================================================
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ForjaPlayer } from '../types';
+import { RankedPlayer, computeRankedPlayers } from '../forjaUtils';
 import { subscribeToForjaPlayers } from '../services/forjaService';
 
-// Dados mockados de fallback (dev / sem Firestore)
+// ─── Mock Data (dev) ──────────────────────────────────────────────────────────
+
 const MOCK_PLAYERS: ForjaPlayer[] = [
   {
     discord_id: '111111111111111111',
-    aom_profile_id: 10001,
-    aom_id: 'omoradin',
-    nick: 'Omoradin',
+    aom_profile_id: 10001, aom_id: 'omoradin', nick: 'Omoradin',
     avatar_url: 'https://cdn.discordapp.com/embed/avatars/0.png',
+    discord_avatar_url: 'https://cdn.discordapp.com/embed/avatars/0.png',
     is_brazilian: true,
     pitch_quote: 'Zeus ou morte, não tem meio-termo!',
     elo_1v1: 2150, elo_tg: 1980,
+    esports_elo_enabled: true, esports_elo_value: 2450,
     top_gods: [
       { god: 'zeus',   godName: 'Zeus',   winRate: 68, playRate: 45 },
       { god: 'hades',  godName: 'Hades',  winRate: 61, playRate: 22 },
       { god: 'thor',   godName: 'Thor',   winRate: 55, playRate: 18 },
-      { god: 'ra',     godName: 'Ra',     winRate: 50, playRate: 10 },
-      { god: 'kronos', godName: 'Kronos', winRate: 48, playRate: 5  },
     ],
-    status: 'available', tier: 'A', team_id: null, seed: 1, registered_at: null,
-    consent_rules: true, consent_format: true,
-    discord_avatar_url: 'https://cdn.discordapp.com/embed/avatars/0.png',
+    top_gods_admin: ['zeus', 'hades', 'thor'],
+    status: 'available', tier: null, team_id: null, seed: null,
+    registered_at: null, consent_rules: true, consent_format: true,
     availability: ['weekday-eve', 'weekend-eve'],
+    role: 'admin',
+    catchphrase: 'Forjado em chamas, temperado na vitória.',
   },
   {
     discord_id: '222222222222222222',
-    aom_profile_id: 10002,
-    aom_id: 'kamaRTS',
-    nick: 'KamaRTS',
+    aom_profile_id: 10002, aom_id: 'kamaRTS', nick: 'KamaRTS',
     avatar_url: 'https://cdn.discordapp.com/embed/avatars/1.png',
     discord_avatar_url: 'https://cdn.discordapp.com/embed/avatars/1.png',
     is_brazilian: true,
@@ -50,15 +50,14 @@ const MOCK_PLAYERS: ForjaPlayer[] = [
       { god: 'isis',   godName: 'Isis',   winRate: 53, playRate: 8  },
       { god: 'oranos', godName: 'Oranos', winRate: 45, playRate: 5  },
     ],
-    status: 'available', tier: 'A', team_id: null, seed: 2, registered_at: null,
-    consent_rules: true, consent_format: true,
+    status: 'available', tier: null, team_id: null, seed: null,
+    registered_at: null, consent_rules: true, consent_format: true,
     availability: ['weekend-aft', 'weekend-eve'],
+    role: 'player',
   },
   {
     discord_id: '333333333333333333',
-    aom_profile_id: 10003,
-    aom_id: 'thunderaxe99',
-    nick: 'ThunderAxe',
+    aom_profile_id: 10003, aom_id: 'thunderaxe99', nick: 'ThunderAxe',
     avatar_url: 'https://cdn.discordapp.com/embed/avatars/2.png',
     discord_avatar_url: 'https://cdn.discordapp.com/embed/avatars/2.png',
     is_brazilian: true,
@@ -68,35 +67,91 @@ const MOCK_PLAYERS: ForjaPlayer[] = [
       { god: 'thor',     godName: 'Thor',     winRate: 70, playRate: 60 },
       { god: 'odin',     godName: 'Odin',     winRate: 58, playRate: 20 },
       { god: 'poseidon', godName: 'Poseidon', winRate: 54, playRate: 10 },
-      { god: 'ra',       godName: 'Ra',       winRate: 50, playRate: 7  },
-      { god: 'gaia',     godName: 'Gaia',     winRate: 44, playRate: 3  },
     ],
-    status: 'available', tier: 'B', team_id: null, seed: 3, registered_at: null,
-    consent_rules: true, consent_format: true,
+    status: 'available', tier: null, team_id: null, seed: null,
+    registered_at: null, consent_rules: true, consent_format: true,
     availability: ['weekday-eve'],
+    role: 'player',
+  },
+  {
+    discord_id: '444444444444444444',
+    aom_profile_id: 10004, aom_id: 'mythkeeper_br', nick: 'MythKeeper',
+    avatar_url: 'https://cdn.discordapp.com/embed/avatars/3.png',
+    discord_avatar_url: 'https://cdn.discordapp.com/embed/avatars/3.png',
+    is_brazilian: true,
+    pitch_quote: 'Isis e fé, sempre. Vai que vai.',
+    elo_1v1: 1850, elo_tg: 1900,
+    top_gods: [
+      { god: 'isis',      godName: 'Isis',      winRate: 65, playRate: 50 },
+      { god: 'ra',        godName: 'Ra',        winRate: 59, playRate: 25 },
+      { god: 'amaterasu', godName: 'Amaterasu', winRate: 52, playRate: 12 },
+    ],
+    status: 'available', tier: null, team_id: null, seed: null,
+    registered_at: null, consent_rules: true, consent_format: true,
+    availability: ['weekend-eve', 'late-night'],
+    role: 'player',
+  },
+  {
+    discord_id: '555555555555555555',
+    aom_profile_id: 10005, aom_id: 'dragonlord_pt', nick: 'DragonLord_PT',
+    avatar_url: 'https://cdn.discordapp.com/embed/avatars/4.png',
+    discord_avatar_url: 'https://cdn.discordapp.com/embed/avatars/4.png',
+    is_brazilian: false,
+    pitch_quote: 'De Portugal para o mundo!',
+    elo_1v1: 1780, elo_tg: 1820,
+    top_gods: [
+      { god: 'kronos', godName: 'Kronos', winRate: 63, playRate: 42 },
+      { god: 'oranos', godName: 'Oranos', winRate: 58, playRate: 30 },
+    ],
+    status: 'available', tier: null, team_id: null, seed: null,
+    registered_at: null, consent_rules: true, consent_format: true,
+    availability: ['weekday-eve', 'weekend-aft'],
+    role: 'player',
+  },
+  {
+    discord_id: '666666666666666666',
+    aom_profile_id: 10006, aom_id: 'goldenspear7', nick: 'GoldenSpear',
+    avatar_url: 'https://cdn.discordapp.com/embed/avatars/5.png',
+    discord_avatar_url: 'https://cdn.discordapp.com/embed/avatars/5.png',
+    is_brazilian: true,
+    pitch_quote: 'Cada partida é uma forja da alma.',
+    elo_1v1: 1710, elo_tg: 1750,
+    top_gods: [
+      { god: 'nuwa', godName: 'Nüwa', winRate: 61, playRate: 38 },
+      { god: 'fuxi', godName: 'Fuxi', winRate: 55, playRate: 28 },
+    ],
+    status: 'available', tier: null, team_id: null, seed: null,
+    registered_at: null, consent_rules: true, consent_format: true,
+    availability: ['weekend-eve', 'late-night'],
+    role: 'player',
+    is_reserve: true, // Mock: esse jogador está no banco de reservas
   },
 ];
 
+// ─── Hook ─────────────────────────────────────────────────────────────────────
+
 interface UseForjaPlayersResult {
-  players: ForjaPlayer[];
+  /** Players rankeados e com computedTier atribuído */
+  rankedPlayers: RankedPlayer[];
+  /** Players brutos do Firestore (sem modificação) */
+  rawPlayers: ForjaPlayer[];
   loading: boolean;
   error: string | null;
-  isLive: boolean; // true = dados do Firestore, false = mock
+  isLive: boolean;
 }
 
 export function useForjaPlayers(): UseForjaPlayersResult {
-  const [players, setPlayers] = useState<ForjaPlayer[]>([]);
-  const [loading, setLoading]  = useState(true);
-  const [error,   setError]    = useState<string | null>(null);
-  const [isLive,  setIsLive]   = useState(false);
+  const [rawPlayers, setRawPlayers] = useState<ForjaPlayer[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [error,   setError]         = useState<string | null>(null);
+  const [isLive,  setIsLive]        = useState(false);
 
   useEffect(() => {
     const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
 
     if (IS_DEV) {
-      // Simula um delay de rede em dev
       const timer = setTimeout(() => {
-        setPlayers(MOCK_PLAYERS);
+        setRawPlayers(MOCK_PLAYERS);
         setLoading(false);
         setIsLive(false);
       }, 600);
@@ -104,17 +159,17 @@ export function useForjaPlayers(): UseForjaPlayersResult {
     }
 
     // Produção: subscrição Firestore em tempo real
+    // O sort/tier são computados aqui, não dependemos de campos estáticos no Firestore
     const unsub = subscribeToForjaPlayers(
       (data) => {
-        setPlayers(data);
+        setRawPlayers(data);
         setLoading(false);
         setIsLive(true);
         setError(null);
       },
       (err) => {
         console.error('[useForjaPlayers]', err);
-        // Fallback gracioso para mock em caso de erro de permissão
-        setPlayers(MOCK_PLAYERS);
+        setRawPlayers(MOCK_PLAYERS);
         setError('Não foi possível conectar ao banco de dados. Exibindo dados de demonstração.');
         setLoading(false);
         setIsLive(false);
@@ -124,5 +179,8 @@ export function useForjaPlayers(): UseForjaPlayersResult {
     return () => unsub();
   }, []);
 
-  return { players, loading, error, isLive };
+  // Tier e rank são sempre computados no cliente — nunca lidos do Firestore
+  const rankedPlayers = useMemo(() => computeRankedPlayers(rawPlayers), [rawPlayers]);
+
+  return { rankedPlayers, rawPlayers, loading, error, isLive };
 }

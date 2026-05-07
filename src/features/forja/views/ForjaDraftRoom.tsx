@@ -67,7 +67,7 @@ function PickCard({ player, onPick, disabled }: {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function ForjaDraftRoom({ discordUser, isAdmin }: ForjaViewProps) {
-  const { players, loading: playersLoading } = useForjaPlayers();
+  const { rankedPlayers: players, loading: playersLoading } = useForjaPlayers();
   const { teams }                            = useForjaTeams();
   const { session, loading: sessionLoading } = useForjaDraftSession();
 
@@ -97,7 +97,7 @@ export default function ForjaDraftRoom({ discordUser, isAdmin }: ForjaViewProps)
   // Jogadores disponíveis do tier atual
   const expectedTier = session?.current_round ?? 'B';
   const availableForPick = players.filter(
-    p => p.status === 'available' && p.tier === expectedTier
+    p => p.status === 'available' && (p as any).computedTier === expectedTier
   );
 
   const handlePick = async (player: ForjaPlayer) => {

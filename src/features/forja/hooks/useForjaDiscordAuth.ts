@@ -18,6 +18,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { ForjaDiscordUser } from '../types';
+import { subscribeToForjaPlayer } from '../services/forjaService';
 
 const STORAGE_KEY = 'forja_discord_user';
 const ADMIN_DISCORD_IDS_KEY = 'VITE_FORJA_ADMIN_IDS'; // ex: "123,456"
@@ -110,6 +111,8 @@ interface UseForjaDiscordAuthResult {
 export function useForjaDiscordAuth(): UseForjaDiscordAuthResult {
   const [discordUser, setDiscordUser] = useState<ForjaDiscordUser | null>(null);
   const [isLoading,   setIsLoading]   = useState(true);
+  // Role lida do Firestore (forja_players/{uid}.role)
+  const [firestoreRole, setFirestoreRole] = useState<'player' | 'admin' | null>(null);
 
   // Ao montar: tenta restaurar sessão ou processar callback OAuth
   useEffect(() => {
@@ -160,6 +163,17 @@ export function useForjaDiscordAuth(): UseForjaDiscordAuthResult {
     init();
   }, []);
 
+  // Subscrição em tempo real ao documento do jogador para ler o role
+  useEffect(() => {
+    if (!discordUser) { setFirestoreRole(null); return; }
+    const unsub = subscribeToForjaPlayer(
+      discordUser.discord_id,
+      (player) => setFirestoreRole(player?.role ?? null),
+      () => setFirestoreRole(null)
+    );
+    return () => unsub();
+  }, [discordUser?.discord_id]);
+
   const loginWithDiscord = useCallback(() => {
     const clientId = import.meta.env.VITE_DISCORD_CLIENT_ID;
     
@@ -182,7 +196,11 @@ export function useForjaDiscordAuth(): UseForjaDiscordAuthResult {
     setDiscordUser(null);
   }, []);
 
-  const isAdmin = discordUser ? isForjaAdmin(discordUser.discord_id) : false;
+  const isAdmin =
+    // 1. Role do Firestore (fonte de verdade principal)
+    firestoreRole === 'admin' ||
+    // 2. Fallback: IDs hardcoded e .env (funcionam mesmo sem registro)
+    (discordUser ? isForjaAdmin(discordUser.discord_id) : false);
 
   return { discordUser, isAdmin, isLoading, loginWithDiscord, logout };
 }

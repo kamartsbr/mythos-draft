@@ -24,6 +24,9 @@ const ForjaTabela      = lazy(() => import('./views/ForjaTabela'));
 const ForjaAdminDraft  = lazy(() => import('./views/ForjaAdminDraft'));
 const ForjaDraftRoom   = lazy(() => import('./views/ForjaDraftRoom'));
 const ForjaDraftOBS    = lazy(() => import('./views/ForjaDraftOBS'));
+// Fase 3
+const ForjaRulesEditor  = lazy(() => import('./components/ForjaRulesEditor'));
+const ForjaTimesManager = lazy(() => import('./components/ForjaTimesManager'));
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 const PUBLIC_TABS: ForjaTab[] = [
@@ -246,11 +249,15 @@ export default function ForjaHub() {
       <main className="forja-tab-content">
         <Suspense fallback={<TabFallback />}>
           {activeTab === 'inicio'      && <ForjaInicio {...sharedProps} onRegisterClick={() => setShowRegModal(true)} />}
-          {activeTab === 'regras'      && <ForjaRegras {...sharedProps} />}
+          {activeTab === 'regras'      && (isAdmin
+            ? <ForjaRulesEditor {...sharedProps} />
+            : <ForjaRegras {...sharedProps} />)}
           {activeTab === 'mapas'       && <ForjaMapas {...sharedProps} />}
           {activeTab === 'formato'     && <ForjaFormato {...sharedProps} />}
           {activeTab === 'schedule'    && <ForjaSchedule {...sharedProps} />}
-          {activeTab === 'times'       && <ForjaTimes {...sharedProps} />}
+          {activeTab === 'times'       && (isAdmin
+            ? <ForjaTimesManager {...sharedProps} />
+            : <ForjaTimes {...sharedProps} />)}
           {activeTab === 'tabela'      && <ForjaTabela {...sharedProps} />}
           {activeTab === 'draft-room'  && <ForjaDraftRoom {...sharedProps} />}
           {activeTab === 'admin-draft' && <ForjaAdminDraft {...sharedProps} />}

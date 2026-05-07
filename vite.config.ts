@@ -16,12 +16,30 @@ export default defineConfig(({ mode }) => {
         workbox: {
           // Aumenta o limite para 25MB para suportar vídeos e mapas
           maximumFileSizeToCacheInBytes: 25 * 1024 * 1024,
-          
-          // Impede o Service Worker de quebrar a conexão com o Firestore
-          navigateFallbackDenylist: [/^\/__/, /firestore\.googleapis\.com/, /firebase\.googleapis\.com/, /identitytoolkit\.googleapis\.com/, /securetoken\.googleapis\.com/],
+
+          // Desativa Navigation Preload — evita interceptação de requests de navegação
+          // que o Workbox confunde com fetch de dados do Firestore
+          navigationPreload: false,
+
+          /**
+           * REGRAS DE CACHE EM TEMPO DE EXECUÇÃO
+           *
+           * ORDEM IMPORTA: o Workbox usa o primeiro match que encontrar.
+           * As regras de "Não mexa aqui" (NetworkOnly) vêm PRIMEIRO,
+           * antes de qualquer regra de cache de assets estáticos.
+           *
+           * Cobre:
+           *  - firestore.googleapis.com  (real-time listen / long-polling WebSocket)
+           *  - firebase.googleapis.com   (Firebase SDK geral)
+           *  - identitytoolkit           (Auth)
+           *  - securetoken               (Refresh de tokens)
+           *  - accounts.google.com       (OAuth)
+           *  - *.googleapis.com          (wildcard — captura qualquer subdomínio novo)
+           */
           runtimeCaching: [
+            // ── Firebase / Google APIs — NetworkOnly (NUNCA cachear) ──────
             {
-              urlPattern: /^https:\/\/firestore\.googleapis\.com.*/,
+              urlPattern: /^https:\/\/firestore\.googleapis\.com\/.*/,
               handler: 'NetworkOnly',
             },
             {
@@ -36,11 +54,46 @@ export default defineConfig(({ mode }) => {
               urlPattern: /^https:\/\/securetoken\.googleapis\.com\/.*/,
               handler: 'NetworkOnly',
             },
+            {
+              urlPattern: /^https:\/\/accounts\.google\.com\/.*/,
+              handler: 'NetworkOnly',
+            },
+            // Wildcard final para qualquer subdomínio *.googleapis.com
+            // que a SDK do Firebase possa usar no futuro
+            {
+              urlPattern: /^https:\/\/[a-z0-9-]+\.googleapis\.com\/.*/,
+              handler: 'NetworkOnly',
+            },
+            // ── Discord CDN (avatares) — NetworkFirst ─────────────────────
+            {
+              urlPattern: /^https:\/\/cdn\.discordapp\.com\/.*/,
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'discord-avatars',
+                networkTimeoutSeconds: 5,
+                expiration: {
+                  maxEntries: 200,
+                  maxAgeSeconds: 60 * 60 * 24 * 7, // 7 dias
+                },
+              },
+            },
           ],
-          // Cache de assets estáticos
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,mp4}']
-        }
-      })
+
+          // Padrões de pré-cache (assets do build)
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,mp4}'],
+
+          /**
+           * navigateFallbackDenylist:
+           * Impede o SW de interceptar chamadas de navegação
+           * para os domínios do Firebase.
+           */
+          navigateFallbackDenylist: [
+            /^\/__/,
+            /^https?:\/\/.*\.googleapis\.com/,
+            /^https?:\/\/accounts\.google\.com/,
+          ],
+        },
+      }),
     ],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),

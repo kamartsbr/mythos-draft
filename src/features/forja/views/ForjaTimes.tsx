@@ -117,7 +117,7 @@ function TeamCard({ team, members, colorIdx, isAdmin, isCaptain }: {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function ForjaTimes({ discordUser, isAdmin }: ForjaViewProps) {
   const { teams, loading: teamsLoading, error: teamsError } = useForjaTeams();
-  const { players, loading: playersLoading }                = useForjaPlayers();
+  const { rankedPlayers: players, loading: playersLoading } = useForjaPlayers();
 
   const playerMap = useMemo(() => {
     const m: Record<string, ForjaPlayer> = {};

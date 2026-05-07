@@ -586,3 +586,25 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
                 return (
                   <div key={team.id} className="forja-admin-team-card">
                     <div className="forja-admin-team-header">
+                      <strong style={{ color: '#f59e0b' }}>{team.team_name}</strong>
+                      <span style={{ color: '#475569', fontSize: '0.7rem' }}>Pick #{team.pick_order}</span>
+                    </div>
+                    <div className="forja-admin-team-members">
+                      {memberPlayers.map(p => (
+                        <span key={p!.discord_id} className="forja-admin-team-member">
+                          <img src={p!.avatar_url} alt={p!.nick} onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} referrerPolicy="no-referrer" />
+                          {p!.nick}
+                          {p!.discord_id === team.captain_id && ' 👑'}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}

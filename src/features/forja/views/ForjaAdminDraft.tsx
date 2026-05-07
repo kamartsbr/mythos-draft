@@ -371,7 +371,7 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
     setError(null);
 
     try {
-      const functionsObj = getFunctions();
+      const functions = getFunctions(undefined, 'us-central1');
       const runSnapshot = httpsCallable(functionsObj, 'updateEloSnapshot');
       const result = await runSnapshot();
       

@@ -1,4 +1,4 @@
-/* eslint-disable */
+/* eslint-disable */ // Build corrigido para a API do Vercel - 07/05/2026
 
 /**
  * ============================================================

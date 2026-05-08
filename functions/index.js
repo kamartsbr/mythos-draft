@@ -87,7 +87,7 @@ async function fetchVercelData(profileId, nick = null) {
 
 // --- FUNÇÃO 1: Snapshot (Uso do Admin) ---
 exports.updateEloSnapshot = onCall({ timeoutSeconds: 540, memory: "256MiB" }, async (request) => {
-  const db = getFirestore();
+  const db = getFirestore("mythosdraft-prod");
   const snapshot = await db.collection("forja_players").get();
   
   const players = snapshot.docs
@@ -164,7 +164,7 @@ exports.updateEloSnapshot = onCall({ timeoutSeconds: 540, memory: "256MiB" }, as
 });
 
 // --- FUNÇÃO 2: Busca Individual ---
-exports.fetchaomprofile = onRequest({ cors: ["https://mythosdraft.com", "http://localhost:5173", "http://localhost:3000"] }, async (req, res) => {
+exports.fetchAomProfile = onRequest({ cors: true }, async (req, res) => {
   const profileId = req.query.id;
   if (!profileId) return res.status(400).send("ID ausente");
   const result = await fetchVercelData(profileId);

@@ -81,9 +81,12 @@ export interface RankedPlayer extends ForjaPlayer {
  * - Players is_reserve === true são incluídos por último (sem tier)
  */
 export function computeRankedPlayers(players: ForjaPlayer[]): RankedPlayer[] {
+  // Filtra banidos
+  const nonBanned = players.filter(p => p.status !== 'banned');
+
   // Separa reservas e participantes ativos
-  const active  = players.filter(p => !p.is_reserve);
-  const reserve = players.filter(p => p.is_reserve);
+  const active  = nonBanned.filter(p => !p.is_reserve);
+  const reserve = nonBanned.filter(p => p.is_reserve);
 
   // Sort decrescente por effectiveElo, tiebreak por elo_tg
   const sorted = [...active].sort((a, b) => {

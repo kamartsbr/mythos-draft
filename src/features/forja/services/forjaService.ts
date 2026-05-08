@@ -71,13 +71,19 @@ export function subscribeToForjaPlayers(
   // Removido orderBy para evitar que documentos sem o campo registered_at sumam da lista
   const q = query(collection(db, PLAYERS_COL));
   return onSnapshot(q,
-    snap => onData(snap.docs.map(d => ({ ...(d.data() as ForjaPlayer), discord_id: d.id }))),
+    snap => {
+      const players = snap.docs
+        .map(d => ({ ...(d.data() as ForjaPlayer), discord_id: d.id }));
+      onData(players);
+    },
     err  => { console.error('[Forja] players:', err); onError?.(err); }
   );
 }
 
 export async function isPlayerRegistered(discordId: string): Promise<boolean> {
-  return (await getDoc(doc(db, PLAYERS_COL, discordId))).exists();
+  const snap = await getDoc(doc(db, PLAYERS_COL, discordId));
+  if (!snap.exists()) return false;
+  return snap.data().status !== 'banned';
 }
 
 export const ESPORTS_ELO_OVERRIDES: Record<string, number> = {
@@ -144,6 +150,26 @@ export async function removeForjaPlayer(discordId: string): Promise<void> {
   await deleteDoc(doc(db, PLAYERS_COL, discordId));
 }
 
+export async function banForjaPlayer(discordId: string, nick: string): Promise<void> {
+  await setDoc(doc(db, 'forja_bans', discordId), {
+    discord_id: discordId,
+    nick,
+    banned_at: serverTimestamp(),
+  });
+  // Soft delete: set status to banned instead of removing the document
+  await updateDoc(doc(db, PLAYERS_COL, discordId), { status: 'banned' });
+}
+
+export async function unbanForjaPlayer(discordId: string): Promise<void> {
+  await deleteDoc(doc(db, 'forja_bans', discordId));
+  await updateDoc(doc(db, PLAYERS_COL, discordId), { status: 'available' });
+}
+
+export async function isPlayerBanned(discordId: string): Promise<boolean> {
+  const snap = await getDoc(doc(db, 'forja_bans', discordId));
+  return snap.exists();
+}
+
 export async function setPlayerTier(discordId: string, tier: ForjaTier, seed?: number): Promise<void> {
   await updateDoc(doc(db, PLAYERS_COL, discordId), {
     tier,
@@ -181,6 +207,8 @@ export interface AdminPlayerFields {
   top_gods_admin?: string[];          // Array flexível de god IDs (1–5)
   esports_elo_enabled?: boolean;      // Toggle Esports ELO
   esports_elo_value?: number | null;  // Valor manual (só usado quando enabled)
+  elo_1v1?: number | null;            // Manual ELO 1v1 overwrite
+  elo_tg?: number | null;             // Manual ELO TG overwrite
   is_reserve?: boolean;               // Banco de Reservas
 }
 
@@ -196,6 +224,8 @@ export async function updatePlayerAdminFields(
   }
   if (fields.esports_elo_enabled !== undefined) payload['esports_elo_enabled'] = fields.esports_elo_enabled;
   if (fields.esports_elo_value   !== undefined) payload['esports_elo_value']   = fields.esports_elo_value;
+  if (fields.elo_1v1             !== undefined) payload['elo_1v1']             = fields.elo_1v1;
+  if (fields.elo_tg              !== undefined) payload['elo_tg']              = fields.elo_tg;
   if (fields.is_reserve          !== undefined) payload['is_reserve']          = fields.is_reserve;
 
   // Garantia absoluta para não enviar undefined ao Firestore
@@ -471,7 +501,11 @@ export async function resetForjaDraft(): Promise<void> {
   const teamsSnap   = await getDocs(collection(db, TEAMS_COL));
   const playersSnap = await getDocs(collection(db, PLAYERS_COL));
   teamsSnap.docs.forEach(d => batch.delete(d.ref));
-  playersSnap.docs.forEach(d => batch.update(d.ref, { status: 'available', team_id: null }));
+  playersSnap.docs.forEach(d => {
+    if (d.data().status !== 'banned') {
+      batch.update(d.ref, { status: 'available', team_id: null });
+    }
+  });
   await batch.commit();
 }
 
@@ -663,7 +697,11 @@ export async function deleteForjaTeam(teamId: string): Promise<void> {
   const playersSnap = await getDocs(collection(db, PLAYERS_COL));
   playersSnap.docs.forEach(d => {
     if (d.data().team_id === teamId) {
-      batch.update(d.ref, { team_id: null, status: 'available' });
+      if (d.data().status !== 'banned') {
+        batch.update(d.ref, { team_id: null, status: 'available' });
+      } else {
+        batch.update(d.ref, { team_id: null });
+      }
     }
   });
   batch.delete(doc(db, TEAMS_COL, teamId));

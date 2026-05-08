@@ -5,7 +5,7 @@
  */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ForjaDiscordUser, ForjaRegistrationForm, AomProfileData } from '../types';
-import { parseAomProfileId, registerForjaPlayer, isPlayerRegistered } from '../services/forjaService';
+import { parseAomProfileId, registerForjaPlayer, isPlayerRegistered, isPlayerBanned } from '../services/forjaService';
 import { useForjaSettings, useForjaContent } from '../hooks/useForjaContent';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -25,7 +25,7 @@ interface Props {
   onSuccess: () => void;
 }
 
-type Step = 'login' | 'check' | 'form' | 'submitting' | 'done' | 'already' | 'closed';
+type Step = 'login' | 'check' | 'form' | 'submitting' | 'done' | 'already' | 'closed' | 'banned';
 
 // ─── Countdown Hook ───────────────────────────────────────────────────────────
 function useCountdown(targetMs: number) {
@@ -117,6 +117,17 @@ function AlreadyRegistered({ onClose }: { onClose: () => void }) {
       <h3 className="forja-modal-step__title">Você já está inscrito!</h3>
       <p className="forja-modal-step__desc">Fique de olho no Discord para atualizações sobre o torneio.</p>
       <button className="forja-btn forja-btn--primary" onClick={onClose} style={{ width: '100%' }}>Fechar</button>
+    </div>
+  );
+}
+
+function BannedUser({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="forja-modal-step">
+      <div style={{ fontSize: '3rem' }}>🚫</div>
+      <h3 className="forja-modal-step__title">Inscrição Bloqueada</h3>
+      <p className="forja-modal-step__desc" style={{ color: '#fca5a5' }}>Você foi banido ou impedido de participar deste torneio.</p>
+      <button className="forja-btn forja-btn--ghost" onClick={onClose} style={{ width: '100%' }}>Fechar</button>
     </div>
   );
 }
@@ -544,10 +555,21 @@ export default function ForjaRegistrationModal({ isOpen, onClose, discordUser, o
     const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
     if (IS_DEV) { setStep('form'); return; }
 
-    isPlayerRegistered(discordUser.discord_id)
-      .then(reg => setStep(reg ? 'already' : 'form'))
+    Promise.all([
+      isPlayerRegistered(discordUser.discord_id),
+      isPlayerBanned(discordUser.discord_id)
+    ])
+      .then(([isRegistered, isBanned]) => {
+        if (isBanned) {
+          setStep('banned');
+        } else if (isRegistered) {
+          setStep('already');
+        } else {
+          setStep('form');
+        }
+      })
       .catch(err => {
-        console.error('[Forja] Error checking registration:', err);
+        console.error('[Forja] Error checking registration/bans:', err);
         setSubmitError('Erro de conexão. Tente novamente.');
       });
   }, [isOpen, discordUser, registrationOpen]);
@@ -621,6 +643,7 @@ export default function ForjaRegistrationModal({ isOpen, onClose, discordUser, o
           {step === 'login'      && <LoginGate onLogin={onLoginRequest} onClose={onClose} />}
           {step === 'closed'     && <RegistrationClosed onClose={onClose} />}
           {step === 'already'    && <AlreadyRegistered onClose={onClose} />}
+          {step === 'banned'     && <BannedUser onClose={onClose} />}
           {step === 'done'       && <RegistrationDone onClose={onClose} />}
           {step === 'form'       && discordUser && (
             <RegistrationForm

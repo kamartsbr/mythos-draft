@@ -8,7 +8,7 @@
 export type FirestoreTimestamp = { seconds: number; nanoseconds: number } | number | null;
 
 // ─── Jogador ─────────────────────────────────────────────────────────────────
-export type ForjaPlayerStatus = 'available' | 'drafted' | 'reserve' | 'rejected' | 'pending';
+export type ForjaPlayerStatus = 'available' | 'drafted' | 'reserve' | 'rejected' | 'pending' | 'banned';
 export type ForjaTier = 'A' | 'B' | 'C' | null;
 export type ForjaRole = 'player' | 'admin';
 

@@ -68,7 +68,8 @@ export function subscribeToForjaPlayers(
   onData: (players: ForjaPlayer[]) => void,
   onError?: (err: Error) => void
 ): Unsubscribe {
-  const q = query(collection(db, PLAYERS_COL), orderBy('registered_at', 'asc'));
+  // Removido orderBy para evitar que documentos sem o campo registered_at sumam da lista
+  const q = query(collection(db, PLAYERS_COL));
   return onSnapshot(q,
     snap => onData(snap.docs.map(d => ({ ...(d.data() as ForjaPlayer), discord_id: d.id }))),
     err  => { console.error('[Forja] players:', err); onError?.(err); }
@@ -189,10 +190,21 @@ export async function updatePlayerAdminFields(
   fields: AdminPlayerFields
 ): Promise<void> {
   const payload: Record<string, unknown> = {};
-  if (fields.top_gods_admin !== undefined)   payload['top_gods_admin']    = fields.top_gods_admin;
+  if (fields.top_gods_admin !== undefined) {
+    // Filtra undefineds do array, Firebase odeia undefined em arrays
+    payload['top_gods_admin'] = fields.top_gods_admin.filter(g => g !== undefined && g !== null);
+  }
   if (fields.esports_elo_enabled !== undefined) payload['esports_elo_enabled'] = fields.esports_elo_enabled;
   if (fields.esports_elo_value   !== undefined) payload['esports_elo_value']   = fields.esports_elo_value;
-  if (fields.is_reserve          !== undefined) payload['is_reserve']           = fields.is_reserve;
+  if (fields.is_reserve          !== undefined) payload['is_reserve']          = fields.is_reserve;
+
+  // Garantia absoluta para não enviar undefined ao Firestore
+  Object.keys(payload).forEach(key => {
+    if (payload[key] === undefined) {
+      delete payload[key];
+    }
+  });
+
   if (Object.keys(payload).length === 0) return;
   await updateDoc(doc(db, PLAYERS_COL, discordId), payload);
 }

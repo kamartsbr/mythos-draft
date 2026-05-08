@@ -34,13 +34,9 @@ export function getTierByRank(rank: number): ForjaTier {
  *  3. elo_1v1 (padrão)
  */
 export function getEffectiveElo(player: ForjaPlayer): number {
-  if (player.esports_elo_enabled && player.esports_elo_value != null) {
-    return player.esports_elo_value;
-  }
-  if (player.esports_elo && player.esports_elo > 0) {
-    return player.esports_elo;
-  }
-  return player.elo_1v1 ?? 0;
+  const elo1v1 = player.elo_1v1 ?? 0;
+  const eloTg = player.elo_tg ?? 0;
+  return Math.round((elo1v1 + eloTg) / 2);
 }
 
 /**

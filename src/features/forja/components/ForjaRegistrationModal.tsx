@@ -546,7 +546,36 @@ export default function ForjaRegistrationModal({ isOpen, onClose, discordUser, o
     if (!discordUser) return;
     setStep('submitting');
     try {
-      await registerForjaPlayer(discordUser, form);
+      // 1. Tenta buscar os dados da API para injetar no cadastro
+      let finalData = form.aom_profile_data;
+      const profileId = parseAomProfileId(form.aomstats_url);
+      
+      if (profileId) {
+        try {
+          // Fallback obrigatório: timeout ou erro na Vercel/Cloud Function ignora silenciosamente
+          const res = await fetch(`https://us-central1-mythos-draft.cloudfunctions.net/fetchAomProfile?id=${profileId}`);
+          if (res.ok) {
+            const json = await res.json();
+            if (json.success && json.data) {
+              finalData = {
+                profile_id: profileId,
+                avatar_url: json.data.avatar_url,
+                elo_1v1: json.data.elo_1v1,
+                elo_tg: json.data.elo_tg,
+                elo_efetivo: json.data.elo_efetivo,
+                top_gods: json.data.top_gods
+              };
+            }
+          }
+        } catch (fetchError) {
+          console.warn('[Forja] Erro silencioso ao buscar dados adicionais no cadastro:', fetchError);
+        }
+      }
+
+      const finalForm = { ...form, aom_profile_data: finalData };
+
+      // 2. Registra no banco
+      await registerForjaPlayer(discordUser, finalForm);
       setStep('done');
       onSuccess();
     } catch (err: any) {

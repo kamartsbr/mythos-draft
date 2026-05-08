@@ -1,5 +1,5 @@
 /* eslint-disable */
-// Build Final Corrigido (Preservação de Dados + Elo Efetivo) - 07/05/2026
+// Build Final Corrigido (Batch + Throttling + Filtros Seguros) - 07/05/2026
 
 const { onCall, onRequest } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2");
@@ -13,8 +13,9 @@ setGlobalOptions({ region: "us-central1" });
 
 const API_KEY = 'mythosdraftweb_8b73781cc25e8f45b77bb760146a19dad427168c22fa8cad';
 const TARGET_ORIGIN = 'https://mythosdraft.com';
-const CHUNK_SIZE = 6;
-const DELAY_BETWEEN_CHUNKS_MS = 1200;
+
+// Substituímos os "Lotes" por um delay individual contínuo para evitar bloqueio da API (Rate Limit 429)
+const DELAY_BETWEEN_PLAYERS_MS = 200; 
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -50,19 +51,26 @@ async function fetchVercelData(profileId, nick = null) {
     const s1v1 = stats.find(s => s.mode === "Sup 1v1");
     const sTG = stats.find(s => s.mode === "Sup Team" || s.mode === "Team" || s.mode === "Sup TG");
 
-    const calc_elo_1v1 = s1v1 ? parseInt(s1v1.elo, 10) : 0;
-    const calc_elo_tg = sTG ? parseInt(sTG.elo, 10) : 0;
+    // FILTRO SEGURO 1: Previne NaN caso a API envie um ELO corrompido/nulo
+    const calc_elo_1v1 = s1v1 ? (parseInt(s1v1.elo, 10) || 0) : 0;
+    const calc_elo_tg = sTG ? (parseInt(sTG.elo, 10) || 0) : 0;
     const calc_elo_efetivo = Math.round((calc_elo_1v1 + calc_elo_tg) / 2);
+
+    // FILTRO SEGURO 2: Bloqueia strings vazias e 'undefined' no array de deuses
+    const top_gods_safe = (Array.isArray(godsRes.data) && godsRes.data.length > 0)
+      ? godsRes.data
+          .map(g => g && g.god)
+          .filter(g => typeof g === 'string' && g.trim() !== '') // Remove qualquer sujeira
+          .slice(0, 5)
+      : null;
 
     return {
       isError: false,
-      avatar_url: data.playerAvatarUrl || null, // Mudado para null se vazio
+      avatar_url: data.playerAvatarUrl || null, 
       elo_1v1: calc_elo_1v1,
       elo_tg: calc_elo_tg,
       elo_efetivo: calc_elo_efetivo,
-      top_gods: (Array.isArray(godsRes.data) && godsRes.data.length > 0) 
-        ? godsRes.data.slice(0, 5).map(g => g.god) 
-        : null // Retorna null se não houver deuses
+      top_gods: top_gods_safe 
     };
   } catch (e) { 
     return { isError: true, message: e.message, status: e.response?.status }; 
@@ -74,51 +82,57 @@ exports.updateEloSnapshot = onCall({ timeoutSeconds: 300, memory: "256MiB" }, as
   const db = getFirestore("mythosdraft-prod");
   const snapshot = await db.collection("forja_players").get();
   
-  const debugInfo = { apiErrors: [], sampleResult: null };
   const players = snapshot.docs
     .map(doc => ({ ref: doc.ref, data: doc.data(), nick: doc.data().nick }))
     .filter(p => p.data.aom_profile_id || p.data.aom_id);
 
   let updatedCount = 0;
+  let operationCount = 0;
+  
+  // Usando BATCH em vez de UPDATE solto para economizar quotas e evitar crash concorrente
+  let batch = db.batch();
 
   if (players.length > 0) {
-    const lotes = [];
-    for (let i = 0; i < players.length; i += CHUNK_SIZE) {
-      lotes.push(players.slice(i, i + CHUNK_SIZE));
-    }
+    for (const player of players) {
+      // THROTTLING: Pausa respiratória entre jogadores para não afogar a API do Scooby
+      await delay(DELAY_BETWEEN_PLAYERS_MS);
 
-    for (let i = 0; i < lotes.length; i++) {
-      await Promise.allSettled(lotes[i].map(async (player) => {
-        const stats = await fetchVercelData(player.data.aom_profile_id || player.data.aom_id, player.nick);
-        
-        if (stats && !stats.isError) {
-          // MONTAGEM DINÂMICA DO UPDATE (O segredo para não apagar nada)
-          const updateObj = {
-            elo_1v1: stats.elo_1v1,
-            elo_tg: stats.elo_tg,
-            elo_efetivo: stats.elo_efetivo,
-            elo_snapshot: stats.elo_1v1,
-            last_update: admin.firestore.FieldValue.serverTimestamp()
-          };
+      const stats = await fetchVercelData(player.data.aom_profile_id || player.data.aom_id, player.nick);
+      
+      if (stats && !stats.isError) {
+        const updateObj = {
+          elo_1v1: stats.elo_1v1,
+          elo_tg: stats.elo_tg,
+          elo_efetivo: stats.elo_efetivo,
+          elo_snapshot: stats.elo_1v1,
+          last_update: admin.firestore.FieldValue.serverTimestamp()
+        };
 
-          // SÓ ATUALIZA O AVATAR SE A API TROUXER UM NOVO
-          if (stats.avatar_url) {
-            updateObj.avatar_url = stats.avatar_url;
-          }
-
-          // SÓ ATUALIZA OS DEUSES SE A API TROUXER ALGO
-          // Se stats.top_gods for null (vazio na API), esse campo nem entra no updateObj
-          // Assim, o que já existe no banco (Kama e Cabral) é PRESERVADO.
-          if (stats.top_gods && stats.top_gods.length > 0) {
-            updateObj.top_gods = stats.top_gods;
-          }
-
-          // .update() garante que campos como 'esports_elo', 'role', etc, fiquem intactos
-          await player.ref.update(updateObj);
-          updatedCount++;
+        if (stats.avatar_url) {
+          updateObj.avatar_url = stats.avatar_url;
         }
-      }));
-      if (i < lotes.length - 1) await delay(DELAY_BETWEEN_CHUNKS_MS);
+
+        if (stats.top_gods && stats.top_gods.length > 0) {
+          updateObj.top_gods = stats.top_gods;
+        }
+
+        // SET com MERGE: Seguro contra alterações simultâneas no banco (substitui o .update)
+        batch.set(player.ref, updateObj, { merge: true });
+        updatedCount++;
+        operationCount++;
+
+        // O Firestore limita a 500 operações por batch. Se passar de 400, comita e abre outro.
+        if (operationCount >= 400) {
+          await batch.commit();
+          batch = db.batch();
+          operationCount = 0;
+        }
+      }
+    }
+    
+    // Comita os jogadores restantes
+    if (operationCount > 0) {
+      await batch.commit();
     }
   }
 

@@ -3,7 +3,7 @@ import { ForjaViewProps } from '../types';
 import { useForjaTeams } from '../hooks/useForjaTeams';
 import { db } from '../../../firebase';
 import { collection, query, where, getDocs, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
-import { DraftConfig } from '../../../types';
+import { LobbyConfig } from '../../../types';
 import { MAJOR_GODS } from '../../../data/gods';
 import { FORJA_MAP_POOL } from '../../../constants';
 
@@ -15,6 +15,7 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
   // Formulário Admin
   const [selectedTeamA, setSelectedTeamA] = useState('');
   const [selectedTeamB, setSelectedTeamB] = useState('');
+  const [selectedMaps, setSelectedMaps] = useState<string[]>([]);
   const [matchStage, setMatchStage] = useState<'GROUP' | 'PLAYOFFS_BO3' | 'PLAYOFFS_BO5'>('GROUP');
   const [matchGroup, setMatchGroup] = useState<string>('A');
 
@@ -52,7 +53,7 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
     const stageLabel = matchStage === 'GROUP' ? 'Fase de Grupos' : (matchStage === 'PLAYOFFS_BO3' ? 'Playoffs (BO3)' : 'Playoffs (BO5)');
     const matchName = `FdH ${stageLabel} - ${teamA?.team_name} x ${teamB?.team_name}`;
 
-    const config: DraftConfig = {
+    const config: LobbyConfig = {
       name: matchName,
       preset: 'FORJA',
       tournamentStage: matchStage,
@@ -67,6 +68,8 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
       mapBanCount: 0,
       banCount: 0,
       acePick: false,
+      acePickHidden: false,
+      isPrivate: false,
       isExclusive: false,
       pickType: 'alternated',
       firstMapRandom: false,

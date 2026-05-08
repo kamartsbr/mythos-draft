@@ -25,45 +25,11 @@ export default defineConfig(({ mode }) => {
            * REGRAS DE CACHE EM TEMPO DE EXECUÇÃO
            *
            * ORDEM IMPORTA: o Workbox usa o primeiro match que encontrar.
-           * As regras de "Não mexa aqui" (NetworkOnly) vêm PRIMEIRO,
-           * antes de qualquer regra de cache de assets estáticos.
            *
            * Cobre:
-           *  - firestore.googleapis.com  (real-time listen / long-polling WebSocket)
-           *  - firebase.googleapis.com   (Firebase SDK geral)
-           *  - identitytoolkit           (Auth)
-           *  - securetoken               (Refresh de tokens)
-           *  - accounts.google.com       (OAuth)
-           *  - *.googleapis.com          (wildcard — captura qualquer subdomínio novo)
+           *  - Avatar do Discord (NetworkFirst)
            */
           runtimeCaching: [
-            // ── Firebase / Google APIs — NetworkOnly (NUNCA cachear) ──────
-            {
-              urlPattern: /^https:\/\/firestore\.googleapis\.com\/.*/,
-              handler: 'NetworkOnly',
-            },
-            {
-              urlPattern: /^https:\/\/firebase\.googleapis\.com\/.*/,
-              handler: 'NetworkOnly',
-            },
-            {
-              urlPattern: /^https:\/\/identitytoolkit\.googleapis\.com\/.*/,
-              handler: 'NetworkOnly',
-            },
-            {
-              urlPattern: /^https:\/\/securetoken\.googleapis\.com\/.*/,
-              handler: 'NetworkOnly',
-            },
-            {
-              urlPattern: /^https:\/\/accounts\.google\.com\/.*/,
-              handler: 'NetworkOnly',
-            },
-            // Wildcard final para qualquer subdomínio *.googleapis.com
-            // que a SDK do Firebase possa usar no futuro
-            {
-              urlPattern: /^https:\/\/[a-z0-9-]+\.googleapis\.com\/.*/,
-              handler: 'NetworkOnly',
-            },
             // ── Discord CDN (avatares) — NetworkFirst ─────────────────────
             {
               urlPattern: /^https:\/\/cdn\.discordapp\.com\/.*/,

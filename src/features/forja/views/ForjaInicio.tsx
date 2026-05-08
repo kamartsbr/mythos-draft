@@ -105,7 +105,7 @@ function PlayerCard({
   const canClick  = isAdmin || isOwnCard;
 
   // CÁLCULO ELO EFETIVO (MÉDIA)
-  const effectiveElo = player.elo_efetivo || Math.round(((player.elo_1v1 || 0) + (player.elo_tg || 0)) / 2);
+  const effectiveElo = player.effectiveElo || Math.round(((player.elo_1v1 || 0) + (player.elo_tg || 0)) / 2);
 
   const handleRemove = async () => {
     if (!window.confirm(`Remover a inscrição de ${player.nick}?`)) return;
@@ -130,9 +130,15 @@ function PlayerCard({
       {/* Esports Badge */}
       {esportsEloValue && (
         <div className="forja-seed-badge" style={{
-          right: '2.5rem', background: 'rgba(245,158,11,0.2)',
-          color: '#f59e0b', borderColor: 'rgba(245,158,11,0.5)',
-        }}>CAPITÃO</div>
+          right: '2.5rem', 
+          background: 'linear-gradient(135deg, rgba(245,158,11,0.2) 0%, rgba(217,119,6,0.3) 100%)',
+          color: '#fcd34d', 
+          borderColor: 'rgba(245,158,11,0.6)',
+          textShadow: '0 0 5px rgba(245,158,11,0.4)',
+          fontWeight: 800,
+          padding: '0.15rem 0.5rem',
+          boxShadow: '0 0 10px rgba(245,158,11,0.1)'
+        }}>🏆 PRO: {esportsEloValue}</div>
       )}
 
       {/* Admin Remove */}
@@ -327,7 +333,7 @@ function PlayerTable({ players, isAdmin }: { players: RankedPlayer[]; isAdmin: b
         <tbody>
           {players.map((p, idx) => {
             const esportsEloValue = getEsportsEloDisplay(p);
-            const effectiveElo = p.elo_efetivo || Math.round(((p.elo_1v1 || 0) + (p.elo_tg || 0)) / 2);
+            const effectiveElo = p.effectiveElo || Math.round(((p.elo_1v1 || 0) + (p.elo_tg || 0)) / 2);
             const prevTier = idx > 0 ? players[idx - 1].computedTier : null;
             const needsSep = p.computedTier && p.computedTier !== prevTier && !p.is_reserve;
 

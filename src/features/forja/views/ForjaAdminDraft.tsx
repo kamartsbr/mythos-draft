@@ -43,7 +43,7 @@ function PlayerEditModal({ player, onClose, onSave }: { player: ForjaPlayer, onC
   const [eloTg, setEloTg] = useState(player.elo_tg || 0);
   // @ts-ignore - forçando a leitura caso não exista na tipagem
   const [esportsElo, setEsportsElo] = useState(player.esports_elo || 0);
-  const [gods, setGods] = useState((player.top_gods || []).join(', '));
+  const [gods, setGods] = useState((player.top_gods_admin || player.top_gods?.map(g => g.god) || []).join(', '));
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -53,14 +53,13 @@ function PlayerEditModal({ player, onClose, onSave }: { player: ForjaPlayer, onC
     
     await onSave(player.discord_id, {
       nick,
-      aom_profile_id: profileId ? profileId : null,
+      aom_profile_id: profileId ? Number(profileId) : null,
       avatar_url: avatarUrl,
       elo_1v1: Number(elo1v1),
       elo_tg: Number(eloTg),
-      // @ts-ignore
       esports_elo: Number(esportsElo),
-      top_gods: topGodsArray
-    });
+      top_gods_admin: topGodsArray
+    } as any);
     
     setIsSaving(false);
     onClose();
@@ -279,6 +278,9 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
   const [isBusy, setIsBusy]                     = useState(false);
   const [error, setError]                       = useState<string | null>(null);
   
+  // ESTADO NOVO: Feedback visual enquanto o Snapshot roda
+  const [isSnapshotLoading, setIsSnapshotLoading] = useState(false);
+
   // Estado para controlar quem estamos editando manualmente
   const [editingPlayer, setEditingPlayer] = useState<ForjaPlayer | null>(null);
 
@@ -363,25 +365,33 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
     finally { setIsBusy(false); }
   };
 
-  // ── Snapshot ELO (Backend) ───────────────────────────────────────────────
+  // ── Snapshot ELO (Backend) Atualizado ────────────────────────────────────
   const handleSnapshot = async () => {
-    if (!confirm(`Atenção: Isso vai iniciar o processamento em lote no servidor para atualizar o ELO e Top Deuses de todos os ${players.length} inscritos. Deseja continuar?`)) return;
+    if (!confirm(`Atenção: Isso vai iniciar o processamento no servidor para atualizar o ELO e Top Deuses de todos os ${players.length} inscritos. Pode levar alguns minutos.\nDeseja continuar?`)) return;
     
     setIsBusy(true); 
+    setIsSnapshotLoading(true); // Liga o feedback visual
     setError(null);
 
     try {
       const functions = getFunctions(undefined, 'us-central1');
-      const runSnapshot = httpsCallable(functionsObj, 'updateEloSnapshot');
+      // Passando timeout estendido para o Firebase não cortar a requisição cedo demais
+      const runSnapshot = httpsCallable(functions, 'updateEloSnapshot', { timeout: 300000 }); 
       const result = await runSnapshot();
       
       alert(`Snapshot finalizado com sucesso!`);
       console.log("Resultado do Snapshot:", result.data);
     } catch (err: any) {
       console.error("[Forja Snapshot] Erro:", err);
-      setError("Falha ao rodar o Snapshot: " + err.message);
+      // Se ainda der deadline-exceeded, o admin sabe que o servidor tá trabalhando pelas costas.
+      if (err.code === 'deadline-exceeded') {
+        alert("O servidor está demorando um pouco mais que o esperado, mas a atualização continua rodando nos bastidores. Aguarde alguns minutos e atualize a página.");
+      } else {
+        setError("Falha ao rodar o Snapshot: " + err.message);
+      }
     } finally {
       setIsBusy(false);
+      setIsSnapshotLoading(false); // Desliga o feedback visual
     }
   };
 
@@ -420,21 +430,22 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
           {!isDraftActive && (
             <>
+              {/* Botão de Snapshot Atualizado */}
               <button
                 className="forja-btn forja-btn--ghost"
                 style={{ borderColor: '#60a5fa', color: '#60a5fa' }}
                 onClick={handleSnapshot}
-                disabled={isBusy}
+                disabled={isBusy || isSnapshotLoading}
               >
-                {isBusy ? '📸 Atualizando Servidor...' : '📸 Snapshot de ELO'}
+                {isSnapshotLoading ? '🔄 Atualizando... (Aguarde)' : '📸 Snapshot de ELO'}
               </button>
               <button
                 id="forja-admin-start-draft-btn"
                 className="forja-btn forja-btn--primary"
                 onClick={handleStartDraft}
-                disabled={isBusy || selectedCaptains.length < 2}
+                disabled={isBusy || selectedCaptains.length < 2 || isSnapshotLoading}
               >
-                {isBusy ? '⏳ Iniciando...' : '🚀 Iniciar Draft'}
+                {isBusy && !isSnapshotLoading ? '⏳ Iniciando...' : '🚀 Iniciar Draft'}
               </button>
             </>
           )}

@@ -50,7 +50,7 @@ function useAomProfileVerify() {
     setLoading(true); setError(null); setData(null);
     try {
       // Chama a Cloud Function que criamos
-      const url = `https://us-central1-boxwood-plating-368522.cloudfunctions.net/fetchaomprofile?id=${profileId}`;
+      const url = `https://us-central1-mythos-draft.cloudfunctions.net/fetchAomProfile?id=${profileId}`;
       const res = await fetch(url);
       const json = await res.json();
       
@@ -542,7 +542,7 @@ function RegistrationForm({ discordUser, onSubmit, onClose, submitting, deadline
 
 // ─── Main Modal ───────────────────────────────────────────────────────────────
 export default function ForjaRegistrationModal({ isOpen, onClose, discordUser, onLoginRequest, onSuccess }: Props) {
-  const [step, setStep]               = useState<Step>('check'); // INICIA EM CHECK para evitar piscar o login
+  const [step, setStep]               = useState<Step>('login');
   const [submitError, setSubmitError] = useState<string | null>(null);
   const { registrationOpen, data: settings } = useForjaSettings();
 
@@ -554,8 +554,6 @@ export default function ForjaRegistrationModal({ isOpen, onClose, discordUser, o
 
     const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
     if (IS_DEV) { setStep('form'); return; }
-
-    setStep('check'); // Garante que a tela de carregamento apareça enquanto verifica
 
     Promise.all([
       isPlayerRegistered(discordUser.discord_id),
@@ -572,9 +570,7 @@ export default function ForjaRegistrationModal({ isOpen, onClose, discordUser, o
       })
       .catch(err => {
         console.error('[Forja] Error checking registration/bans:', err);
-        // Fallback: se o banco recusar conexão, libera para o form com um aviso
-        setSubmitError('Aviso: Não conseguimos validar seu histórico, mas você pode prosseguir com a inscrição.');
-        setStep('form');
+        setSubmitError('Erro de conexão. Tente novamente.');
       });
   }, [isOpen, discordUser, registrationOpen]);
 
@@ -589,7 +585,7 @@ export default function ForjaRegistrationModal({ isOpen, onClose, discordUser, o
       if (profileId) {
         try {
           // Fallback obrigatório: timeout ou erro na Vercel/Cloud Function ignora silenciosamente
-          const url = `https://us-central1-boxwood-plating-368522.cloudfunctions.net/fetchaomprofile?id=${profileId}`;
+          const url = `https://us-central1-mythos-draft.cloudfunctions.net/fetchAomProfile?id=${profileId}`;
           const res = await fetch(url);
           if (res.ok) {
             const json = await res.json();

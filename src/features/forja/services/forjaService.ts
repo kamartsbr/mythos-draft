@@ -81,9 +81,14 @@ export function subscribeToForjaPlayers(
 }
 
 export async function isPlayerRegistered(discordId: string): Promise<boolean> {
-  const snap = await getDoc(doc(db, PLAYERS_COL, discordId));
-  if (!snap.exists()) return false;
-  return snap.data().status !== 'banned';
+  try {
+    const snap = await getDoc(doc(db, PLAYERS_COL, discordId));
+    if (!snap.exists()) return false;
+    return snap.data().status !== 'banned';
+  } catch (err) {
+    console.warn('[Forja] Could not read player registration (possibly permission denied):', err);
+    return false;
+  }
 }
 
 export const ESPORTS_ELO_OVERRIDES: Record<string, number> = {
@@ -166,8 +171,13 @@ export async function unbanForjaPlayer(discordId: string): Promise<void> {
 }
 
 export async function isPlayerBanned(discordId: string): Promise<boolean> {
-  const snap = await getDoc(doc(db, 'forja_bans', discordId));
-  return snap.exists();
+  try {
+    const snap = await getDoc(doc(db, 'forja_bans', discordId));
+    return snap.exists();
+  } catch (err) {
+    console.warn('[Forja] Could not check ban status (rules not deployed?), assuming false:', err);
+    return false;
+  }
 }
 
 export async function setPlayerTier(discordId: string, tier: ForjaTier, seed?: number): Promise<void> {

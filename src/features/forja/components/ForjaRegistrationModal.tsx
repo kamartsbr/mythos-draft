@@ -50,7 +50,7 @@ function useAomProfileVerify() {
     setLoading(true); setError(null); setData(null);
     try {
       // Chama a Cloud Function que criamos
-      const url = `https://us-central1-boxwood-plating-368522.cloudfunctions.net/fetchaomprofile?id=${profileId}`;
+      const url = `https://us-central1-boxwood-plating-368522.cloudfunctions.net/fetchAomProfile?id=${profileId}`;
       const res = await fetch(url);
       const json = await res.json();
       

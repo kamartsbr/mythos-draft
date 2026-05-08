@@ -542,7 +542,7 @@ function RegistrationForm({ discordUser, onSubmit, onClose, submitting, deadline
 
 // ─── Main Modal ───────────────────────────────────────────────────────────────
 export default function ForjaRegistrationModal({ isOpen, onClose, discordUser, onLoginRequest, onSuccess }: Props) {
-  const [step, setStep]               = useState<Step>('login');
+  const [step, setStep]               = useState<Step>('check'); // INICIA EM CHECK para evitar piscar o login
   const [submitError, setSubmitError] = useState<string | null>(null);
   const { registrationOpen, data: settings } = useForjaSettings();
 
@@ -554,6 +554,8 @@ export default function ForjaRegistrationModal({ isOpen, onClose, discordUser, o
 
     const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
     if (IS_DEV) { setStep('form'); return; }
+
+    setStep('check'); // Garante que a tela de carregamento apareça enquanto verifica
 
     Promise.all([
       isPlayerRegistered(discordUser.discord_id),
@@ -570,7 +572,9 @@ export default function ForjaRegistrationModal({ isOpen, onClose, discordUser, o
       })
       .catch(err => {
         console.error('[Forja] Error checking registration/bans:', err);
-        setSubmitError('Erro de conexão. Tente novamente.');
+        // Fallback: se o banco recusar conexão, libera para o form com um aviso
+        setSubmitError('Aviso: Não conseguimos validar seu histórico, mas você pode prosseguir com a inscrição.');
+        setStep('form');
       });
   }, [isOpen, discordUser, registrationOpen]);
 

@@ -50,7 +50,8 @@ function useAomProfileVerify() {
     setLoading(true); setError(null); setData(null);
     try {
       // Chama a Cloud Function que criamos
-      const res = await fetch(`https://us-central1-mythos-draft.cloudfunctions.net/fetchAomProfile?id=${profileId}`);
+      const url = `https://us-central1-mythos-draft.cloudfunctions.net/fetchAomProfile?id=${profileId}`;
+      const res = await fetch(url);
       const json = await res.json();
       
       if (!res.ok || !json.success) throw new Error(json.error ?? 'Perfil não encontrado');
@@ -65,7 +66,10 @@ function useAomProfileVerify() {
         top_gods: json.data.top_gods
       });
     } catch (e: any) {
-      setError(e.message ?? 'Falha ao verificar perfil');
+      const msg = e.message === 'Failed to fetch' 
+        ? 'Servidor de stats indisponível no momento'
+        : e.message ?? 'Falha ao verificar perfil';
+      setError(`${msg}. Você pode continuar o cadastro normalmente.`);
     } finally {
       setLoading(false);
     }
@@ -384,7 +388,11 @@ function RegistrationForm({ discordUser, onSubmit, onClose, submitting, deadline
           </button>
         </div>
         {urlError && <span className="forja-reg-field-error">{urlError}</span>}
-        {verifyError && <span className="forja-reg-field-error">⚠️ {verifyError}</span>}
+        {verifyError && (
+          <div className="forja-reg-hint" style={{ color: '#fcd34d', marginTop: '0.25rem' }}>
+            ⚠️ {verifyError}
+          </div>
+        )}
         {verifying && <span className="forja-reg-hint" style={{ color: '#f59e0b' }}>⏳ Buscando ELOs e Avatar...</span>}
 
         {/* Profile preview after verification */}
@@ -553,7 +561,8 @@ export default function ForjaRegistrationModal({ isOpen, onClose, discordUser, o
       if (profileId) {
         try {
           // Fallback obrigatório: timeout ou erro na Vercel/Cloud Function ignora silenciosamente
-          const res = await fetch(`https://us-central1-mythos-draft.cloudfunctions.net/fetchAomProfile?id=${profileId}`);
+          const url = `https://us-central1-mythos-draft.cloudfunctions.net/fetchAomProfile?id=${profileId}`;
+          const res = await fetch(url);
           if (res.ok) {
             const json = await res.json();
             if (json.success && json.data) {

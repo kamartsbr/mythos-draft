@@ -112,5 +112,10 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+    // ─── /forja_status ────────────────────────────────────────────────────────
+    match /forja_status/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
   }
 }

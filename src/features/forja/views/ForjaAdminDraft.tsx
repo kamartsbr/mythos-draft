@@ -2,7 +2,7 @@
  * Forja de Hefesto — Painel Admin: Snake Draft
  * Admin controla o draft ao vivo: define tiers, escolhe capitães e faz os picks.
  */
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ForjaViewProps, ForjaPlayer, ForjaTier } from '../types';
 import { useForjaPlayers } from '../hooks/useForjaPlayers';
 import { useForjaTeams }   from '../hooks/useForjaTeams';
@@ -12,6 +12,8 @@ import {
   setPlayerTier, startForjaDraft, makeDraftPick, resetForjaDraft, undoLastDraftPick, updatePlayerProfile
 } from '../services/forjaService';
 import { getFunctions, httpsCallable } from "firebase/functions";
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../../../firebase';
 
 // ─── Tier Badge ───────────────────────────────────────────────────────────────
 const TIER_COLOR: Record<string, string> = { A: '#facc15', B: '#60a5fa', C: '#94a3b8' };
@@ -278,8 +280,18 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
   const [isBusy, setIsBusy]                     = useState(false);
   const [error, setError]                       = useState<string | null>(null);
   
-  // ESTADO NOVO: Feedback visual enquanto o Snapshot roda
-  const [isSnapshotLoading, setIsSnapshotLoading] = useState(false);
+  // Estado para Snapshot Progress
+  const [snapshotProgress, setSnapshotProgress] = useState<any>(null);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const unsub = onSnapshot(doc(db, 'forja_status/snapshot'), (docSnap) => {
+      if (docSnap.exists()) {
+        setSnapshotProgress(docSnap.data());
+      }
+    });
+    return () => unsub();
+  }, [isAdmin]);
 
   // Estado para controlar quem estamos editando manualmente
   const [editingPlayer, setEditingPlayer] = useState<ForjaPlayer | null>(null);
@@ -365,33 +377,25 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
     finally { setIsBusy(false); }
   };
 
-  // ── Snapshot ELO (Backend) Atualizado ────────────────────────────────────
+  // ── Snapshot ELO (Backend) ───────────────────────────────────────────────
   const handleSnapshot = async () => {
-    if (!confirm(`Atenção: Isso vai iniciar o processamento no servidor para atualizar o ELO e Top Deuses de todos os ${players.length} inscritos. Pode levar alguns minutos.\nDeseja continuar?`)) return;
+    if (!confirm(`Atenção: Isso vai iniciar o processamento em lote no servidor para atualizar o ELO e Top Deuses de todos os ${players.length} inscritos. Deseja continuar?`)) return;
     
     setIsBusy(true); 
-    setIsSnapshotLoading(true); // Liga o feedback visual
     setError(null);
 
     try {
       const functions = getFunctions(undefined, 'us-central1');
-      // Passando timeout estendido para o Firebase não cortar a requisição cedo demais
-      const runSnapshot = httpsCallable(functions, 'updateEloSnapshot', { timeout: 300000 }); 
+      const runSnapshot = httpsCallable(functions, 'updateEloSnapshot');
       const result = await runSnapshot();
       
       alert(`Snapshot finalizado com sucesso!`);
       console.log("Resultado do Snapshot:", result.data);
     } catch (err: any) {
       console.error("[Forja Snapshot] Erro:", err);
-      // Se ainda der deadline-exceeded, o admin sabe que o servidor tá trabalhando pelas costas.
-      if (err.code === 'deadline-exceeded') {
-        alert("O servidor está demorando um pouco mais que o esperado, mas a atualização continua rodando nos bastidores. Aguarde alguns minutos e atualize a página.");
-      } else {
-        setError("Falha ao rodar o Snapshot: " + err.message);
-      }
+      setError("Falha ao rodar o Snapshot: " + err.message);
     } finally {
       setIsBusy(false);
-      setIsSnapshotLoading(false); // Desliga o feedback visual
     }
   };
 
@@ -430,22 +434,21 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
           {!isDraftActive && (
             <>
-              {/* Botão de Snapshot Atualizado */}
               <button
                 className="forja-btn forja-btn--ghost"
                 style={{ borderColor: '#60a5fa', color: '#60a5fa' }}
                 onClick={handleSnapshot}
-                disabled={isBusy || isSnapshotLoading}
+                disabled={isBusy || (snapshotProgress && snapshotProgress.status === 'running')}
               >
-                {isSnapshotLoading ? '🔄 Atualizando... (Aguarde)' : '📸 Snapshot de ELO'}
+                {isBusy || (snapshotProgress && snapshotProgress.status === 'running') ? '📸 Atualizando Servidor...' : '📸 Snapshot de ELO'}
               </button>
               <button
                 id="forja-admin-start-draft-btn"
                 className="forja-btn forja-btn--primary"
                 onClick={handleStartDraft}
-                disabled={isBusy || selectedCaptains.length < 2 || isSnapshotLoading}
+                disabled={isBusy || selectedCaptains.length < 2}
               >
-                {isBusy && !isSnapshotLoading ? '⏳ Iniciando...' : '🚀 Iniciar Draft'}
+                {isBusy ? '⏳ Iniciando...' : '🚀 Iniciar Draft'}
               </button>
             </>
           )}
@@ -473,6 +476,30 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
           </button>
         </div>
       </div>
+
+      {/* Snapshot Progress */}
+      {snapshotProgress && snapshotProgress.status === 'running' && (
+        <div style={{ background: '#1e293b', border: '1px solid #3b82f6', borderRadius: '8px', padding: '1rem', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: '#93c5fd', fontWeight: 600 }}>
+            <span>📸 Atualização de ELO/Gods em andamento...</span>
+            <span>{snapshotProgress.processed_count} / {snapshotProgress.total_players}</span>
+          </div>
+          <div style={{ width: '100%', background: '#0f172a', height: '12px', borderRadius: '6px', overflow: 'hidden' }}>
+            <div 
+              style={{ 
+                height: '100%', 
+                background: 'linear-gradient(90deg, #3b82f6, #60a5fa)', 
+                width: `${Math.min(100, Math.round(((snapshotProgress.processed_count || 0) / (snapshotProgress.total_players || 1)) * 100))}%`,
+                transition: 'width 0.3s ease'
+              }} 
+            />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem', fontSize: '0.85rem', color: '#cbd5e1' }}>
+            <span>Jogador atual: <strong style={{ color: '#fff' }}>{snapshotProgress.current_player || '...'}</strong></span>
+            <span>Atualizados com sucesso: <strong style={{ color: '#10b981' }}>{snapshotProgress.updated_count}</strong></span>
+          </div>
+        </div>
+      )}
 
       {/* Error */}
       {error && (

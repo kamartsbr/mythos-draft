@@ -50,7 +50,7 @@ function useAomProfileVerify() {
     setLoading(true); setError(null); setData(null);
     try {
       // Chama a Cloud Function que criamos
-      const url = `https://us-central1-mythos-draft.cloudfunctions.net/fetchAomProfile?id=${profileId}`;
+      const url = `https://us-central1-boxwood-plating-368522.cloudfunctions.net/fetchaomprofile?id=${profileId}`;
       const res = await fetch(url);
       const json = await res.json();
       
@@ -585,7 +585,7 @@ export default function ForjaRegistrationModal({ isOpen, onClose, discordUser, o
       if (profileId) {
         try {
           // Fallback obrigatório: timeout ou erro na Vercel/Cloud Function ignora silenciosamente
-          const url = `https://us-central1-mythos-draft.cloudfunctions.net/fetchAomProfile?id=${profileId}`;
+          const url = `https://us-central1-boxwood-plating-368522.cloudfunctions.net/fetchaomprofile?id=${profileId}`;
           const res = await fetch(url);
           if (res.ok) {
             const json = await res.json();

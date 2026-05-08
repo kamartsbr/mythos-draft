@@ -63,7 +63,9 @@ function useAomProfileVerify() {
         elo_1v1: json.data.elo_1v1,
         elo_tg: json.data.elo_tg,
         elo_efetivo: json.data.elo_efetivo,
-        top_gods: json.data.top_gods
+        top_gods: json.data.top_gods,
+        alias: null,
+        verified: false
       });
     } catch (e: any) {
       const msg = e.message === 'Failed to fetch' 
@@ -572,7 +574,9 @@ export default function ForjaRegistrationModal({ isOpen, onClose, discordUser, o
                 elo_1v1: json.data.elo_1v1,
                 elo_tg: json.data.elo_tg,
                 elo_efetivo: json.data.elo_efetivo,
-                top_gods: json.data.top_gods
+                top_gods: json.data.top_gods,
+                alias: null,
+                verified: false
               };
             }
           }

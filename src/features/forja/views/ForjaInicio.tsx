@@ -58,21 +58,19 @@ function TierSeparator({ tier }: { tier: 'A' | 'B' | 'C' }) {
 // ─── GodIcon ──────────────────────────────────────────────────────────────────
 
 function GodIcon({ god }: { god: any }) {
-  // LOG PARA TESTE DE DEPLOY - Se isso não aparecer no console, o deploy não entrou
-  console.log("DEBUG: GodIcon processando:", god); 
-
   if (!god) return null;
 
-  const godName = typeof god === 'string' ? god : (god && typeof god === 'object' && 'god' in god ? god.god : null);
+  let godName = '';
+  if (typeof god === 'string') godName = god;
+  else if (typeof god === 'object' && god.god && typeof god.god === 'string') godName = god.god;
   
-  if (!godName || typeof godName !== 'string') return null;
+  if (!godName) return null;
 
-  // Busca ultra segura
+  const lowerGodName = String(godName).toLowerCase();
+
   const godData = (MAJOR_GODS || []).find(g => {
-    if (g && typeof g.id === 'string') {
-      return g.id.toLowerCase() === godName.toLowerCase();
-    }
-    return false;
+    if (!g || !g.id || typeof g.id !== 'string') return false;
+    return String(g.id).toLowerCase() === lowerGodName;
   });
 
   return (

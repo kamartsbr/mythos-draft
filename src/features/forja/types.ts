@@ -213,6 +213,7 @@ export interface AomProfileData {
   elo_1v1: number | null;
   /** ELO do ranking Supremacy Team Game extraído do perfil */
   elo_tg: number | null;
+  elo_efetivo?: number | null;
   /** Top 5 deuses com win rate e play rate calculados do perfil */
   top_gods: ForjaGodStat[];
 }

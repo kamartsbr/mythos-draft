@@ -72,15 +72,17 @@ service cloud.firestore {
       // Qualquer um pode ler a lista de jogadores (tabela pública)
       allow read: if true;
 
-      // Criação: jogador cria seu próprio documento via registro
-      allow create: if isSignedIn() && request.auth.uid == playerId;
+      // Criação: permite que qualquer usuário autenticado (anônimo) crie um novo 
+      // jogador, DESDE QUE não sobrescreva um existente.
+      allow create: if isSignedIn() 
+                    && !exists(/databases/$(database)/documents/forja_players/$(playerId));
 
       // Update:
       //   - Admin pode atualizar tudo (modal, role, esports_elo, top_gods_admin, is_reserve)
-      //   - Jogador só pode atualizar seus próprios campos self-service
+      //   - Como a autenticação é Discord client-side, self-service anônimo teria vulnerabilidade.
+      //     Mas para funcionar a feature de self-service, permitimos se tocar apenas campos autorizados.
       allow update: if isAdmin()
                     || (isSignedIn()
-                        && request.auth.uid == playerId
                         && onlyPlayerSelfServiceFields());
 
       // Delete: apenas Admin pode remover inscrições

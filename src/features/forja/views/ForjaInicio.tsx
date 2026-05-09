@@ -8,10 +8,13 @@ import React, { useState, useMemo } from 'react';
 import { ForjaViewProps, ForjaGodStat, ForjaTier } from '../types';
 import { RankedPlayer, TIER_META, AVAILABILITY_LABELS, eloColor, getEsportsEloDisplay } from '../forjaUtils';
 import { useForjaPlayers } from '../hooks/useForjaPlayers';
+import { useForjaSettings } from '../hooks/useForjaSettings';
 import { removeForjaPlayer } from '../services/forjaService';
 import { MAJOR_GODS } from '../../../data/gods';
 import AdminPlayerModal from '../components/AdminPlayerModal';
 import PlayerSelfServiceModal from '../components/PlayerSelfServiceModal';
+import ForjaTournamentSettingsModal from '../components/ForjaTournamentSettingsModal';
+import ForjaAddPlayerModal from '../components/ForjaAddPlayerModal';
 
 // ─── TierBadge ────────────────────────────────────────────────────────────────
 
@@ -445,13 +448,31 @@ interface ForjaInicioProps extends ForjaViewProps {
 
 export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: ForjaInicioProps) {
   const { rankedPlayers, loading, error, isLive } = useForjaPlayers();
+  const { settings, maxParticipants, tierASize, isRegistrationOpen, deadlineMs } = useForjaSettings();
   const [filter, setFilter]    = useState<'all' | 'A' | 'B' | 'C' | 'reserve'>('all');
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
 
   const [adminModalPlayer,      setAdminModalPlayer]      = useState<RankedPlayer | null>(null);
   const [selfServiceModalPlayer, setSelfServiceModalPlayer] = useState<RankedPlayer | null>(null);
+  const [showSettingsModal,     setShowSettingsModal]     = useState(false);
+  const [showAddPlayerModal,    setShowAddPlayerModal]    = useState(false);
 
   const currentUserId = discordUser?.discord_id ?? null;
+
+  // Inscrições fechadas se: toggle off OU deadline passou OU máx atingido
+  const now = Date.now();
+  const deadlinePassed = deadlineMs ? now > deadlineMs : false;
+  const activePlayersCount = rankedPlayers.filter(p => !p.is_reserve).length;
+  const limitReached = activePlayersCount >= maxParticipants;
+  const registrationBlocked = !isRegistrationOpen || deadlinePassed || limitReached;
+
+  const registrationBlockReason = !isRegistrationOpen
+    ? 'Inscrições encerradas pelo organizador.'
+    : deadlinePassed
+    ? 'O prazo de inscrições encerrou.'
+    : limitReached
+    ? `Limite de ${maxParticipants} participantes atingido. Novos jogadores entram como reserva.`
+    : null;
 
   const isRegistered = useMemo(() => 
     rankedPlayers.some(p => p.discord_id === currentUserId),
@@ -464,6 +485,12 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
     } else if (currentUserId === player.discord_id) {
       setSelfServiceModalPlayer(player);
     }
+  };
+
+  // Ao clicar em Inscrever quando limite atingido, vai para reserva (via onRegisterClick normal,
+  // mas a lógica de reserva pode ser implementada no modal de registro)
+  const handleRegisterClick = () => {
+    onRegisterClick();
   };
 
   const handleLeaveTournament = async () => {
@@ -490,6 +517,22 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
     <section className="forja-view forja-view--inicio">
       <AdminPlayerModal player={adminModalPlayer} onClose={() => setAdminModalPlayer(null)} />
       <PlayerSelfServiceModal player={selfServiceModalPlayer} onClose={() => setSelfServiceModalPlayer(null)} />
+
+      {/* Modais de Admin */}
+      {showSettingsModal && discordUser && (
+        <ForjaTournamentSettingsModal
+          discordUserId={discordUser.discord_id}
+          currentSettings={settings}
+          onClose={() => setShowSettingsModal(false)}
+        />
+      )}
+      {showAddPlayerModal && discordUser && (
+        <ForjaAddPlayerModal
+          discordUserId={discordUser.discord_id}
+          discordUsername={discordUser.username}
+          onClose={() => setShowAddPlayerModal(false)}
+        />
+      )}
 
       {isRegistered ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(30,41,59,0.5)', border: '1px solid #1e293b', borderRadius: '1rem', padding: '1rem 1.5rem', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
@@ -520,8 +563,24 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
             </p>
           </div>
           <div className="forja-inicio-hero__cta">
-            <button id="forja-cta-register-btn" className="forja-btn forja-btn--primary forja-btn--lg forja-btn--glow" onClick={onRegisterClick}>
-              <span>🔥</span> Inscreva-se no Torneio
+            {/* Aviso de inscrições bloqueadas */}
+            {registrationBlockReason && (
+              <div style={{
+                background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)',
+                borderRadius: '0.75rem', padding: '0.75rem 1rem', marginBottom: '1rem',
+                color: '#fca5a5', fontSize: '0.8rem', textAlign: 'center',
+              }}>
+                🔒 {registrationBlockReason}
+              </div>
+            )}
+            <button
+              id="forja-cta-register-btn"
+              className="forja-btn forja-btn--primary forja-btn--lg forja-btn--glow"
+              onClick={handleRegisterClick}
+              disabled={!!(registrationBlocked && !limitReached)}
+              style={(registrationBlocked && !limitReached) ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+            >
+              <span>🔥</span> {limitReached ? 'Entrar como Reserva' : 'Inscreva-se no Torneio'}
             </button>
             <span className="forja-cta-note">
               {discordUser ? `Logado como ${discordUser.username}` : 'Necessário login com Discord'}
@@ -579,8 +638,32 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
       )}
 
       {isAdmin && !loading && (
-        <div className="forja-admin-banner">
-          🛡️ Modo Admin ativo — tiers calculados dinamicamente por ELO efetivo
+        <div className="forja-admin-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <span>🛡️ Modo Admin ativo — tiers calculados por ELO efetivo ({maxParticipants} participantes, Tier A: {tierASize} capitães)</span>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              id="forja-add-player-btn"
+              onClick={() => setShowAddPlayerModal(true)}
+              style={{
+                background: 'rgba(96,165,250,0.15)', border: '1px solid rgba(96,165,250,0.4)',
+                color: '#60a5fa', borderRadius: '0.5rem', padding: '0.4rem 0.875rem',
+                cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem',
+              }}
+            >
+              ➕ Adicionar Jogador
+            </button>
+            <button
+              id="forja-tournament-settings-btn"
+              onClick={() => setShowSettingsModal(true)}
+              style={{
+                background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.4)',
+                color: '#f59e0b', borderRadius: '0.5rem', padding: '0.4rem 0.875rem',
+                cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem',
+              }}
+            >
+              ⚙️ Configurações
+            </button>
+          </div>
         </div>
       )}
     </section>

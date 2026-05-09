@@ -6,21 +6,41 @@
  * ============================================================
  */
 
-import { ForjaPlayer, ForjaTier } from './types';
+import { ForjaPlayer, ForjaTier, ForjaSettings } from './types';
 
-// ─── Tiers (baseado em 48 players) ───────────────────────────────────────────
-const TIER_A_MAX = 16;
-const TIER_B_MAX = 32;
+// ─── Tiers (dinâmico baseado em settings, fallback para 48 players) ───────────
+const DEFAULT_MAX_PARTICIPANTS = 48;
+
+/**
+ * Retorna os cortes de tier com base nas configurações do torneio (Opção B).
+ * - tier_a_size: tamanho do Tier A (capitães). Default: floor(max/3)
+ * - tier_b_size: tamanho do Tier B. Default: floor((max - tierA) / 2)
+ * - Tier C: restante até max_participants
+ */
+export function getTierCutoffs(settings?: Pick<ForjaSettings, 'max_participants' | 'tier_a_size' | 'tier_b_size'>): {
+  tierAMax: number; tierBMax: number; tierASize: number; tierBSize: number; tierCSize: number;
+} {
+  const maxParticipants = settings?.max_participants ?? DEFAULT_MAX_PARTICIPANTS;
+  const tierASize = settings?.tier_a_size ?? Math.floor(maxParticipants / 3);
+  const remaining = maxParticipants - tierASize;
+  const tierBSize = settings?.tier_b_size ?? Math.floor(remaining / 2);
+  const tierCSize = maxParticipants - tierASize - tierBSize;
+  return {
+    tierAMax: tierASize,
+    tierBMax: tierASize + tierBSize,
+    tierASize,
+    tierBSize,
+    tierCSize,
+  };
+}
 
 /**
  * Retorna o Tier dinâmico com base na posição (1-indexed) no rank geral.
- * Posição 1–16  → A
- * Posição 17–32 → B
- * Posição 33–48 → C
  */
-export function getTierByRank(rank: number): ForjaTier {
-  if (rank <= TIER_A_MAX) return 'A';
-  if (rank <= TIER_B_MAX) return 'B';
+export function getTierByRank(rank: number, settings?: Pick<ForjaSettings, 'max_participants' | 'tier_a_size' | 'tier_b_size'>): ForjaTier {
+  const { tierAMax, tierBMax } = getTierCutoffs(settings);
+  if (rank <= tierAMax) return 'A';
+  if (rank <= tierBMax) return 'B';
   return 'C';
 }
 
@@ -79,12 +99,18 @@ export interface RankedPlayer extends ForjaPlayer {
  * - Ordenado do maior para o menor effectiveElo
  * - Com rank (1-indexed) e computedTier atribuídos
  * - Players is_reserve === true são incluídos por último (sem tier)
+ *
+ * @param players - Array de jogadores
+ * @param settings - Opções do torneio (para cortes dinâmicos de tier)
  */
-export function computeRankedPlayers(players: ForjaPlayer[]): RankedPlayer[] {
+export function computeRankedPlayers(players: ForjaPlayer[], settings?: Pick<ForjaSettings, 'max_participants' | 'tier_a_size' | 'tier_b_size'>): RankedPlayer[] {
   // Filtra banidos
   const nonBanned = players.filter(p => p.status !== 'banned');
 
+  const maxParticipants = settings?.max_participants ?? DEFAULT_MAX_PARTICIPANTS;
+
   // Separa reservas e participantes ativos
+  // Se houver mais ativos do que max_participants, os excedentes viram reserva implicitamente
   const active  = nonBanned.filter(p => !p.is_reserve);
   const reserve = nonBanned.filter(p => p.is_reserve);
 
@@ -96,21 +122,34 @@ export function computeRankedPlayers(players: ForjaPlayer[]): RankedPlayer[] {
     return (b.elo_tg ?? 0) - (a.elo_tg ?? 0);
   });
 
-  const rankedActive: RankedPlayer[] = sorted.map((p, idx) => ({
+  // Jogadores dentro do limite = participantes; acima do limite = reserva dinâmica
+  const withinLimit = sorted.slice(0, maxParticipants);
+  const overflow    = sorted.slice(maxParticipants);
+
+  const rankedActive: RankedPlayer[] = withinLimit.map((p, idx) => ({
     ...p,
     rank: idx + 1,
-    computedTier: getTierByRank(idx + 1),
+    computedTier: getTierByRank(idx + 1, settings),
     effectiveElo: getEffectiveElo(p),
   }));
 
-  const rankedReserve: RankedPlayer[] = reserve.map((p, idx) => ({
+  // Overflow tratado como reserva dinâmica (não altera o Firestore)
+  const overflowReserve: RankedPlayer[] = overflow.map((p, idx) => ({
     ...p,
     rank: rankedActive.length + idx + 1,
     computedTier: null,
     effectiveElo: getEffectiveElo(p),
+    is_reserve: true, // Forçado como reserva local apenas para exibição
   }));
 
-  return [...rankedActive, ...rankedReserve];
+  const rankedReserve: RankedPlayer[] = reserve.map((p, idx) => ({
+    ...p,
+    rank: rankedActive.length + overflowReserve.length + idx + 1,
+    computedTier: null,
+    effectiveElo: getEffectiveElo(p),
+  }));
+
+  return [...rankedActive, ...overflowReserve, ...rankedReserve];
 }
 
 // ─── Cor de ELO ───────────────────────────────────────────────────────────────

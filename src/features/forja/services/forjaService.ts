@@ -536,6 +536,99 @@ export function subscribeToForjaContent<T = ForjaContentDoc>(
   );
 }
 
+// ─── Settings do Torneio ──────────────────────────────────────────────────────
+
+/** Subscrição em tempo real às configurações gerais do torneio. */
+export function subscribeToForjaSettings(
+  onData: (settings: ForjaSettings | null) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  return onSnapshot(
+    doc(db, CONTENT_COL, 'settings'),
+    snap => onData(snap.exists() ? (snap.data() as ForjaSettings) : null),
+    err  => { console.error('[Forja] settings:', err); onError?.(err); }
+  );
+}
+
+/**
+ * Salva as configurações gerais do torneio (apenas Admin via Firestore Rules).
+ * Usa merge: true para não apagar campos não incluídos no update.
+ */
+export async function saveForjaSettings(
+  settings: Partial<Omit<ForjaSettings, 'updated_at'>>,
+  updatedBy: string
+): Promise<void> {
+  await setDoc(doc(db, CONTENT_COL, 'settings'), {
+    ...settings,
+    updated_at: serverTimestamp(),
+    updated_by: updatedBy,
+  }, { merge: true });
+}
+
+// ─── Adição Manual de Jogador (Admin) ────────────────────────────────────────
+
+/**
+ * Adiciona um jogador manualmente pelo Discord ID (apenas Admin).
+ * Usado quando o Admin conhece o jogador e quer inscrevê-lo sem OAuth Discord.
+ * O avatar usa o CDN do Discord como placeholder; o snapshot de ELO oficial atualiza depois.
+ */
+export async function adminRegisterPlayer(params: {
+  discordId: string;
+  nick: string;
+  aomProfileId: number;
+  elo1v1?: number;
+  eloTg?: number;
+  topGods?: any[];
+  avatarUrl?: string;
+  /** Frase de efeito do jogador (admin pode preencher pelo jogador) */
+  pitchQuote?: string;
+  /** Disponibilidade selecionada pelo admin */
+  availability?: string[];
+  /** Nacionalidade (default: brasileiro) */
+  isBrazilian?: boolean;
+  addedBy: string;
+}): Promise<void> {
+  const {
+    discordId, nick, aomProfileId, elo1v1 = 0, eloTg = 0,
+    topGods = [], avatarUrl, pitchQuote, availability = [],
+    isBrazilian = true, addedBy,
+  } = params;
+
+  // Verifica se já existe
+  const existing = await getDoc(doc(db, PLAYERS_COL, discordId));
+  if (existing.exists()) {
+    throw new Error(`Jogador com Discord ID ${discordId} já está inscrito.`);
+  }
+
+  // Avatar placeholder do CDN do Discord
+  const defaultAvatar = `https://cdn.discordapp.com/embed/avatars/${parseInt(discordId.slice(-1)) % 6}.png`;
+
+  const player: Omit<import('../types').ForjaPlayer, 'discord_id'> = {
+    aom_profile_id:     aomProfileId,
+    aom_id:             String(aomProfileId),
+    nick:               nick.trim(),
+    avatar_url:         avatarUrl || defaultAvatar,
+    discord_avatar_url: avatarUrl || defaultAvatar,
+    is_brazilian:       isBrazilian,
+    pitch_quote:        pitchQuote?.trim() || `Adicionado manualmente por ${addedBy}`,
+    availability,
+    elo_1v1:            elo1v1,
+    elo_tg:             eloTg,
+    top_gods:           topGods,
+    elo_snapshot:       elo1v1,
+    status:             'available',
+    tier:               null,
+    team_id:            null,
+    seed:               null,
+    registered_at:      serverTimestamp() as any,
+    consent_rules:      true,   // Admin assume responsabilidade
+    consent_format:     true,
+    role:               'player',
+  };
+
+  await setDoc(doc(db, PLAYERS_COL, discordId), player);
+}
+
 export async function updateForjaContent(
   docId: ForjaContentId,
   data: object,

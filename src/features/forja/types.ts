@@ -200,6 +200,19 @@ export interface ForjaSettings {
   elo_snapshot_ms: number;
   /** Unix ms do início do draft (Sáb 15:00 BRT) */
   draft_start_ms: number;
+  /** Número máximo de participantes. Inscritos acima do limite vão para reserva automática. */
+  max_participants?: number;
+  /**
+   * [Opção B] Tamanho do Tier A (capitães).
+   * Default: Math.floor(max_participants / 3)
+   */
+  tier_a_size?: number;
+  /**
+   * [Opção B] Tamanho do Tier B.
+   * Default: Math.floor((max_participants - tier_a_size) / 2)
+   * Tier C = max_participants - tier_a_size - tier_b_size
+   */
+  tier_b_size?: number;
   updated_at: FirestoreTimestamp;
 }
 

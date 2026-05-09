@@ -305,11 +305,10 @@ export const lobbyService = {
   async getLobbiesPaginated(isFirstPage: boolean = true) {
     if (IS_DEV) return getLocalIndex();
     try {
-      // 1. Define a base da query ordenada por atividade recente
       let lobbyQuery = query(
         collection(db, 'lobbies'), 
-        orderBy('createdAt', 'desc'), 
-        limit(20) // LOBBIES_PER_PAGE
+        orderBy('lastActivityAt', 'desc'), 
+        limit(40) // LOBBIES_PER_PAGE (increased to handle post-filter reductions)
       );
 
       // 2. Se n├úo for a primeira p├ígina, come├ºa ap├│s o ├║ltimo documento visto
@@ -363,8 +362,8 @@ export const lobbyService = {
       // we ensure older, but still relevant drafts are not dropped from the index queries.
       const q = query(
         collection(db, 'lobbies'),
-        orderBy('createdAt', 'desc'),
-        limit(50)
+        orderBy('lastActivityAt', 'desc'),
+        limit(100)
       );
 
       const snap = await getDocs(q);

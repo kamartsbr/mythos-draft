@@ -307,7 +307,7 @@ export const lobbyService = {
     try {
       let lobbyQuery = query(
         collection(db, 'lobbies'), 
-        orderBy('lastActivityAt', 'desc'), 
+        orderBy('createdAt', 'desc'), 
         limit(40) // LOBBIES_PER_PAGE (increased to handle post-filter reductions)
       );
 
@@ -355,14 +355,11 @@ export const lobbyService = {
       if ((this as any)._isRefreshingIndex) return;
       (this as any)._isRefreshingIndex = true;
 
-      // We use 'lastActivityAt' instead of 'createdAt' for ordering. 
-      // This is crucial because Firestore's query engine automatically excludes any documents 
-      // from the result set if they are missing the field specified in an 'orderBy' or 'where' clause. 
-      // By using a field that is consistently updated during the lifecycle of a draft, 
-      // we ensure older, but still relevant drafts are not dropped from the index queries.
+      // We use 'createdAt' for ordering to ensure a stable chronological list 
+      // where the most recently created drafts always appear first.
       const q = query(
         collection(db, 'lobbies'),
-        orderBy('lastActivityAt', 'desc'),
+        orderBy('createdAt', 'desc'),
         limit(100)
       );
 

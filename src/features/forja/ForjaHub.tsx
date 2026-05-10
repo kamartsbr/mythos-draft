@@ -265,9 +265,7 @@ export default function ForjaHub() {
       <main className="forja-tab-content">
         <Suspense fallback={<TabFallback />}>
           {activeTab === 'inicio'      && <ForjaInicio {...sharedProps} onRegisterClick={() => setShowRegModal(true)} />}
-          {activeTab === 'regras'      && (isAdmin
-            ? <ForjaRulesEditor {...sharedProps} />
-            : <ForjaRegras {...sharedProps} />)}
+          {activeTab === 'regras'      && <ForjaRulesEditor {...sharedProps} />}
           {activeTab === 'mapas'       && <ForjaMapas {...sharedProps} />}
           {activeTab === 'formato'     && <ForjaFormato {...sharedProps} />}
           {activeTab === 'schedule'    && <ForjaSchedule {...sharedProps} />}

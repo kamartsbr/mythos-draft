@@ -10,7 +10,7 @@
  */
 import React, { useState, useEffect, useRef } from 'react';
 import { RankedPlayer } from '../forjaUtils';
-import { updatePlayerAdminFields, setPlayerRole, banForjaPlayer } from '../services/forjaService';
+import { updatePlayerAdminFields, setPlayerRole, banForjaPlayer, fetchAomProfileForPlayer, AomApiResult } from '../services/forjaService';
 import { MAJOR_GODS } from '../../../data/gods';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -111,7 +111,14 @@ export default function AdminPlayerModal({ player, onClose }: AdminPlayerModalPr
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [activeSection, setActiveSection] = useState<'gods' | 'elo' | 'admin'>('gods');
+  const [activeSection, setActiveSection] = useState<'gods' | 'elo' | 'refresh' | 'admin'>('gods');
+
+  // API Refresh state
+  const [refreshOpts,    setRefreshOpts]    = useState({ elo: true, gods: true });
+  const [refreshing,     setRefreshing]     = useState(false);
+  const [refreshResult,  setRefreshResult]  = useState<AomApiResult | null>(null);
+  const [refreshApplied, setRefreshApplied] = useState(false);
+  const [refreshError,   setRefreshError]   = useState<string | null>(null);
 
   const overlayRef = useRef<HTMLDivElement>(null);
 
@@ -129,6 +136,10 @@ export default function AdminPlayerModal({ player, onClose }: AdminPlayerModalPr
     setSuccess(false);
     setGodSearch('');
     setActiveSection('gods');
+    setRefreshResult(null);
+    setRefreshError(null);
+    setRefreshApplied(false);
+    setRefreshOpts({ elo: true, gods: true });
   }, [player?.discord_id]);
 
   if (!player) return null;
@@ -253,9 +264,10 @@ export default function AdminPlayerModal({ player, onClose }: AdminPlayerModalPr
         {/* Section Tabs */}
         <div style={{ display: 'flex', borderBottom: '1px solid #1e293b', flexShrink: 0 }}>
           {([
-            { id: 'gods',  label: '⚡ Top Deuses' },
-            { id: 'elo',   label: '🏆 Esports ELO' },
-            { id: 'admin', label: '🔑 Permissões' },
+            { id: 'gods',    label: '⚡ Top Deuses' },
+            { id: 'elo',     label: '🏆 Esports ELO' },
+            { id: 'refresh', label: '🔄 API' },
+            { id: 'admin',   label: '🔑 Permissões' },
           ] as const).map(s => (
             <button key={s.id} type="button"
               onClick={() => setActiveSection(s.id)}
@@ -332,6 +344,148 @@ export default function AdminPlayerModal({ player, onClose }: AdminPlayerModalPr
               </p>
             </div>
           )}
+
+          {/* ── Section: API Refresh ── */}
+          {activeSection === 'refresh' && (() => {
+            const handleFetch = async () => {
+              setRefreshing(true); setRefreshError(null); setRefreshResult(null); setRefreshApplied(false);
+              try {
+                const result = await fetchAomProfileForPlayer(player.aom_profile_id);
+                setRefreshResult(result);
+              } catch (e: any) {
+                setRefreshError(e.message ?? 'Erro ao consultar API');
+              } finally {
+                setRefreshing(false);
+              }
+            };
+
+            const handleApply = async () => {
+              if (!refreshResult) return;
+              setSaving(true); setRefreshError(null);
+              try {
+                const payload: Record<string, unknown> = {};
+                if (refreshOpts.elo)  { payload['elo_1v1'] = refreshResult.elo_1v1; payload['elo_tg'] = refreshResult.elo_tg; }
+                if (refreshOpts.gods) { payload['top_gods'] = refreshResult.top_gods; }
+                if (Object.keys(payload).length > 0) {
+                  const { updateDoc, doc } = await import('firebase/firestore');
+                  const { db } = await import('../../../firebase');
+                  await updateDoc(doc(db, 'forja_players', player.discord_id), payload);
+                }
+                setRefreshApplied(true);
+              } catch (e: any) {
+                setRefreshError(e.message ?? 'Erro ao aplicar');
+              } finally {
+                setSaving(false);
+              }
+            };
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {/* Info do jogador */}
+                <div style={{ background: 'rgba(30,41,59,0.6)', border: '1px solid #1e293b', borderRadius: '0.75rem', padding: '0.875rem' }}>
+                  <p style={{ margin: 0, fontSize: '0.78rem', color: '#94a3b8' }}>
+                    Puxar dados frescos do <strong style={{ color: '#60a5fa' }}>aom.gg</strong> para{' '}
+                    <strong style={{ color: '#f8fafc' }}>{player.nick}</strong>
+                    {' '}(Profile ID: <code style={{ color: '#f59e0b' }}>{player.aom_profile_id}</code>)
+                  </p>
+                </div>
+
+                {/* Checkboxes */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                  <p style={{ margin: 0, fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.06em' }}>O que atualizar</p>
+                  {[{ key: 'elo', label: '🏆 ELO (1v1 + TG)', desc: 'Atualiza elo_1v1 e elo_tg no Firestore' },
+                    { key: 'gods', label: '⚡ Top Deuses', desc: 'Substitui top_gods pelos dados novos da API' },
+                  ].map(opt => (
+                    <label key={opt.key} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer',
+                      background: refreshOpts[opt.key as 'elo' | 'gods'] ? 'rgba(96,165,250,0.08)' : 'rgba(255,255,255,0.03)',
+                      border: `1px solid ${refreshOpts[opt.key as 'elo' | 'gods'] ? 'rgba(96,165,250,0.3)' : '#1e293b'}`,
+                      borderRadius: '0.6rem', padding: '0.6rem 0.875rem' }}>
+                      <input type="checkbox"
+                        checked={refreshOpts[opt.key as 'elo' | 'gods']}
+                        onChange={e => setRefreshOpts(prev => ({ ...prev, [opt.key]: e.target.checked }))}
+                        style={{ width: '1rem', height: '1rem', accentColor: '#60a5fa', cursor: 'pointer' }} />
+                      <div>
+                        <div style={{ color: '#e2e8f0', fontWeight: 600, fontSize: '0.82rem' }}>{opt.label}</div>
+                        <div style={{ color: '#64748b', fontSize: '0.68rem' }}>{opt.desc}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+
+                {/* Fetch button */}
+                <button type="button" onClick={handleFetch}
+                  disabled={refreshing || (!refreshOpts.elo && !refreshOpts.gods)}
+                  style={{ padding: '0.65rem', borderRadius: '0.6rem',
+                    background: refreshing ? '#1e293b' : 'rgba(96,165,250,0.15)',
+                    border: '1px solid rgba(96,165,250,0.4)', color: '#60a5fa',
+                    cursor: refreshing ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '0.82rem' }}>
+                  {refreshing ? '⏳ Consultando API...' : '🔄 Puxar da API'}
+                </button>
+
+                {refreshError && (
+                  <div style={{ color: '#f87171', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+                    borderRadius: '0.5rem', padding: '0.65rem', fontSize: '0.78rem' }}>
+                    ⚠️ {refreshError}
+                  </div>
+                )}
+
+                {/* Preview */}
+                {refreshResult && (
+                  <div style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: '0.75rem', padding: '1rem' }}>
+                    <p style={{ margin: '0 0 0.75rem', fontSize: '0.72rem', color: '#4ade80', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      ✓ Resultado da API — {refreshResult.alias}
+                    </p>
+                    {refreshOpts.elo && (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                        {[{ label: '1v1 ELO', old: player.elo_1v1, novo: refreshResult.elo_1v1 },
+                          { label: 'TG ELO',  old: player.elo_tg,  novo: refreshResult.elo_tg },
+                        ].map(row => (
+                          <div key={row.label} style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '0.4rem', padding: '0.5rem' }}>
+                            <div style={{ fontSize: '0.65rem', color: '#64748b', marginBottom: '0.2rem' }}>{row.label}</div>
+                            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                              <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>{row.old.toLocaleString()}</span>
+                              <span style={{ color: '#475569' }}>→</span>
+                              <span style={{ color: row.novo > row.old ? '#4ade80' : row.novo < row.old ? '#f87171' : '#94a3b8', fontWeight: 700 }}>
+                                {row.novo.toLocaleString()}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {refreshOpts.gods && (
+                      <div style={{ marginBottom: '0.5rem' }}>
+                        <div style={{ fontSize: '0.65rem', color: '#64748b', marginBottom: '0.35rem' }}>Top Deuses (novos)</div>
+                        <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+                          {(refreshResult.top_gods ?? []).slice(0, 5).map((g: any, i: number) => (
+                            <span key={i} style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)',
+                              borderRadius: '0.3rem', padding: '0.2rem 0.5rem', fontSize: '0.72rem', color: '#fcd34d' }}>
+                              {g.god ?? g.godName ?? g}
+                            </span>
+                          ))}
+                          {(refreshResult.top_gods ?? []).length === 0 && <span style={{ color: '#64748b', fontSize: '0.75rem' }}>Nenhum deus retornado</span>}
+                        </div>
+                      </div>
+                    )}
+
+                    {refreshApplied ? (
+                      <div style={{ color: '#4ade80', fontWeight: 700, fontSize: '0.82rem', textAlign: 'center', padding: '0.5rem' }}>
+                        ✓ Dados aplicados com sucesso!
+                      </div>
+                    ) : (
+                      <button type="button" onClick={handleApply} disabled={saving}
+                        style={{ width: '100%', marginTop: '0.5rem', padding: '0.65rem', borderRadius: '0.6rem',
+                          background: saving ? '#1e293b' : 'linear-gradient(135deg, #10b981, #059669)',
+                          border: 'none', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer',
+                          fontWeight: 700, fontSize: '0.82rem' }}>
+                        {saving ? '⏳ Aplicando...' : '✅ Aplicar ao Firestore'}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* ── Section: Esports ELO ── */}
           {activeSection === 'elo' && (
@@ -593,7 +747,7 @@ export default function AdminPlayerModal({ player, onClose }: AdminPlayerModalPr
             Cancelar
           </button>
 
-          {activeSection !== 'admin' && (
+          {activeSection !== 'admin' && activeSection !== 'refresh' && (
             <button
               type="button" onClick={handleSave} disabled={saving}
               id={`admin-modal-save-${player.discord_id}`}

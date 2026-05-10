@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { ForjaSettings } from '../types';
+import { ForjaSettings, ForjaTierMode } from '../types';
 import { saveForjaSettings } from '../services/forjaService';
 import { getTierCutoffs } from '../forjaUtils';
 
@@ -39,6 +39,7 @@ export default function ForjaTournamentSettingsModal({ discordUserId, currentSet
   const [maxParticipants,  setMaxParticipants]  = useState(String(currentSettings?.max_participants ?? 48));
   const [tierASize,        setTierASize]        = useState(String(currentSettings?.tier_a_size ?? 16));
   const [tierBSize,        setTierBSize]        = useState(String(currentSettings?.tier_b_size ?? 16));
+  const [tierMode,         setTierMode]         = useState<ForjaTierMode>(currentSettings?.tier_mode ?? 'ABC');
 
   useEffect(() => {
     if (!currentSettings) return;
@@ -50,13 +51,14 @@ export default function ForjaTournamentSettingsModal({ discordUserId, currentSet
     const { tierASize: a, tierBSize: b } = getTierCutoffs(currentSettings);
     setTierASize(String(a));
     setTierBSize(String(b));
+    setTierMode(currentSettings.tier_mode ?? 'ABC');
   }, [currentSettings]);
 
   // Preview em tempo real dos tamanhos de tier
-  const maxP = parseInt(maxParticipants, 10) || 48;
+  const maxP  = parseInt(maxParticipants, 10) || 48;
   const tierA = parseInt(tierASize, 10) || 0;
-  const tierB = parseInt(tierBSize, 10) || 0;
-  const tierC = Math.max(0, maxP - tierA - tierB);
+  const tierB = tierMode === 'AB' ? maxP - tierA : (parseInt(tierBSize, 10) || 0);
+  const tierC = tierMode === 'AB' ? 0 : Math.max(0, maxP - tierA - tierB);
   const tierTotal = tierA + tierB + tierC;
 
   const handleSave = async () => {
@@ -66,10 +68,16 @@ export default function ForjaTournamentSettingsModal({ discordUserId, currentSet
       return setError('Limite de participantes: entre 6 e 200.');
     if (isNaN(tierA) || tierA < 2)
       return setError('Tier A precisa de pelo menos 2 jogadores.');
-    if (isNaN(tierB) || tierB < 2)
-      return setError('Tier B precisa de pelo menos 2 jogadores.');
-    if (tierA + tierB >= maxP)
-      return setError('Tier A + Tier B não pode ser maior ou igual ao total. Precisa sobrar pelo menos 1 para Tier C.');
+    if (tierMode === 'ABC') {
+      if (isNaN(tierB) || tierB < 2)
+        return setError('Tier B precisa de pelo menos 2 jogadores.');
+      if (tierA + tierB >= maxP)
+        return setError('Tier A + Tier B não pode ser maior ou igual ao total. Precisa sobrar pelo menos 1 para Tier C.');
+    } else {
+      // Modo AB: Tier A precisa deixar espaço para pelo menos 1 jogador no pool
+      if (tierA >= maxP)
+        return setError('Tier A não pode ser igual ou maior que o total de participantes.');
+    }
 
     setSaving(true);
     try {
@@ -79,8 +87,9 @@ export default function ForjaTournamentSettingsModal({ discordUserId, currentSet
         ...(datetimeLocalToMs(snapshotLocal)   !== null && { elo_snapshot_ms: datetimeLocalToMs(snapshotLocal)! }),
         ...(datetimeLocalToMs(draftStartLocal) !== null && { draft_start_ms: datetimeLocalToMs(draftStartLocal)! }),
         max_participants: maxP,
+        tier_mode:        tierMode,
         tier_a_size:      tierA,
-        tier_b_size:      tierB,
+        ...(tierMode === 'ABC' && { tier_b_size: tierB }),
       }, discordUserId);
       setSuccess(true);
       setTimeout(() => { setSuccess(false); onClose(); }, 1200);
@@ -161,6 +170,32 @@ export default function ForjaTournamentSettingsModal({ discordUserId, currentSet
           </div>
         ))}
 
+        {/* Modo de Tiers */}
+        <p style={sectionTitle}>Modo de Tiers</p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem', marginBottom: '1rem' }}>
+          {([
+            { value: 'ABC' as ForjaTierMode, icon: '🏛️', label: 'A + B + C', desc: 'Três tiers distintos (padrão)' },
+            { value: 'AB'  as ForjaTierMode, icon: '🎯', label: 'A + Pool Livre', desc: 'Capitães + pool de jogadores (sem Tier C)' },
+          ]).map(opt => (
+            <button
+              key={opt.value}
+              type="button"
+              id={`forja-tier-mode-${opt.value.toLowerCase()}`}
+              onClick={() => setTierMode(opt.value)}
+              style={{
+                background: tierMode === opt.value ? 'rgba(245,158,11,0.12)' : 'rgba(30,41,59,0.5)',
+                border: `2px solid ${tierMode === opt.value ? 'rgba(245,158,11,0.6)' : '#1e293b'}`,
+                borderRadius: '0.75rem', padding: '0.75rem',
+                cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
+              }}
+            >
+              <div style={{ fontSize: '1.2rem', marginBottom: '0.25rem' }}>{opt.icon}</div>
+              <div style={{ color: tierMode === opt.value ? '#f59e0b' : '#e2e8f0', fontWeight: 700, fontSize: '0.82rem' }}>{opt.label}</div>
+              <div style={{ color: '#64748b', fontSize: '0.68rem', marginTop: '0.2rem', lineHeight: 1.4 }}>{opt.desc}</div>
+            </button>
+          ))}
+        </div>
+
         {/* Limites e Tiers */}
         <p style={sectionTitle}>Participantes e Tiers</p>
         <div style={{ marginBottom: '0.85rem' }}>
@@ -172,11 +207,11 @@ export default function ForjaTournamentSettingsModal({ discordUserId, currentSet
             onChange={(e) => setMaxParticipants(e.target.value)} style={{ ...inputStyle, maxWidth: '120px' }} />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: tierMode === 'AB' ? '1fr 1fr' : '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
           {[
-            { id: 'forja-tier-a-input', label: 'Tier A (Capitães)', hint: 'ex: 10', val: tierASize, set: setTierASize, color: '#facc15' },
-            { id: 'forja-tier-b-input', label: 'Tier B',             hint: 'ex: 10', val: tierBSize, set: setTierBSize, color: '#60a5fa' },
-            { id: 'forja-tier-c-preview', label: 'Tier C (auto)', hint: 'calculado', val: null, set: null, color: '#94a3b8' },
+            { id: 'forja-tier-a-input', label: 'Tier A (Capitães)', hint: 'ex: 16', val: tierASize, set: setTierASize, color: '#facc15' },
+            ...(tierMode === 'ABC' ? [{ id: 'forja-tier-b-input', label: 'Tier B', hint: 'ex: 16', val: tierBSize, set: setTierBSize, color: '#60a5fa' }] : []),
+            { id: 'forja-tier-c-preview', label: tierMode === 'AB' ? 'Tier B (Pool Livre, auto)' : 'Tier C (auto)', hint: 'calculado', val: null as null, set: null as null, color: tierMode === 'AB' ? '#60a5fa' : '#94a3b8' },
           ].map(({ id, label, hint, val, set, color }) => (
             <div key={id}>
               <label htmlFor={id} style={{ ...labelStyle, color }}>
@@ -189,7 +224,7 @@ export default function ForjaTournamentSettingsModal({ discordUserId, currentSet
                   style={{ ...inputStyle, fontWeight: 700, color }} />
               ) : (
                 <div id={id} style={{ ...inputStyle, display: 'flex', alignItems: 'center', color, fontWeight: 700, opacity: 0.7 }}>
-                  {tierC} jogadores
+                  {tierMode === 'AB' ? tierB : tierC} jogadores
                 </div>
               )}
             </div>
@@ -202,12 +237,17 @@ export default function ForjaTournamentSettingsModal({ discordUserId, currentSet
           <span style={{ color: '#facc15' }}>A:{tierA}</span>
           <span style={{ color: '#475569' }}>+</span>
           <span style={{ color: '#60a5fa' }}>B:{tierB}</span>
-          <span style={{ color: '#475569' }}>+</span>
-          <span style={{ color: '#94a3b8' }}>C:{tierC}</span>
+          {tierMode === 'ABC' && <>
+            <span style={{ color: '#475569' }}>+</span>
+            <span style={{ color: '#94a3b8' }}>C:{tierC}</span>
+          </>}
           <span style={{ color: '#475569' }}>=</span>
           <span style={{ color: tierTotal === maxP ? '#10b981' : '#ef4444', fontWeight: 700 }}>
             {tierTotal}/{maxP} {tierTotal !== maxP && '⚠️'}
           </span>
+          {tierMode === 'AB' && (
+            <span style={{ marginLeft: 'auto', color: '#60a5fa', fontSize: '0.68rem', fontWeight: 600 }}>🎯 Pool Livre</span>
+          )}
         </div>
 
         {error && (

@@ -60,6 +60,10 @@ function TierSeparator({ tier }: { tier: 'A' | 'B' | 'C' }) {
 
 // ─── GodIcon ──────────────────────────────────────────────────────────────────
 
+// Remove diacritics (e.g. ü→u) so "Nüwa" matches id "nuwa"
+const normalizeId = (s: string) =>
+  s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
 function GodIcon({ god }: { god: any }) {
   if (!god) return null;
 
@@ -69,11 +73,11 @@ function GodIcon({ god }: { god: any }) {
   
   if (!godName) return null;
 
-  const lowerGodName = String(godName).toLowerCase();
+  const normalizedName = normalizeId(godName);
 
   const godData = (MAJOR_GODS || []).find(g => {
     if (!g || !g.id || typeof g.id !== 'string') return false;
-    return String(g.id).toLowerCase() === lowerGodName;
+    return normalizeId(g.id) === normalizedName;
   });
 
   return (

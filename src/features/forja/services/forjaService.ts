@@ -250,6 +250,57 @@ export async function updatePlayerAdminFields(
 }
 
 /**
+ * Resultado da consulta à API do AoM para um jogador.
+ */
+export interface AomApiResult {
+  elo_1v1: number;
+  elo_tg: number;
+  top_gods: Array<{ god: string; winRate: number; playRate: number }>;
+  alias: string;
+  avatar_url: string | null;
+}
+
+/**
+ * Consulta a API do AoM (/api/forja/fetch-aom-profile) para um jogador
+ * e retorna os dados sem salvar. O Admin decide o que aplicar.
+ */
+export async function fetchAomProfileForPlayer(profileId: number): Promise<AomApiResult> {
+  const res = await fetch(`/api/forja/fetch-aom-profile?id=${profileId}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `Erro ${res.status} ao consultar API`);
+  }
+  return res.json();
+}
+
+/**
+ * Aplica dados frescos da API do AoM ao perfil de um jogador no Firestore.
+ * O Admin controla quais campos atualizar.
+ */
+export async function refreshPlayerFromApi(
+  discordId: string,
+  profileId: number,
+  opts: { elo: boolean; gods: boolean }
+): Promise<AomApiResult> {
+  const data = await fetchAomProfileForPlayer(profileId);
+
+  const payload: Record<string, unknown> = {};
+  if (opts.elo) {
+    payload['elo_1v1'] = data.elo_1v1;
+    payload['elo_tg']  = data.elo_tg;
+  }
+  if (opts.gods) {
+    payload['top_gods'] = data.top_gods;
+  }
+
+  if (Object.keys(payload).length > 0) {
+    await updateDoc(doc(db, PLAYERS_COL, discordId), payload);
+  }
+
+  return data;
+}
+
+/**
  * Campos que o próprio jogador pode alterar (self-service).
  * Não inclui ELOs, avatar, deuses ou time.
  */
@@ -412,16 +463,21 @@ export async function startForjaDraft(captainIds: string[]): Promise<void> {
  */
 export async function makeDraftPick(
   session: ForjaDraftSession,
-  player: ForjaPlayer,
+  player: ForjaPlayer & { computedTier?: ForjaTier | null },
   forcedByAdmin = false
 ): Promise<void> {
   const N = session.pick_order_sequence.length / 2; // metade = num times
 
-  // Validação de tier
+  // Valida tier: prioridade para computedTier (calculado pelo forjaUtils,
+  // que respeita overflow e tier_mode) sobre player.tier (campo Firestore).
+  // Isso garante que jogadores de overflow (37º-44º quando max=36) não
+  // possam ser selecionados mesmo que Firestore ainda tenha tier: null.
+  const effectiveTier: ForjaTier = (player.computedTier !== undefined ? player.computedTier : player.tier);
   const expectedTier: 'B' | 'C' = session.current_round;
-  if (player.tier !== expectedTier) {
+
+  if (effectiveTier !== expectedTier) {
     throw new Error(
-      `Este jogador é Tier ${player.tier ?? '?'}, mas a rodada atual exige Tier ${expectedTier}.`
+      `Este jogador é Tier ${effectiveTier ?? '?'}, mas a rodada atual exige Tier ${expectedTier}.`
     );
   }
 

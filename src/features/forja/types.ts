@@ -191,6 +191,12 @@ export interface ForjaPrizeConfig {
   updated_by: string;
 }
 
+/** Modo de tiers do torneio:
+ * - 'ABC': padrão — Tier A (capitães) + Tier B + Tier C
+ * - 'AB':  pool livre — Tier A (capitães) + Tier B (todos os não-A)
+ */
+export type ForjaTierMode = 'ABC' | 'AB';
+
 /** Configurações gerais do torneio */
 export interface ForjaSettings {
   registration_open: boolean;
@@ -203,14 +209,20 @@ export interface ForjaSettings {
   /** Número máximo de participantes. Inscritos acima do limite vão para reserva automática. */
   max_participants?: number;
   /**
+   * Modo de distribuição de tiers.
+   * 'ABC' = 3 tiers (padrão). 'AB' = capitães + pool livre.
+   * Default: 'ABC'
+   */
+  tier_mode?: ForjaTierMode;
+  /**
    * [Opção B] Tamanho do Tier A (capitães).
    * Default: Math.floor(max_participants / 3)
    */
   tier_a_size?: number;
   /**
    * [Opção B] Tamanho do Tier B.
+   * Ignorado quando tier_mode === 'AB' (Tier B = restante após Tier A).
    * Default: Math.floor((max_participants - tier_a_size) / 2)
-   * Tier C = max_participants - tier_a_size - tier_b_size
    */
   tier_b_size?: number;
   updated_at: FirestoreTimestamp;

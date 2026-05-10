@@ -6,40 +6,55 @@
  * ============================================================
  */
 
-import { ForjaPlayer, ForjaTier, ForjaSettings } from './types';
+import { ForjaPlayer, ForjaTier, ForjaSettings, ForjaTierMode } from './types';
 
 // ─── Tiers (dinâmico baseado em settings, fallback para 48 players) ───────────
 const DEFAULT_MAX_PARTICIPANTS = 48;
 
 /**
- * Retorna os cortes de tier com base nas configurações do torneio (Opção B).
- * - tier_a_size: tamanho do Tier A (capitães). Default: floor(max/3)
- * - tier_b_size: tamanho do Tier B. Default: floor((max - tierA) / 2)
- * - Tier C: restante até max_participants
+ * Retorna os cortes de tier com base nas configurações do torneio.
+ * - 'ABC' (padrão): Tier A + Tier B + Tier C
+ * - 'AB': Tier A + pool livre (todos os não-A = Tier B, tierCSize = 0)
  */
-export function getTierCutoffs(settings?: Pick<ForjaSettings, 'max_participants' | 'tier_a_size' | 'tier_b_size'>): {
-  tierAMax: number; tierBMax: number; tierASize: number; tierBSize: number; tierCSize: number;
+export function getTierCutoffs(settings?: Pick<ForjaSettings, 'max_participants' | 'tier_a_size' | 'tier_b_size' | 'tier_mode'>): {
+  tierAMax: number; tierBMax: number; tierASize: number; tierBSize: number; tierCSize: number; tierMode: ForjaTierMode;
 } {
   const maxParticipants = settings?.max_participants ?? DEFAULT_MAX_PARTICIPANTS;
+  const tierMode: ForjaTierMode = settings?.tier_mode ?? 'ABC';
   const tierASize = settings?.tier_a_size ?? Math.floor(maxParticipants / 3);
-  const remaining = maxParticipants - tierASize;
-  const tierBSize = settings?.tier_b_size ?? Math.floor(remaining / 2);
-  const tierCSize = maxParticipants - tierASize - tierBSize;
+
+  let tierBSize: number;
+  let tierCSize: number;
+
+  if (tierMode === 'AB') {
+    // Pool livre: Tier B absorbe tudo que não é Tier A
+    tierBSize = maxParticipants - tierASize;
+    tierCSize = 0;
+  } else {
+    // Modo padrão ABC
+    const remaining = maxParticipants - tierASize;
+    tierBSize = settings?.tier_b_size ?? Math.floor(remaining / 2);
+    tierCSize = maxParticipants - tierASize - tierBSize;
+  }
+
   return {
     tierAMax: tierASize,
     tierBMax: tierASize + tierBSize,
     tierASize,
     tierBSize,
     tierCSize,
+    tierMode,
   };
 }
 
 /**
  * Retorna o Tier dinâmico com base na posição (1-indexed) no rank geral.
+ * No modo 'AB', retorna apenas 'A' ou 'B' (nunca 'C').
  */
-export function getTierByRank(rank: number, settings?: Pick<ForjaSettings, 'max_participants' | 'tier_a_size' | 'tier_b_size'>): ForjaTier {
-  const { tierAMax, tierBMax } = getTierCutoffs(settings);
+export function getTierByRank(rank: number, settings?: Pick<ForjaSettings, 'max_participants' | 'tier_a_size' | 'tier_b_size' | 'tier_mode'>): ForjaTier {
+  const { tierAMax, tierBMax, tierMode } = getTierCutoffs(settings);
   if (rank <= tierAMax) return 'A';
+  if (tierMode === 'AB') return 'B'; // modo pool livre: tudo fora do A é B
   if (rank <= tierBMax) return 'B';
   return 'C';
 }

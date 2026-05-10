@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { ForjaSettings } from '../types';
+import { ForjaSettings, ForjaTierMode } from '../types';
 import { subscribeToForjaSettings } from '../services/forjaService';
 import { getTierCutoffs } from '../forjaUtils';
 
@@ -17,6 +17,7 @@ export function useForjaSettings(): {
   tierASize: number;
   tierBSize: number;
   tierCSize: number;
+  tierMode: ForjaTierMode;
   isRegistrationOpen: boolean;
   deadlineMs: number | null;
 } {
@@ -32,9 +33,9 @@ export function useForjaSettings(): {
   }, []);
 
   const maxParticipants    = settings?.max_participants ?? DEFAULT_MAX_PARTICIPANTS;
-  const { tierASize, tierBSize, tierCSize } = getTierCutoffs(settings ?? undefined);
+  const { tierASize, tierBSize, tierCSize, tierMode } = getTierCutoffs(settings ?? undefined);
   const isRegistrationOpen = settings?.registration_open ?? true;
   const deadlineMs         = settings?.registration_deadline_ms ?? null;
 
-  return { settings, loading, maxParticipants, tierASize, tierBSize, tierCSize, isRegistrationOpen, deadlineMs };
+  return { settings, loading, maxParticipants, tierASize, tierBSize, tierCSize, tierMode, isRegistrationOpen, deadlineMs };
 }

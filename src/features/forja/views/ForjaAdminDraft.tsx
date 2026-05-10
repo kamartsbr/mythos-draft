@@ -7,6 +7,7 @@ import { ForjaViewProps, ForjaPlayer, ForjaTier } from '../types';
 import { useForjaPlayers } from '../hooks/useForjaPlayers';
 import { useForjaTeams }   from '../hooks/useForjaTeams';
 import { useForjaDraftSession } from '../hooks/useForjaDraftSession';
+import { RankedPlayer } from '../forjaUtils';
 // Adicionamos o updatePlayerProfile na importação
 import {
   setPlayerTier, startForjaDraft, makeDraftPick, resetForjaDraft, undoLastDraftPick, updatePlayerProfile, unbanForjaPlayer
@@ -575,7 +576,7 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
                   isSelected={false}
                   isCaptain={selectedCaptains.includes(player.discord_id)}
                   isDraftActive={isDraftActive}
-                  isCurrentPick={isDraftActive && session?.current_team_id !== null && player.tier === session?.current_round}
+                  isCurrentPick={isDraftActive && session?.current_team_id !== null && (player as RankedPlayer).computedTier === session?.current_round}
                   onToggleCaptain={() => toggleCaptain(player.discord_id)}
                   onPick={() => handlePick(player)}
                   onTierChange={t => handleTierChange(player.discord_id, t)}

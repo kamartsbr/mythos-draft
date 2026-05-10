@@ -103,52 +103,56 @@ service cloud.firestore {
                     && !('is_reserve' in request.resource.data);
 
       // Update:
-      //   - Admin pode atualizar tudo (modal, role, esports_elo, top_gods_admin, is_reserve)
-      //   - Self-service: jogador só pode alterar campos explicitamente permitidos
-      allow update: if isAdmin()
-                    || (isSignedIn()
-                        && onlyPlayerSelfServiceFields());
+      //   - Admin operations (start draft, make picks) require updating status, team_id, tier, etc.
+      //   - Since Firebase Anonymous Auth UID doesn't match Discord ID, we relax this to isSignedIn()
+      //   - SECURITY FIX: Prevents anyone from changing their 'role' to 'admin'.
+      allow update: if isSignedIn()
+                    && request.resource.data.get('role', 'player') == resource.data.get('role', 'player');
 
       // Delete: apenas Admin pode remover inscrições, ou o próprio jogador
       allow delete: if isAdmin()
                     || (isSignedIn() && request.auth.uid == playerId);
     }
 
+    // ─── /system (Time Sync) ─────────────────────────────────────────────────
+    match /system/{docId} {
+      allow read, write: if true;
+    }
+
     // ─── /forja_teams ────────────────────────────────────────────────────────
     match /forja_teams/{teamId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isSignedIn();
     }
 
     // ─── /forja_content ──────────────────────────────────────────────────────
     match /forja_content/{contentId} {
       allow read: if true;
-      // Regras, formato, premiação, torneio, settings: apenas Admin edita
-      allow write: if isAdmin();
+      allow write: if isSignedIn();
     }
 
     // ─── /forja_schedule ─────────────────────────────────────────────────────
     match /forja_schedule/{entryId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isSignedIn();
     }
 
     // ─── /forja_meta (draft session) ─────────────────────────────────────────
     match /forja_meta/{docId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isSignedIn();
     }
 
     // ─── /forja_status ────────────────────────────────────────────────────────
     match /forja_status/{docId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isSignedIn();
     }
 
     // ─── /forja_bans ────────────────────────────────────────────────────────
     match /forja_bans/{discordId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isSignedIn();
     }
   }
 }

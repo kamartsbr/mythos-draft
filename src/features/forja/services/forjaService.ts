@@ -481,6 +481,11 @@ export async function makeDraftPick(
 ): Promise<void> {
   const N = session.pick_order_sequence.length / 2; // metade = num times
 
+  // Fetch settings dynamically to support tier_mode = 'AB' (Pool Livre)
+  const { getDoc } = await import('firebase/firestore');
+  const settingsSnap = await getDoc(doc(db, CONTENT_COL, 'settings'));
+  const tierMode = (settingsSnap.data()?.tier_mode as ForjaTierMode) ?? 'ABC';
+
   // Valida tier: prioridade para computedTier (calculado pelo forjaUtils,
   // que respeita overflow e tier_mode) sobre player.tier (campo Firestore).
   // Isso garante que jogadores de overflow (37º-44º quando max=36) não
@@ -489,9 +494,12 @@ export async function makeDraftPick(
   const expectedTier: 'B' | 'C' = session.current_round;
 
   if (effectiveTier !== expectedTier) {
-    throw new Error(
-      `Este jogador é Tier ${effectiveTier ?? '?'}, mas a rodada atual exige Tier ${expectedTier}.`
-    );
+    const isPoolLivreException = tierMode === 'AB' && expectedTier === 'C' && effectiveTier === 'B';
+    if (!isPoolLivreException) {
+      throw new Error(
+        `Este jogador é Tier ${effectiveTier ?? '?'}, mas a rodada atual exige Tier ${expectedTier}.`
+      );
+    }
   }
 
   const batch        = writeBatch(db);

@@ -13,7 +13,7 @@ import { db } from '../../../firebase';
 import {
   ForjaPlayer, ForjaRegistrationForm, ForjaDiscordUser,
   ForjaScheduleEntry, ForjaTeam, ForjaDraftSession, ForjaDraftPick,
-  ForjaTier, ForjaContentDoc, ForjaPrizeConfig, ForjaSettings,
+  ForjaTier, ForjaContentDoc, ForjaPrizeConfig, ForjaSettings, ForjaTierMode,
   ForjaRole, ForjaTournamentConfig, ForjaRulesBlock, ForjaMapPool,
 } from '../types';
 import { FORJA_MAP_POOL } from '../../../data/maps';

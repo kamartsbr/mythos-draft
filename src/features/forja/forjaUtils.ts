@@ -62,11 +62,8 @@ export function getTierByRank(rank: number, settings?: Pick<ForjaSettings, 'max_
 // ─── Effective ELO ────────────────────────────────────────────────────────────
 
 /**
- * ELO efetivo de um jogador — nunca salvo, sempre computado.
- * Prioridade:
- *  1. esports_elo_enabled === true → usa esports_elo_value (Admin toggle)
- *  2. esports_elo legado (campo antigo, compatibilidade)
- *  3. elo_1v1 (padrão)
+ * ELO médio de um jogador (1v1 + TG / 2).
+ * Anteriormente chamado de ELO efetivo.
  */
 export function getEffectiveElo(player: ForjaPlayer): number {
   const elo1v1 = player.elo_1v1 ?? 0;
@@ -129,8 +126,24 @@ export function computeRankedPlayers(players: ForjaPlayer[], settings?: Pick<For
   const active  = nonBanned.filter(p => !p.is_reserve);
   const reserve = nonBanned.filter(p => p.is_reserve);
 
-  // Sort decrescente por effectiveElo, tiebreak por elo_tg
+  // Sort decrescente:
+  // 1. Quem tem Esports ELO fica sempre acima
+  // 2. Se ambos têm, compara pelo valor do Esports ELO
+  // 3. Se nenhum tem, compara pelo ELO médio (effectiveElo)
+  // 4. Tiebreak por elo_tg
   const sorted = [...active].sort((a, b) => {
+    const hasA = hasEsportsElo(a);
+    const hasB = hasEsportsElo(b);
+
+    if (hasA && !hasB) return -1;
+    if (!hasA && hasB) return 1;
+
+    if (hasA && hasB) {
+      const eA = getEsportsEloDisplay(a) ?? 0;
+      const eB = getEsportsEloDisplay(b) ?? 0;
+      if (eB !== eA) return eB - eA;
+    }
+
     const eloA = getEffectiveElo(a);
     const eloB = getEffectiveElo(b);
     if (eloB !== eloA) return eloB - eloA;

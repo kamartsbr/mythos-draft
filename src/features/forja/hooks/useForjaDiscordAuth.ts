@@ -139,19 +139,13 @@ export function useForjaDiscordAuth(): UseForjaDiscordAuthResult {
       if (stored) {
         try {
           const parsed: ForjaDiscordUser = JSON.parse(stored);
-          // Não armazenamos o access_token por segurança;
-          // se ele existir no storage (sessão recente), validar se ainda é válido
-          if (parsed.access_token) {
-            const verified = await fetchDiscordUser(parsed.access_token);
-            if (verified) {
-              localStorage.setItem(STORAGE_KEY, JSON.stringify(verified));
-              setDiscordUser(verified);
-              setIsLoading(false);
-              return;
-            }
-          }
-          // Access token expirado/ausente — manter dados de exibição sem token
-          setDiscordUser({ ...parsed, access_token: undefined });
+          // O usuário já foi autenticado anteriormente.
+          // Não faremos fetchDiscordUser(parsed.access_token) em todo load 
+          // para evitar Rate Limit de 429 na API do Discord ("Service resources are being rate limited").
+          // Como só precisamos da identidade (ID, avatar, username) para o Firestore, vamos confiar no cache.
+          setDiscordUser(parsed);
+          setIsLoading(false);
+          return;
         } catch {
           localStorage.removeItem(STORAGE_KEY);
         }

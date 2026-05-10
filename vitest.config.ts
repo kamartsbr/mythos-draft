@@ -1,0 +1,24 @@
+/// <reference types="vitest" />
+import { defineConfig } from 'vitest/config';
+import path from 'path';
+
+export default defineConfig({
+  test: {
+    // Simula um ambiente de browser (necessário para importações de módulos React)
+    environment: 'node',
+    // Inclui tipagem automática de expect, it, describe etc.
+    globals: true,
+    // Relatório limpo com diff colorido
+    reporters: ['verbose'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'lcov'],
+      include: ['src/features/forja/forjaUtils.ts'],
+    },
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, '.'),
+    },
+  },
+});

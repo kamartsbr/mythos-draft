@@ -361,6 +361,7 @@ function AppContent() {
       replayLog: [],
       lastWinner: null,
       timerStart: null,
+      lastActivityAt: IS_DEV ? Date.now() : (await import('firebase/firestore')).serverTimestamp(),
       createdAt: IS_DEV ? Date.now() : (await import('firebase/firestore')).serverTimestamp(),
       hiddenActions: [],
       spectators: [],

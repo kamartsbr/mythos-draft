@@ -68,15 +68,27 @@ export function subscribeToForjaPlayers(
   onData: (players: ForjaPlayer[]) => void,
   onError?: (err: Error) => void
 ): Unsubscribe {
-  const q = query(collection(db, PLAYERS_COL), orderBy('registered_at', 'asc'));
+  // Removido orderBy para evitar que documentos sem o campo registered_at sumam da lista
+  const q = query(collection(db, PLAYERS_COL));
   return onSnapshot(q,
-    snap => onData(snap.docs.map(d => ({ ...(d.data() as ForjaPlayer), discord_id: d.id }))),
+    snap => {
+      const players = snap.docs
+        .map(d => ({ ...(d.data() as ForjaPlayer), discord_id: d.id }));
+      onData(players);
+    },
     err  => { console.error('[Forja] players:', err); onError?.(err); }
   );
 }
 
 export async function isPlayerRegistered(discordId: string): Promise<boolean> {
-  return (await getDoc(doc(db, PLAYERS_COL, discordId))).exists();
+  try {
+    const snap = await getDoc(doc(db, PLAYERS_COL, discordId));
+    if (!snap.exists()) return false;
+    return snap.data().status !== 'banned';
+  } catch (err) {
+    console.warn('[Forja] Could not read player registration (possibly permission denied):', err);
+    return false;
+  }
 }
 
 export const ESPORTS_ELO_OVERRIDES: Record<string, number> = {
@@ -143,6 +155,31 @@ export async function removeForjaPlayer(discordId: string): Promise<void> {
   await deleteDoc(doc(db, PLAYERS_COL, discordId));
 }
 
+export async function banForjaPlayer(discordId: string, nick: string): Promise<void> {
+  await setDoc(doc(db, 'forja_bans', discordId), {
+    discord_id: discordId,
+    nick,
+    banned_at: serverTimestamp(),
+  });
+  // Soft delete: set status to banned instead of removing the document
+  await updateDoc(doc(db, PLAYERS_COL, discordId), { status: 'banned' });
+}
+
+export async function unbanForjaPlayer(discordId: string): Promise<void> {
+  await deleteDoc(doc(db, 'forja_bans', discordId));
+  await updateDoc(doc(db, PLAYERS_COL, discordId), { status: 'available' });
+}
+
+export async function isPlayerBanned(discordId: string): Promise<boolean> {
+  try {
+    const snap = await getDoc(doc(db, 'forja_bans', discordId));
+    return snap.exists();
+  } catch (err) {
+    console.warn('[Forja] Could not check ban status (rules not deployed?), assuming false:', err);
+    return false;
+  }
+}
+
 export async function setPlayerTier(discordId: string, tier: ForjaTier, seed?: number): Promise<void> {
   await updateDoc(doc(db, PLAYERS_COL, discordId), {
     tier,
@@ -180,6 +217,8 @@ export interface AdminPlayerFields {
   top_gods_admin?: string[];          // Array flexível de god IDs (1–5)
   esports_elo_enabled?: boolean;      // Toggle Esports ELO
   esports_elo_value?: number | null;  // Valor manual (só usado quando enabled)
+  elo_1v1?: number | null;            // Manual ELO 1v1 overwrite
+  elo_tg?: number | null;             // Manual ELO TG overwrite
   is_reserve?: boolean;               // Banco de Reservas
 }
 
@@ -189,12 +228,76 @@ export async function updatePlayerAdminFields(
   fields: AdminPlayerFields
 ): Promise<void> {
   const payload: Record<string, unknown> = {};
-  if (fields.top_gods_admin !== undefined)   payload['top_gods_admin']    = fields.top_gods_admin;
+  if (fields.top_gods_admin !== undefined) {
+    // Filtra undefineds do array, Firebase odeia undefined em arrays
+    payload['top_gods_admin'] = fields.top_gods_admin.filter(g => g !== undefined && g !== null);
+  }
   if (fields.esports_elo_enabled !== undefined) payload['esports_elo_enabled'] = fields.esports_elo_enabled;
   if (fields.esports_elo_value   !== undefined) payload['esports_elo_value']   = fields.esports_elo_value;
-  if (fields.is_reserve          !== undefined) payload['is_reserve']           = fields.is_reserve;
+  if (fields.elo_1v1             !== undefined) payload['elo_1v1']             = fields.elo_1v1;
+  if (fields.elo_tg              !== undefined) payload['elo_tg']              = fields.elo_tg;
+  if (fields.is_reserve          !== undefined) payload['is_reserve']          = fields.is_reserve;
+
+  // Garantia absoluta para não enviar undefined ao Firestore
+  Object.keys(payload).forEach(key => {
+    if (payload[key] === undefined) {
+      delete payload[key];
+    }
+  });
+
   if (Object.keys(payload).length === 0) return;
   await updateDoc(doc(db, PLAYERS_COL, discordId), payload);
+}
+
+/**
+ * Resultado da consulta à API do AoM para um jogador.
+ */
+export interface AomApiResult {
+  elo_1v1: number;
+  elo_tg: number;
+  top_gods: Array<{ god: string; winRate: number; playRate: number }>;
+  alias: string;
+  avatar_url: string | null;
+}
+
+/**
+ * Consulta a API do AoM (/api/forja/fetch-aom-profile) para um jogador
+ * e retorna os dados sem salvar. O Admin decide o que aplicar.
+ */
+export async function fetchAomProfileForPlayer(profileId: number): Promise<AomApiResult> {
+  const res = await fetch(`/api/forja/fetch-aom-profile?id=${profileId}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `Erro ${res.status} ao consultar API`);
+  }
+  return res.json();
+}
+
+/**
+ * Aplica dados frescos da API do AoM ao perfil de um jogador no Firestore.
+ * O Admin controla quais campos atualizar.
+ */
+export async function refreshPlayerFromApi(
+  discordId: string,
+  profileId: number,
+  opts: { elo: boolean; gods: boolean }
+): Promise<AomApiResult> {
+  const data = await fetchAomProfileForPlayer(profileId);
+
+  const payload: Record<string, unknown> = {};
+  if (opts.elo) {
+    payload['elo_1v1'] = data.elo_1v1;
+    payload['elo_tg']  = data.elo_tg;
+  }
+  if (opts.gods) {
+    payload['top_gods'] = data.top_gods;
+  }
+
+  if (Object.keys(payload).length > 0) {
+    await updateDoc(doc(db, PLAYERS_COL, discordId), payload);
+  }
+
+  return data;
 }
 
 /**
@@ -360,16 +463,21 @@ export async function startForjaDraft(captainIds: string[]): Promise<void> {
  */
 export async function makeDraftPick(
   session: ForjaDraftSession,
-  player: ForjaPlayer,
+  player: ForjaPlayer & { computedTier?: ForjaTier | null },
   forcedByAdmin = false
 ): Promise<void> {
   const N = session.pick_order_sequence.length / 2; // metade = num times
 
-  // Validação de tier
+  // Valida tier: prioridade para computedTier (calculado pelo forjaUtils,
+  // que respeita overflow e tier_mode) sobre player.tier (campo Firestore).
+  // Isso garante que jogadores de overflow (37º-44º quando max=36) não
+  // possam ser selecionados mesmo que Firestore ainda tenha tier: null.
+  const effectiveTier: ForjaTier = (player.computedTier !== undefined ? player.computedTier : player.tier);
   const expectedTier: 'B' | 'C' = session.current_round;
-  if (player.tier !== expectedTier) {
+
+  if (effectiveTier !== expectedTier) {
     throw new Error(
-      `Este jogador é Tier ${player.tier ?? '?'}, mas a rodada atual exige Tier ${expectedTier}.`
+      `Este jogador é Tier ${effectiveTier ?? '?'}, mas a rodada atual exige Tier ${expectedTier}.`
     );
   }
 
@@ -459,7 +567,11 @@ export async function resetForjaDraft(): Promise<void> {
   const teamsSnap   = await getDocs(collection(db, TEAMS_COL));
   const playersSnap = await getDocs(collection(db, PLAYERS_COL));
   teamsSnap.docs.forEach(d => batch.delete(d.ref));
-  playersSnap.docs.forEach(d => batch.update(d.ref, { status: 'available', team_id: null }));
+  playersSnap.docs.forEach(d => {
+    if (d.data().status !== 'banned') {
+      batch.update(d.ref, { status: 'available', team_id: null });
+    }
+  });
   await batch.commit();
 }
 
@@ -478,6 +590,99 @@ export function subscribeToForjaContent<T = ForjaContentDoc>(
     snap => onData(snap.exists() ? (snap.data() as T) : null),
     err  => { console.error(`[Forja] content/${docId}:`, err); onError?.(err); }
   );
+}
+
+// ─── Settings do Torneio ──────────────────────────────────────────────────────
+
+/** Subscrição em tempo real às configurações gerais do torneio. */
+export function subscribeToForjaSettings(
+  onData: (settings: ForjaSettings | null) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  return onSnapshot(
+    doc(db, CONTENT_COL, 'settings'),
+    snap => onData(snap.exists() ? (snap.data() as ForjaSettings) : null),
+    err  => { console.error('[Forja] settings:', err); onError?.(err); }
+  );
+}
+
+/**
+ * Salva as configurações gerais do torneio (apenas Admin via Firestore Rules).
+ * Usa merge: true para não apagar campos não incluídos no update.
+ */
+export async function saveForjaSettings(
+  settings: Partial<Omit<ForjaSettings, 'updated_at'>>,
+  updatedBy: string
+): Promise<void> {
+  await setDoc(doc(db, CONTENT_COL, 'settings'), {
+    ...settings,
+    updated_at: serverTimestamp(),
+    updated_by: updatedBy,
+  }, { merge: true });
+}
+
+// ─── Adição Manual de Jogador (Admin) ────────────────────────────────────────
+
+/**
+ * Adiciona um jogador manualmente pelo Discord ID (apenas Admin).
+ * Usado quando o Admin conhece o jogador e quer inscrevê-lo sem OAuth Discord.
+ * O avatar usa o CDN do Discord como placeholder; o snapshot de ELO oficial atualiza depois.
+ */
+export async function adminRegisterPlayer(params: {
+  discordId: string;
+  nick: string;
+  aomProfileId: number;
+  elo1v1?: number;
+  eloTg?: number;
+  topGods?: any[];
+  avatarUrl?: string;
+  /** Frase de efeito do jogador (admin pode preencher pelo jogador) */
+  pitchQuote?: string;
+  /** Disponibilidade selecionada pelo admin */
+  availability?: string[];
+  /** Nacionalidade (default: brasileiro) */
+  isBrazilian?: boolean;
+  addedBy: string;
+}): Promise<void> {
+  const {
+    discordId, nick, aomProfileId, elo1v1 = 0, eloTg = 0,
+    topGods = [], avatarUrl, pitchQuote, availability = [],
+    isBrazilian = true, addedBy,
+  } = params;
+
+  // Verifica se já existe
+  const existing = await getDoc(doc(db, PLAYERS_COL, discordId));
+  if (existing.exists()) {
+    throw new Error(`Jogador com Discord ID ${discordId} já está inscrito.`);
+  }
+
+  // Avatar placeholder do CDN do Discord
+  const defaultAvatar = `https://cdn.discordapp.com/embed/avatars/${parseInt(discordId.slice(-1)) % 6}.png`;
+
+  const player: Omit<import('../types').ForjaPlayer, 'discord_id'> = {
+    aom_profile_id:     aomProfileId,
+    aom_id:             String(aomProfileId),
+    nick:               nick.trim(),
+    avatar_url:         avatarUrl || defaultAvatar,
+    discord_avatar_url: avatarUrl || defaultAvatar,
+    is_brazilian:       isBrazilian,
+    pitch_quote:        pitchQuote?.trim() || `Adicionado manualmente por ${addedBy}`,
+    availability,
+    elo_1v1:            elo1v1,
+    elo_tg:             eloTg,
+    top_gods:           topGods,
+    elo_snapshot:       elo1v1,
+    status:             'available',
+    tier:               null,
+    team_id:            null,
+    seed:               null,
+    registered_at:      serverTimestamp() as any,
+    consent_rules:      true,   // Admin assume responsabilidade
+    consent_format:     true,
+    role:               'player',
+  };
+
+  await setDoc(doc(db, PLAYERS_COL, discordId), player);
 }
 
 export async function updateForjaContent(
@@ -651,7 +856,11 @@ export async function deleteForjaTeam(teamId: string): Promise<void> {
   const playersSnap = await getDocs(collection(db, PLAYERS_COL));
   playersSnap.docs.forEach(d => {
     if (d.data().team_id === teamId) {
-      batch.update(d.ref, { team_id: null, status: 'available' });
+      if (d.data().status !== 'banned') {
+        batch.update(d.ref, { team_id: null, status: 'available' });
+      } else {
+        batch.update(d.ref, { team_id: null });
+      }
     }
   });
   batch.delete(doc(db, TEAMS_COL, teamId));

@@ -7,6 +7,7 @@
 import React, { useState, lazy, Suspense, useEffect, useCallback } from 'react';
 import { ForjaTab, ForjaTabId } from './types';
 import { useForjaDiscordAuth } from './hooks/useForjaDiscordAuth';
+import { useForjaPlayers } from './hooks/useForjaPlayers';
 import { useForjaSettings } from './hooks/useForjaContent';
 import { useForjaDraftSession } from './hooks/useForjaDraftSession';
 import { seedDefaultContent } from './services/forjaService';
@@ -30,18 +31,18 @@ const ForjaTimesManager = lazy(() => import('./components/ForjaTimesManager'));
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 const PUBLIC_TABS: ForjaTab[] = [
-  { id: 'inicio',   label: 'Início',   icon: '🏛️' },
-  { id: 'regras',   label: 'Regras',   icon: '📜' },
-  { id: 'mapas',    label: 'Mapas',    icon: '🗺️' },
-  { id: 'formato',  label: 'Formato',  icon: '🐍' },
-  { id: 'schedule', label: 'Schedule', icon: '📅' },
-  { id: 'times',    label: 'Times',    icon: '🛡️' },
-  { id: 'tabela',   label: 'Tabela',   icon: '📊' },
+  { id: 'inicio' as ForjaTabId,   label: 'Início',   icon: '🏛️' },
+  { id: 'regras' as ForjaTabId,   label: 'Regras',   icon: '📜' },
+  { id: 'mapas' as ForjaTabId,    label: 'Mapas',    icon: '🗺️' },
+  { id: 'formato' as ForjaTabId,  label: 'Formato',  icon: '🐍' },
+  { id: 'schedule' as ForjaTabId, label: 'Schedule', icon: '📅' },
+  { id: 'times' as ForjaTabId,    label: 'Times',    icon: '🛡️' },
+  { id: 'tabela' as ForjaTabId,   label: 'Tabela',   icon: '📊' },
 ];
 
 const ADMIN_TABS: ForjaTab[] = [
-  { id: 'admin-draft', label: 'Draft Admin', icon: '🎯' },
-  { id: 'obs',         label: 'OBS Mode',    icon: '📺' },
+  { id: 'admin-draft' as ForjaTabId, label: 'Draft Admin', icon: '🎯' },
+  { id: 'obs' as ForjaTabId,         label: 'OBS Mode',    icon: '📺' },
 ];
 
 // ── Countdown ─────────────────────────────────────────────────────────────────
@@ -73,6 +74,7 @@ export default function ForjaHub() {
   const [seeding, setSeeding]           = useState(false);
 
   const { discordUser, isAdmin, isLoading: authLoading, loginWithDiscord, logout } = useForjaDiscordAuth();
+  const { rankedPlayers, loading: playersLoading, error: playersError, isLive: playersLive } = useForjaPlayers();
   const { registrationOpen, msToDeadline, data: settings } = useForjaSettings();
   const { session } = useForjaDraftSession();
 
@@ -139,6 +141,20 @@ export default function ForjaHub() {
   // Mostrar banner de deadline apenas se < 24h e inscrições ainda abertas
   const showDeadlineBanner = registrationOpen && msToDeadline < 24 * 3600 * 1000 && msToDeadline > 0;
 
+  // Formatar label dinâmica da deadline (ex: "Sáb 10/05 às 13h59 BRT")
+  const deadlineLabel = (() => {
+    const deadlineMs = settings?.registration_deadline_ms;
+    if (!deadlineMs) return '';
+    const d = new Date(deadlineMs);
+    const weekdays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    const dayName  = weekdays[d.getDay()];
+    const day      = String(d.getDate()).padStart(2, '0');
+    const month    = String(d.getMonth() + 1).padStart(2, '0');
+    const hh       = String(d.getHours()).padStart(2, '0');
+    const mm       = String(d.getMinutes()).padStart(2, '0');
+    return `${dayName} ${day}/${month} às ${hh}h${mm} BRT`;
+  })();
+
   return (
     <div className="forja-hub">
 
@@ -149,7 +165,7 @@ export default function ForjaHub() {
           <span>
             Inscrições encerram em{' '}
             <strong>{countdown.h}h {countdown.m}m {countdown.s}s</strong>
-            {' '}— Sábado 09/05 às 13h59 BRT
+            {deadlineLabel && <>{' '}— {deadlineLabel}</>}
           </span>
           <button
             className="forja-btn forja-btn--primary"

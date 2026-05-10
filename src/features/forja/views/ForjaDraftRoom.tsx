@@ -6,7 +6,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { ForjaViewProps, ForjaPlayer } from '../types';
 import { useForjaPlayers }      from '../hooks/useForjaPlayers';
-import { useForjaTeams }        from '../hooks/useForjaTeams';
+import { useForjaTeams }            from '../hooks/useForjaTeams';
 import { useForjaDraftSession } from '../hooks/useForjaDraftSession';
 import { makeDraftPick, updateCaptainPresence } from '../services/forjaService';
 
@@ -27,7 +27,7 @@ function OnlineDot({ lastSeenMs }: { lastSeenMs?: number }) {
   );
 }
 
-// ─── Pick Card ────────────────────────────────────────────────────────────────
+// ─── Pick Card (ATUALIZADO COM ELO EFETIVO) ───────────────────────────────────
 function PickCard({ player, onPick, disabled }: {
   player: ForjaPlayer;
   onPick: () => void;
@@ -36,6 +36,9 @@ function PickCard({ player, onPick, disabled }: {
   const [imgErr, setImgErr] = React.useState(false);
   const fallback = `https://cdn.discordapp.com/embed/avatars/${parseInt(player.discord_id.slice(-1)) % 6}.png`;
   const tierColor = player.tier === 'B' ? '#60a5fa' : player.tier === 'C' ? '#94a3b8' : '#facc15';
+
+  // Cálculo da Média para o Draft
+  const effectiveElo = (player as any).elo_efetivo || Math.round(((player.elo_1v1 || 0) + (player.elo_tg || 0)) / 2);
 
   return (
     <div className={`forja-draft-room-card ${disabled ? 'forja-draft-room-card--disabled' : ''}`}>
@@ -49,9 +52,16 @@ function PickCard({ player, onPick, disabled }: {
       <div className="forja-draft-room-card__info">
         <span className="forja-draft-room-card__nick">{player.nick}</span>
         <span style={{ fontSize: '0.7rem', color: tierColor, fontWeight: 700 }}>Tier {player.tier}</span>
-        <span style={{ fontSize: '0.65rem', color: '#475569' }}>
-          1v1: {player.elo_1v1 || '—'} · TG: {player.elo_tg || '—'}
-        </span>
+        
+        {/* Display de Elos Otimizado */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '2px' }}>
+          <span style={{ fontSize: '0.8rem', color: '#f59e0b', fontWeight: 800 }}>
+            Média: {effectiveElo || '—'}
+          </span>
+          <span style={{ fontSize: '0.6rem', color: '#475569' }}>
+            1v1: {player.elo_1v1 || '—'} | TG: {player.elo_tg || '—'}
+          </span>
+        </div>
       </div>
       <button
         className="forja-btn forja-btn--primary"
@@ -68,7 +78,7 @@ function PickCard({ player, onPick, disabled }: {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function ForjaDraftRoom({ discordUser, isAdmin }: ForjaViewProps) {
   const { rankedPlayers: players, loading: playersLoading } = useForjaPlayers();
-  const { teams }                            = useForjaTeams();
+  const { teams }                               = useForjaTeams();
   const { session, loading: sessionLoading } = useForjaDraftSession();
 
   // Heartbeat de presença

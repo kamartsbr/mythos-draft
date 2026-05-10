@@ -1,11 +1,11 @@
 /**
  * ForjaRegistrationModal — Formulário Completo
  * Fluxo: Discord Login → Nick → AoMStats (verify + avatar) →
- *        Disponibilidade → Regras Accordion → Pitch → Submit
+ * Disponibilidade → Regras Accordion → Pitch → Submit
  */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ForjaDiscordUser, ForjaRegistrationForm, AomProfileData } from '../types';
-import { parseAomProfileId, registerForjaPlayer, isPlayerRegistered } from '../services/forjaService';
+import { parseAomProfileId, registerForjaPlayer, isPlayerRegistered, isPlayerBanned } from '../services/forjaService';
 import { useForjaSettings, useForjaContent } from '../hooks/useForjaContent';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -25,7 +25,7 @@ interface Props {
   onSuccess: () => void;
 }
 
-type Step = 'login' | 'check' | 'form' | 'submitting' | 'done' | 'already' | 'closed';
+type Step = 'login' | 'check' | 'form' | 'submitting' | 'done' | 'already' | 'closed' | 'banned';
 
 // ─── Countdown Hook ───────────────────────────────────────────────────────────
 function useCountdown(targetMs: number) {
@@ -40,21 +40,38 @@ function useCountdown(targetMs: number) {
   return { remaining, h, m, s, expired: remaining === 0 };
 }
 
-// ─── Profile Verification Hook ────────────────────────────────────────────────
+// ─── Profile Verification Hook (CONECTADO À CLOUD FUNCTION) ───────────────────
 function useAomProfileVerify() {
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
-  const [data, setData]         = useState<AomProfileData | null>(null);
+  const [data, setData]         = useState<any | null>(null);
 
   const verify = useCallback(async (profileId: number) => {
     setLoading(true); setError(null); setData(null);
     try {
-      const res = await fetch(`/api/forja/fetch-aom-profile?id=${profileId}`);
+      // Chama a Cloud Function que criamos
+      const url = `https://us-central1-boxwood-plating-368522.cloudfunctions.net/fetchaomprofile?id=${profileId}`;
+      const res = await fetch(url);
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? `Erro ${res.status}`);
-      setData(json as AomProfileData);
+      
+      if (!res.ok || !json.success) throw new Error(json.error ?? 'Perfil não encontrado');
+      
+      // Mapeia o retorno da API para o formato que o Form espera
+      setData({
+        profile_id: profileId,
+        avatar_url: json.data.avatar_url,
+        elo_1v1: json.data.elo_1v1,
+        elo_tg: json.data.elo_tg,
+        elo_efetivo: json.data.elo_efetivo,
+        top_gods: json.data.top_gods,
+        alias: null,
+        verified: false
+      });
     } catch (e: any) {
-      setError(e.message ?? 'Falha ao verificar perfil');
+      const msg = e.message === 'Failed to fetch' 
+        ? 'Servidor de stats indisponível no momento'
+        : e.message ?? 'Falha ao verificar perfil';
+      setError(`${msg}. Você pode continuar o cadastro normalmente.`);
     } finally {
       setLoading(false);
     }
@@ -100,6 +117,17 @@ function AlreadyRegistered({ onClose }: { onClose: () => void }) {
       <h3 className="forja-modal-step__title">Você já está inscrito!</h3>
       <p className="forja-modal-step__desc">Fique de olho no Discord para atualizações sobre o torneio.</p>
       <button className="forja-btn forja-btn--primary" onClick={onClose} style={{ width: '100%' }}>Fechar</button>
+    </div>
+  );
+}
+
+function BannedUser({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="forja-modal-step">
+      <div style={{ fontSize: '3rem' }}>🚫</div>
+      <h3 className="forja-modal-step__title">Inscrição Bloqueada</h3>
+      <p className="forja-modal-step__desc" style={{ color: '#fca5a5' }}>Você foi banido ou impedido de participar deste torneio.</p>
+      <button className="forja-btn forja-btn--ghost" onClick={onClose} style={{ width: '100%' }}>Fechar</button>
     </div>
   );
 }
@@ -159,8 +187,8 @@ function RulesAccordion() {
   );
 }
 
-// ─── Profile Preview Card ─────────────────────────────────────────────────────
-function ProfilePreview({ data, discordAvatar }: { data: AomProfileData; discordAvatar: string }) {
+// ─── Profile Preview Card (ATUALIZADO PARA MOSTRAR ELOS) ───────────────────────
+function ProfilePreview({ data, discordAvatar }: { data: any; discordAvatar: string }) {
   const [imgErr, setImgErr] = useState(false);
   const src = (!imgErr && data.avatar_url) ? data.avatar_url : discordAvatar;
 
@@ -168,22 +196,29 @@ function ProfilePreview({ data, discordAvatar }: { data: AomProfileData; discord
     <div className="forja-reg-profile-preview">
       <img
         src={src}
-        alt={data.alias ?? 'Avatar'}
+        alt="Avatar"
         className="forja-reg-profile-preview__avatar"
         referrerPolicy="no-referrer"
         onError={() => setImgErr(true)}
       />
       <div className="forja-reg-profile-preview__info">
-        <span className="forja-reg-profile-preview__alias">
-          {data.alias ?? `Profile #${data.profile_id}`}
+        <span className="forja-reg-profile-preview__alias" style={{ color: '#4ade80' }}>
+          ✓ Perfil Localizado
         </span>
-        <span className="forja-reg-profile-preview__id">ID #{data.profile_id}</span>
+        <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.2rem' }}>
+          <span className="forja-reg-profile-preview__id" style={{ fontSize: '0.7rem' }}>
+            1v1: <strong>{data.elo_1v1 || '—'}</strong>
+          </span>
+          <span className="forja-reg-profile-preview__id" style={{ fontSize: '0.7rem' }}>
+            TG: <strong>{data.elo_tg || '—'}</strong>
+          </span>
+        </div>
         {data.avatar_url
-          ? <span className="forja-reg-profile-preview__badge">📷 Avatar Steam encontrado</span>
-          : <span className="forja-reg-profile-preview__badge forja-reg-profile-preview__badge--warn">ℹ️ Sem avatar — será usado o Discord</span>
+          ? <span className="forja-reg-profile-preview__badge">📷 Avatar Steam pronto</span>
+          : <span className="forja-reg-profile-preview__badge forja-reg-profile-preview__badge--warn">ℹ️ Usando avatar do Discord</span>
         }
       </div>
-      <span className="forja-reg-verified" style={{ color: '#4ade80' }}>✓ Verificado</span>
+      <span className="forja-reg-verified" style={{ color: '#4ade80' }}>Verificado</span>
     </div>
   );
 }
@@ -218,11 +253,11 @@ function RegistrationForm({ discordUser, onSubmit, onClose, submitting, deadline
   // Validate & auto-verify on blur
   const validateUrl = useCallback((val: string): number | null => {
     if (!val.trim()) { setUrlError('URL obrigatória'); return null; }
-    // Accept both /profile/ and /profiles/ (common mistake)
+    // Normaliza a URL para garantir que o parse funcione
     const normalized = val.replace('aomstats.io/profile/', 'aomstats.io/profiles/');
     const id = parseAomProfileId(normalized);
     if (!id) {
-      setUrlError('URL inválida. Use: https://aomstats.io/profiles/SEU_ID');
+      setUrlError('URL inválida. Use: https://aomstats.io/profile/SEU_ID');
       return null;
     }
     setUrlError('');
@@ -248,13 +283,6 @@ function RegistrationForm({ discordUser, onSubmit, onClose, submitting, deadline
     if (id) verify(id);
   };
 
-  // Auto-fill nick from aomstats alias (if not already typed)
-  useEffect(() => {
-    if (profileData?.alias && !nick) {
-      setNick(profileData.alias);
-    }
-  }, [profileData]);
-
   const toggleAvailability = (id: string) => {
     setAvailability(prev =>
       prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id]
@@ -276,7 +304,7 @@ function RegistrationForm({ discordUser, onSubmit, onClose, submitting, deadline
     onSubmit({
       nick: nick.trim(),
       aomstats_url: aomUrl,
-      aom_profile_data: profileData,
+      aom_profile_data: profileData, // Aqui passamos os Elos e Avatar puxados pela API
       availability,
       pitch_quote: pitch,
       is_brazilian: isBrazilian,
@@ -347,7 +375,7 @@ function RegistrationForm({ discordUser, onSubmit, onClose, submitting, deadline
         <span className="forja-reg-hint">Pode ser diferente do seu nome no Discord.</span>
       </div>
 
-      {/* ── 2. AoMStats Profile ─────────────────────────────────────── */}
+      {/* ── 2. AoMStats Profile (COM BUSCA AUTOMÁTICA) ───────────────── */}
       <div className="forja-reg-field">
         <label htmlFor="forja-reg-aomstats" className="forja-reg-label">
           2. Perfil no AoMStats.io <span style={{ color: '#f87171' }}>*</span>
@@ -373,8 +401,12 @@ function RegistrationForm({ discordUser, onSubmit, onClose, submitting, deadline
           </button>
         </div>
         {urlError && <span className="forja-reg-field-error">{urlError}</span>}
-        {verifyError && <span className="forja-reg-field-error">⚠️ {verifyError}</span>}
-        {verifying && <span className="forja-reg-hint" style={{ color: '#f59e0b' }}>⏳ Verificando perfil...</span>}
+        {verifyError && (
+          <div className="forja-reg-hint" style={{ color: '#fcd34d', marginTop: '0.25rem' }}>
+            ⚠️ {verifyError}
+          </div>
+        )}
+        {verifying && <span className="forja-reg-hint" style={{ color: '#f59e0b' }}>⏳ Buscando ELOs e Avatar...</span>}
 
         {/* Profile preview after verification */}
         {profileData && (
@@ -384,8 +416,8 @@ function RegistrationForm({ discordUser, onSubmit, onClose, submitting, deadline
         <span className="forja-reg-hint">
           📌 Como encontrar:{' '}
           <a href="https://aomstats.io/leaderboard/1" target="_blank" rel="noreferrer" style={{ color: '#60a5fa' }}>
-            aomstats.io/leaderboard/1
-          </a>{' '}→ busque seu nick → clique no perfil → copie a URL da página.
+            aomstats.io/leaderboard
+          </a>{' '}→ busque seu nick → clique no perfil → copie a URL.
         </span>
       </div>
 
@@ -510,7 +542,7 @@ function RegistrationForm({ discordUser, onSubmit, onClose, submitting, deadline
 
 // ─── Main Modal ───────────────────────────────────────────────────────────────
 export default function ForjaRegistrationModal({ isOpen, onClose, discordUser, onLoginRequest, onSuccess }: Props) {
-  const [step, setStep]               = useState<Step>('login');
+  const [step, setStep]               = useState<Step>('check'); // INICIA EM CHECK para evitar piscar o login
   const [submitError, setSubmitError] = useState<string | null>(null);
   const { registrationOpen, data: settings } = useForjaSettings();
 
@@ -523,12 +555,26 @@ export default function ForjaRegistrationModal({ isOpen, onClose, discordUser, o
     const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
     if (IS_DEV) { setStep('form'); return; }
 
-    isPlayerRegistered(discordUser.discord_id)
-      .then(reg => setStep(reg ? 'already' : 'form'))
+    setStep('check'); // Garante que a tela de carregamento apareça enquanto verifica
+
+    Promise.all([
+      isPlayerRegistered(discordUser.discord_id),
+      isPlayerBanned(discordUser.discord_id)
+    ])
+      .then(([isRegistered, isBanned]) => {
+        if (isBanned) {
+          setStep('banned');
+        } else if (isRegistered) {
+          setStep('already');
+        } else {
+          setStep('form');
+        }
+      })
       .catch(err => {
-        console.error('[Forja] Error checking registration:', err);
-        setSubmitError('Erro de permissão no banco de dados. Contate o admin.');
-        // Opcional: permitir o form caso falhe, mas como a escrita também falharia, melhor travar no erro
+        console.error('[Forja] Error checking registration/bans:', err);
+        // Fallback: se o banco recusar conexão, libera para o form com um aviso
+        setSubmitError('Aviso: Não conseguimos validar seu histórico, mas você pode prosseguir com a inscrição.');
+        setStep('form');
       });
   }, [isOpen, discordUser, registrationOpen]);
 
@@ -536,7 +582,39 @@ export default function ForjaRegistrationModal({ isOpen, onClose, discordUser, o
     if (!discordUser) return;
     setStep('submitting');
     try {
-      await registerForjaPlayer(discordUser, form);
+      // 1. Tenta buscar os dados da API para injetar no cadastro
+      let finalData = form.aom_profile_data;
+      const profileId = parseAomProfileId(form.aomstats_url);
+      
+      if (profileId) {
+        try {
+          // Fallback obrigatório: timeout ou erro na Vercel/Cloud Function ignora silenciosamente
+          const url = `https://us-central1-boxwood-plating-368522.cloudfunctions.net/fetchaomprofile?id=${profileId}`;
+          const res = await fetch(url);
+          if (res.ok) {
+            const json = await res.json();
+            if (json.success && json.data) {
+              finalData = {
+                profile_id: profileId,
+                avatar_url: json.data.avatar_url,
+                elo_1v1: json.data.elo_1v1,
+                elo_tg: json.data.elo_tg,
+                elo_efetivo: json.data.elo_efetivo,
+                top_gods: json.data.top_gods,
+                alias: null,
+                verified: false
+              };
+            }
+          }
+        } catch (fetchError) {
+          console.warn('[Forja] Erro silencioso ao buscar dados adicionais no cadastro:', fetchError);
+        }
+      }
+
+      const finalForm = { ...form, aom_profile_data: finalData };
+
+      // 2. Registra no banco
+      await registerForjaPlayer(discordUser, finalForm);
       setStep('done');
       onSuccess();
     } catch (err: any) {
@@ -569,6 +647,7 @@ export default function ForjaRegistrationModal({ isOpen, onClose, discordUser, o
           {step === 'login'      && <LoginGate onLogin={onLoginRequest} onClose={onClose} />}
           {step === 'closed'     && <RegistrationClosed onClose={onClose} />}
           {step === 'already'    && <AlreadyRegistered onClose={onClose} />}
+          {step === 'banned'     && <BannedUser onClose={onClose} />}
           {step === 'done'       && <RegistrationDone onClose={onClose} />}
           {step === 'form'       && discordUser && (
             <RegistrationForm

@@ -7,6 +7,7 @@ import { ForjaViewProps, ForjaTeam, ForjaPlayer } from '../types';
 import { useForjaTeams }   from '../hooks/useForjaTeams';
 import { useForjaPlayers } from '../hooks/useForjaPlayers';
 import { updateTeamName }  from '../services/forjaService';
+import { getEffectiveElo } from '../forjaUtils';
 
 // ─── Team Card ────────────────────────────────────────────────────────────────
 const TEAM_COLORS = ['#f59e0b','#60a5fa','#a78bfa','#4ade80','#f87171','#fb923c'];
@@ -34,8 +35,12 @@ function TeamCard({ team, members, colorIdx, isAdmin, isCaptain }: {
   };
 
   const avgElo = members.length > 0
-    ? Math.round(members.reduce((s, m) => s + (m.elo_tg || m.elo_1v1 || 0), 0) / members.length)
-    : 0;
+  ? Math.round(members.reduce((sum, m) => {
+      // Tenta usar o elo_efetivo do banco; se não houver, calcula a média na hora
+      const playerEffective = getEffectiveElo(m);
+      return sum + playerEffective;
+    }, 0) / members.length)
+  : 0;
 
   return (
     <div className="forja-team-card" style={{ '--team-color': color, borderTopColor: color } as any}>

@@ -10,6 +10,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { ForjaPlayer } from '../types';
 import { RankedPlayer, computeRankedPlayers } from '../forjaUtils';
 import { subscribeToForjaPlayers } from '../services/forjaService';
+import { useForjaSettings } from './useForjaSettings';
 
 // ─── Mock Data (dev) ──────────────────────────────────────────────────────────
 
@@ -133,6 +134,8 @@ const MOCK_PLAYERS: ForjaPlayer[] = [
 interface UseForjaPlayersResult {
   /** Players rankeados e com computedTier atribuído */
   rankedPlayers: RankedPlayer[];
+  /** Players banidos */
+  bannedPlayers: ForjaPlayer[];
   /** Players brutos do Firestore (sem modificação) */
   rawPlayers: ForjaPlayer[];
   loading: boolean;
@@ -179,8 +182,16 @@ export function useForjaPlayers(): UseForjaPlayersResult {
     return () => unsub();
   }, []);
 
-  // Tier e rank são sempre computados no cliente — nunca lidos do Firestore
-  const rankedPlayers = useMemo(() => computeRankedPlayers(rawPlayers), [rawPlayers]);
+  // Configurações em tempo real (tier_mode, cortes de tier, etc.)
+  const { settings } = useForjaSettings();
 
-  return { rankedPlayers, rawPlayers, loading, error, isLive };
+  // Tier e rank são sempre computados no cliente — nunca lidos do Firestore
+  // Passa settings para respeitar tier_mode e tamanhos configurados
+  const rankedPlayers = useMemo(
+    () => computeRankedPlayers(rawPlayers, settings ?? undefined),
+    [rawPlayers, settings]
+  );
+  const bannedPlayers = useMemo(() => rawPlayers.filter(p => p.status === 'banned'), [rawPlayers]);
+
+  return { rankedPlayers, bannedPlayers, rawPlayers, loading, error, isLive };
 }

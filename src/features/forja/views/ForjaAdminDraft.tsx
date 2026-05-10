@@ -2,16 +2,19 @@
  * Forja de Hefesto — Painel Admin: Snake Draft
  * Admin controla o draft ao vivo: define tiers, escolhe capitães e faz os picks.
  */
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ForjaViewProps, ForjaPlayer, ForjaTier } from '../types';
 import { useForjaPlayers } from '../hooks/useForjaPlayers';
 import { useForjaTeams }   from '../hooks/useForjaTeams';
 import { useForjaDraftSession } from '../hooks/useForjaDraftSession';
+import { RankedPlayer } from '../forjaUtils';
 // Adicionamos o updatePlayerProfile na importação
 import {
-  setPlayerTier, startForjaDraft, makeDraftPick, resetForjaDraft, undoLastDraftPick, updatePlayerProfile
+  setPlayerTier, startForjaDraft, makeDraftPick, resetForjaDraft, undoLastDraftPick, updatePlayerProfile, unbanForjaPlayer
 } from '../services/forjaService';
 import { getFunctions, httpsCallable } from "firebase/functions";
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../../../firebase';
 
 // ─── Tier Badge ───────────────────────────────────────────────────────────────
 const TIER_COLOR: Record<string, string> = { A: '#facc15', B: '#60a5fa', C: '#94a3b8' };
@@ -43,7 +46,7 @@ function PlayerEditModal({ player, onClose, onSave }: { player: ForjaPlayer, onC
   const [eloTg, setEloTg] = useState(player.elo_tg || 0);
   // @ts-ignore - forçando a leitura caso não exista na tipagem
   const [esportsElo, setEsportsElo] = useState(player.esports_elo || 0);
-  const [gods, setGods] = useState((player.top_gods || []).join(', '));
+  const [gods, setGods] = useState((player.top_gods_admin || player.top_gods?.map(g => g.god) || []).join(', '));
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -53,14 +56,13 @@ function PlayerEditModal({ player, onClose, onSave }: { player: ForjaPlayer, onC
     
     await onSave(player.discord_id, {
       nick,
-      aom_profile_id: profileId ? profileId : null,
+      aom_profile_id: profileId ? Number(profileId) : null,
       avatar_url: avatarUrl,
       elo_1v1: Number(elo1v1),
       elo_tg: Number(eloTg),
-      // @ts-ignore
       esports_elo: Number(esportsElo),
-      top_gods: topGodsArray
-    });
+      top_gods_admin: topGodsArray
+    } as any);
     
     setIsSaving(false);
     onClose();
@@ -111,21 +113,26 @@ interface PlayerRowProps {
   onPick: () => void;
   onTierChange: (t: ForjaTier) => void;
   onEdit: () => void;
+  onUnban?: () => void;
 }
 
 function PlayerRow({
   player, isSelected, isCaptain, isDraftActive, isCurrentPick,
-  onToggleCaptain, onPick, onTierChange, onEdit
+  onToggleCaptain, onPick, onTierChange, onEdit, onUnban
 }: PlayerRowProps) {
   const [imgErr, setImgErr] = useState(false);
   const fallback = `https://cdn.discordapp.com/embed/avatars/${parseInt(player.discord_id.slice(-1)) % 6}.png`;
+
+  const isBanned = player.status === 'banned';
 
   return (
     <div
       className={`forja-admin-player-row
         ${isSelected ? 'forja-admin-player-row--drafted' : ''}
         ${isCurrentPick ? 'forja-admin-player-row--current-pick' : ''}
+        ${isBanned ? 'forja-admin-player-row--banned' : ''}
       `}
+      style={isBanned ? { opacity: 0.8, background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)'} : {}}
     >
       <img
         src={imgErr ? fallback : player.avatar_url || fallback}
@@ -144,53 +151,65 @@ function PlayerRow({
         </span>
       </div>
 
-      {/* Tier selector (só antes do draft) */}
-      {!isDraftActive && (
-        <TierSelect player={player} onSet={onTierChange} />
-      )}
-
-      {/* Status badge */}
-      {player.tier && (
-        <span className="forja-admin-tier-badge" style={{ color: TIER_COLOR[player.tier] }}>
-          Tier {player.tier}
-        </span>
-      )}
-
-      {/* Botoes de Ação (só antes do draft) */}
-      {!isDraftActive && (
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <button
-            className={`forja-btn ${isCaptain ? 'forja-btn--primary' : 'forja-btn--ghost'}`}
-            style={{ padding: '0.3rem 0.5rem', fontSize: '0.7rem' }}
-            onClick={onToggleCaptain}
-            title={isCaptain ? 'Remover como Capitão' : 'Definir como Capitão'}
-          >
-            {isCaptain ? '👑 Cap' : '+ Cap'}
-          </button>
-          <button
-            className="forja-btn forja-btn--ghost"
-            style={{ padding: '0.3rem 0.5rem', fontSize: '0.7rem', color: '#cbd5e1' }}
-            onClick={onEdit}
-            title="Editar Jogador Manualmente"
-          >
-            ✏️
-          </button>
-        </div>
-      )}
-
-      {/* Pick button (durante o draft, jogador disponível) */}
-      {isDraftActive && !isSelected && isCurrentPick && (
+      {isBanned ? (
         <button
-          className="forja-btn forja-btn--primary"
-          style={{ padding: '0.4rem 1rem', fontSize: '0.75rem' }}
-          onClick={onPick}
+          className="forja-btn forja-btn--ghost"
+          style={{ padding: '0.4rem 0.6rem', fontSize: '0.75rem', color: '#68d391', borderColor: 'rgba(104, 211, 145, 0.4)' }}
+          onClick={onUnban}
         >
-          ✓ Pick
+          ♻️ Desbanir
         </button>
-      )}
+      ) : (
+        <>
+          {/* Tier selector (só antes do draft) */}
+          {!isDraftActive && (
+            <TierSelect player={player} onSet={onTierChange} />
+          )}
 
-      {isSelected && (
-        <span className="forja-admin-drafted-badge">✓ Drafted</span>
+          {/* Status badge */}
+          {player.tier && (
+            <span className="forja-admin-tier-badge" style={{ color: TIER_COLOR[player.tier] }}>
+              Tier {player.tier}
+            </span>
+          )}
+
+          {/* Botoes de Ação (só antes do draft) */}
+          {!isDraftActive && (
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <button
+                className={`forja-btn ${isCaptain ? 'forja-btn--primary' : 'forja-btn--ghost'}`}
+                style={{ padding: '0.3rem 0.5rem', fontSize: '0.7rem' }}
+                onClick={onToggleCaptain}
+                title={isCaptain ? 'Remover como Capitão' : 'Definir como Capitão'}
+              >
+                {isCaptain ? '👑 Cap' : '+ Cap'}
+              </button>
+              <button
+                className="forja-btn forja-btn--ghost"
+                style={{ padding: '0.3rem 0.5rem', fontSize: '0.7rem', color: '#cbd5e1' }}
+                onClick={onEdit}
+                title="Editar Jogador Manualmente"
+              >
+                ✏️
+              </button>
+            </div>
+          )}
+
+          {/* Pick button (durante o draft, jogador disponível) */}
+          {isDraftActive && !isSelected && isCurrentPick && (
+            <button
+              className="forja-btn forja-btn--primary"
+              style={{ padding: '0.4rem 1rem', fontSize: '0.75rem' }}
+              onClick={onPick}
+            >
+              ✓ Pick
+            </button>
+          )}
+
+          {isSelected && (
+            <span className="forja-admin-drafted-badge">✓ Drafted</span>
+          )}
+        </>
       )}
     </div>
   );
@@ -270,15 +289,28 @@ function DraftBoard({ session, teams, players }: {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
-  const { rankedPlayers: players, loading: playersLoading } = useForjaPlayers();
+  const { rankedPlayers: players, bannedPlayers, loading: playersLoading } = useForjaPlayers();
   const { teams }                                            = useForjaTeams();
   const { session, loading: sessionLoading } = useForjaDraftSession();
 
   const [selectedCaptains, setSelectedCaptains] = useState<string[]>([]);
-  const [tierFilter, setTierFilter]             = useState<'all'|'A'|'B'|'C'>('all');
+  const [tierFilter, setTierFilter]             = useState<'all'|'A'|'B'|'C'|'banned'>('all');
   const [isBusy, setIsBusy]                     = useState(false);
   const [error, setError]                       = useState<string | null>(null);
   
+  // Estado para Snapshot Progress
+  const [snapshotProgress, setSnapshotProgress] = useState<any>(null);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const unsub = onSnapshot(doc(db, 'forja_status/snapshot'), (docSnap) => {
+      if (docSnap.exists()) {
+        setSnapshotProgress(docSnap.data());
+      }
+    });
+    return () => unsub();
+  }, [isAdmin]);
+
   // Estado para controlar quem estamos editando manualmente
   const [editingPlayer, setEditingPlayer] = useState<ForjaPlayer | null>(null);
 
@@ -290,11 +322,12 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
   );
 
   const visiblePlayers = useMemo(() => {
+    if (tierFilter === 'banned') return [...bannedPlayers];
     const base = tierFilter === 'all'
       ? players
       : players.filter(p => (p as any).computedTier === tierFilter);
     return [...base];
-  }, [players, tierFilter]);
+  }, [players, bannedPlayers, tierFilter]);
 
   const availablePlayers = useMemo(
     () => visiblePlayers.filter(p => !draftedIds.has(p.discord_id)),
@@ -372,7 +405,7 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
 
     try {
       const functions = getFunctions(undefined, 'us-central1');
-      const runSnapshot = httpsCallable(functionsObj, 'updateEloSnapshot');
+      const runSnapshot = httpsCallable(functions, 'updateEloSnapshot');
       const result = await runSnapshot();
       
       alert(`Snapshot finalizado com sucesso!`);
@@ -380,6 +413,19 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
     } catch (err: any) {
       console.error("[Forja Snapshot] Erro:", err);
       setError("Falha ao rodar o Snapshot: " + err.message);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleUnban = async (player: ForjaPlayer) => {
+    if (!confirm(`Deseja desbanir ${player.nick}? Ele será devolvido à lista de jogadores disponíveis.`)) return;
+    setIsBusy(true); setError(null);
+    try {
+      await unbanForjaPlayer(player.discord_id);
+      // Optional: alert(`Jogador ${player.nick} desbanido com sucesso.`);
+    } catch (err: any) {
+      setError('Erro ao desbanir jogador: ' + err.message);
     } finally {
       setIsBusy(false);
     }
@@ -424,9 +470,9 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
                 className="forja-btn forja-btn--ghost"
                 style={{ borderColor: '#60a5fa', color: '#60a5fa' }}
                 onClick={handleSnapshot}
-                disabled={isBusy}
+                disabled={isBusy || (snapshotProgress && snapshotProgress.status === 'running')}
               >
-                {isBusy ? '📸 Atualizando Servidor...' : '📸 Snapshot de ELO'}
+                {isBusy || (snapshotProgress && snapshotProgress.status === 'running') ? '📸 Atualizando Servidor...' : '📸 Snapshot de ELO'}
               </button>
               <button
                 id="forja-admin-start-draft-btn"
@@ -463,6 +509,30 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
         </div>
       </div>
 
+      {/* Snapshot Progress */}
+      {snapshotProgress && snapshotProgress.status === 'running' && (
+        <div style={{ background: '#1e293b', border: '1px solid #3b82f6', borderRadius: '8px', padding: '1rem', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: '#93c5fd', fontWeight: 600 }}>
+            <span>📸 Atualização de ELO/Gods em andamento...</span>
+            <span>{snapshotProgress.processed_count} / {snapshotProgress.total_players}</span>
+          </div>
+          <div style={{ width: '100%', background: '#0f172a', height: '12px', borderRadius: '6px', overflow: 'hidden' }}>
+            <div 
+              style={{ 
+                height: '100%', 
+                background: 'linear-gradient(90deg, #3b82f6, #60a5fa)', 
+                width: `${Math.min(100, Math.round(((snapshotProgress.processed_count || 0) / (snapshotProgress.total_players || 1)) * 100))}%`,
+                transition: 'width 0.3s ease'
+              }} 
+            />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem', fontSize: '0.85rem', color: '#cbd5e1' }}>
+            <span>Jogador atual: <strong style={{ color: '#fff' }}>{snapshotProgress.current_player || '...'}</strong></span>
+            <span>Atualizados com sucesso: <strong style={{ color: '#10b981' }}>{snapshotProgress.updated_count}</strong></span>
+          </div>
+        </div>
+      )}
+
       {/* Error */}
       {error && (
         <div className="forja-modal-error" style={{ marginBottom: '1rem' }}>
@@ -479,17 +549,18 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
           </h3>
 
           {/* Tier filter */}
-          <div className="forja-filter-row" style={{ marginBottom: '1rem' }}>
-            {(['all','A','B','C'] as const).map(f => (
+          <div className="forja-filter-row" style={{ marginBottom: '1rem', flexWrap: 'wrap' }}>
+            {(['all','A','B','C', 'banned'] as const).map(f => (
               <button
                 key={f}
                 className={`forja-filter-btn ${tierFilter === f ? 'forja-filter-btn--active' : ''}`}
                 onClick={() => setTierFilter(f)}
+                style={f === 'banned' ? { borderColor: 'rgba(239, 68, 68, 0.5)', color: tierFilter === 'banned' ? '#fff' : '#fca5a5', background: tierFilter === 'banned' ? '#dc2626' : undefined } : {}}
               >
-                {f === 'all' ? 'Todos' : `Tier ${f}`}
+                {f === 'all' ? 'Todos' : f === 'banned' ? '🚫 Banidos' : `Tier ${f}`}
               </button>
             ))}
-            <span className="forja-filter-count">{availablePlayers.length} disponíveis</span>
+            <span className="forja-filter-count">{availablePlayers.length} {tierFilter === 'banned' ? 'banidos' : 'disponíveis'}</span>
           </div>
 
           {/* Player list */}
@@ -505,11 +576,12 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
                   isSelected={false}
                   isCaptain={selectedCaptains.includes(player.discord_id)}
                   isDraftActive={isDraftActive}
-                  isCurrentPick={isDraftActive && session?.current_team_id !== null && player.tier === session?.current_round}
+                  isCurrentPick={isDraftActive && session?.current_team_id !== null && (player as RankedPlayer).computedTier === session?.current_round}
                   onToggleCaptain={() => toggleCaptain(player.discord_id)}
                   onPick={() => handlePick(player)}
                   onTierChange={t => handleTierChange(player.discord_id, t)}
                   onEdit={() => setEditingPlayer(player)}
+                  onUnban={() => handleUnban(player)}
                 />
               ))}
               {/* Drafted players (greyed) */}
@@ -525,6 +597,7 @@ export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
                   onPick={() => {}}
                   onTierChange={() => {}}
                   onEdit={() => setEditingPlayer(player)}
+                  onUnban={() => handleUnban(player)}
                 />
               ))}
               {players.length === 0 && (

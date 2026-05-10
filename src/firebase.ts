@@ -6,16 +6,13 @@ import firebaseConfig from '../firebase-applet-config.json';
 // Inicializa o App com as configurações do JSON
 const app = initializeApp(firebaseConfig);
 
-/**
- * ATENÇÃO JOÃO ALEXANDRE: 
- * Forçamos o ID "mythosdraft-prod" 
- * pois o seu projeto não utiliza o banco de dados "(default)".
- */
-export const db = getFirestore(app, "mythosdraft-prod");
+export const FIRESTORE_DB_ID = firebaseConfig.firestoreDatabaseId;
+
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 export const auth = getAuth(app);
 
-console.log("[Firebase] Initialized with Database ID: mythosdraft-prod");
+console.log("[Firebase] Initialized with Database ID:", firebaseConfig.firestoreDatabaseId);
 console.log("[Firebase] Project ID:", firebaseConfig.projectId);
 
 export enum OperationType {
@@ -48,7 +45,7 @@ export interface FirestoreErrorInfo {
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
-    databaseId: "mythosdraft-prod",
+    databaseId: firebaseConfig.firestoreDatabaseId,
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -70,11 +67,18 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 // Teste de conexão automático
 async function testConnection() {
   try {
-    console.log("Testing Firestore connection to database: mythosdraft-prod");
+    const dbId = firebaseConfig.firestoreDatabaseId || '(default)';
+    console.log("Testing Firestore connection to database:", dbId);
     // Tenta ler um documento de teste para validar o acesso
     const docRef = doc(db, 'test', 'connection');
-    await getDocFromServer(docRef);
-    console.log("Firestore connection test successful");
+    const snap = await getDocFromServer(docRef);
+    console.log("Firestore connection test results:", snap.exists() ? "Document exists" : "Document not found (but connected)");
+    
+    // Teste extra: listar uma pequena parte de forja_players
+    const { getDocsFromServer, collection, limit, query } = await import('firebase/firestore');
+    const q = query(collection(db, 'forja_players'), limit(1));
+    const playersSnap = await getDocsFromServer(q);
+    console.log(`[Debug] forja_players count (limited 1): ${playersSnap.size}`);
   } catch (error) {
     const errorDetails = error instanceof Error ? error.message : String(error);
     console.error("App-level connection test fail:", errorDetails);

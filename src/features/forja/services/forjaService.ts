@@ -265,12 +265,25 @@ export interface AomApiResult {
  * e retorna os dados sem salvar. O Admin decide o que aplicar.
  */
 export async function fetchAomProfileForPlayer(profileId: number): Promise<AomApiResult> {
-  const res = await fetch(`/api/forja/fetch-aom-profile?id=${profileId}`);
+  const url = `https://us-central1-boxwood-plating-368522.cloudfunctions.net/fetchaomprofile?id=${profileId}`;
+  const res = await fetch(url);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ?? `Erro ${res.status} ao consultar API`);
   }
-  return res.json();
+  
+  const json = await res.json();
+  if (!json.success || !json.data) {
+    throw new Error(json.error ?? 'Erro inesperado no retorno da API');
+  }
+  
+  return {
+    elo_1v1: json.data.elo_1v1,
+    elo_tg: json.data.elo_tg,
+    top_gods: json.data.top_gods,
+    alias: json.data.alias || String(profileId),
+    avatar_url: json.data.avatar_url,
+  };
 }
 
 /**

@@ -10,7 +10,7 @@ import { useForjaTeams }            from '../hooks/useForjaTeams';
 import { useForjaDraftSession } from '../hooks/useForjaDraftSession';
 import { makeDraftPick, updateCaptainPresence } from '../services/forjaService';
 
-const PRESENCE_INTERVAL_MS = 20_000;
+const PRESENCE_INTERVAL_MS = 120_000;
 
 // ─── Online indicator ─────────────────────────────────────────────────────────
 function OnlineDot({ lastSeenMs }: { lastSeenMs?: number }) {

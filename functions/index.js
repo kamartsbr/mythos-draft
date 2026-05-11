@@ -1,5 +1,6 @@
 /* eslint-disable */
 // Build Final Corrigido (Preservação de Dados + Elo Efetivo) - 07/05/2026
+// 🔥 CORREÇÃO DE CUSTOS: Remoção do loop de gravação de status e uso de Batch
 
 const { onCall, onRequest } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2");
@@ -13,8 +14,6 @@ setGlobalOptions({ region: "us-central1" });
 
 const API_KEY = 'mythosdraftweb_8b73781cc25e8f45b77bb760146a19dad427168c22fa8cad';
 const TARGET_ORIGIN = 'https://mythosdraft.com';
-const CHUNK_SIZE = 6;
-const DELAY_BETWEEN_CHUNKS_MS = 1200;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -69,7 +68,7 @@ async function fetchVercelData(profileId, nick = null) {
 
     return {
       isError: false,
-      avatar_url: data.playerAvatarUrl || null, // Mudado para null se vazio
+      avatar_url: data.playerAvatarUrl || null,
       elo_1v1: calc_elo_1v1,
       elo_tg: calc_elo_tg,
       elo_efetivo: calc_elo_efetivo,
@@ -78,7 +77,7 @@ async function fetchVercelData(profileId, nick = null) {
             .map(g => g && g.god)
             .filter(g => typeof g === 'string' && g.trim() !== '')
             .slice(0, 5) 
-        : null // Retorna null se não houver deuses
+        : null
     };
   } catch (e) { 
     return { isError: true, message: e.message, status: e.response?.status }; 
@@ -98,18 +97,21 @@ exports.updateEloSnapshot = onCall({ timeoutSeconds: 540, memory: "256MiB" }, as
   const total = players.length;
   const statusRef = db.doc("forja_status/snapshot");
 
-  // Inicia o tracking de progresso
+  // Inicia o tracking de progresso (Grava 1 ÚNICA VEZ no início)
   await statusRef.set({
     status: 'running',
     total_players: total,
     processed_count: 0,
     updated_count: 0,
-    current_player: '',
+    current_player: 'Atualizando...',
     start_time: admin.firestore.FieldValue.serverTimestamp(),
     end_time: null
   });
 
   if (total > 0) {
+    let batch = db.batch();
+    let batchOperations = 0;
+
     for (let i = 0; i < total; i++) {
       const player = players[i];
       
@@ -117,7 +119,6 @@ exports.updateEloSnapshot = onCall({ timeoutSeconds: 540, memory: "256MiB" }, as
         const stats = await fetchVercelData(player.data.aom_profile_id || player.data.aom_id, player.nick);
         
         if (stats && !stats.isError) {
-          // MONTAGEM DINÂMICA DO UPDATE (O segredo para não apagar nada)
           const updateObj = {
             elo_1v1: stats.elo_1v1,
             elo_tg: stats.elo_tg,
@@ -126,37 +127,42 @@ exports.updateEloSnapshot = onCall({ timeoutSeconds: 540, memory: "256MiB" }, as
             last_update: admin.firestore.FieldValue.serverTimestamp()
           };
 
-          // SÓ ATUALIZA O AVATAR SE A API TROUXER UM NOVO
-          if (stats.avatar_url) {
-            updateObj.avatar_url = stats.avatar_url;
-          }
+          if (stats.avatar_url) updateObj.avatar_url = stats.avatar_url;
+          if (stats.top_gods && stats.top_gods.length > 0) updateObj.top_gods = stats.top_gods;
 
-          // SÓ ATUALIZA OS DEUSES SE A API TROUXER ALGO
-          if (stats.top_gods && stats.top_gods.length > 0) {
-            updateObj.top_gods = stats.top_gods;
-          }
-
-          await player.ref.set(updateObj, { merge: true });
+          // Adiciona a gravação no pacote (batch) em vez de gravar direto no banco
+          batch.set(player.ref, updateObj, { merge: true });
           updatedCount++;
+          batchOperations++;
         }
       } catch (e) {
         console.error(`Erro ao processar ${player.nick}:`, e);
       }
 
-      await statusRef.update({
-        processed_count: i + 1,
-        updated_count: updatedCount,
-        current_player: player.nick || ''
-      });
+      // Previne erro do Firestore (limite de 500 ops por batch)
+      if (batchOperations >= 400) {
+        await batch.commit();
+        batch = db.batch();
+        batchOperations = 0;
+      }
 
       if (i < total - 1) {
-        await delay(200); // Fila Indiana 200ms
+        await delay(200); // Fila Indiana 200ms para não engasgar a Vercel
       }
+    }
+
+    // Grava o restante que ficou no pacote
+    if (batchOperations > 0) {
+      await batch.commit();
     }
   }
 
+  // Finaliza o tracking de progresso (Grava 1 ÚNICA VEZ no final)
   await statusRef.update({
     status: 'completed',
+    processed_count: total,
+    updated_count: updatedCount,
+    current_player: 'Concluído',
     end_time: admin.firestore.FieldValue.serverTimestamp()
   });
 

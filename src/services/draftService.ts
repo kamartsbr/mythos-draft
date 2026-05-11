@@ -425,10 +425,13 @@ export const draftService = {
         else nextLobby.scoreB++;
 
         let isFinished = false;
-        if (lobby.config.preset === 'MCL' || (lobby.config.preset === 'FORJA' && lobby.config.tournamentStage === 'GROUP')) {
+        const sType = lobby.config.seriesType;
+
+        if (sType === '3G' || lobby.config.preset === 'MCL' || (lobby.config.preset === 'FORJA' && lobby.config.tournamentStage === 'GROUP')) {
+          // No modo 3G (ou Forja Grupos), a série SÓ acaba após o Game 3 ser reportado, independente do placar (pode ser 3-0 ou 2-1).
           isFinished = lobby.currentGame === 3 && Boolean(nextLobby.reportVoteA && nextLobby.reportVoteB);
         } else {
-          const maxGamesStr = lobby.config.seriesType === 'CUSTOM' ? (lobby.config.customGameCount || 1).toString() : lobby.config.seriesType.replace('BO', '');
+          const maxGamesStr = sType === 'CUSTOM' ? (lobby.config.customGameCount || 1).toString() : sType.replace('BO', '');
           const maxGames = parseInt(maxGamesStr);
           const winThreshold = Math.ceil(maxGames / 2);
           if (nextLobby.scoreA >= winThreshold || nextLobby.scoreB >= winThreshold) isFinished = true;

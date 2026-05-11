@@ -404,6 +404,10 @@ export async function updateTeamName(teamId: string, name?: string, captainId?: 
   await updateDoc(doc(db, TEAMS_COL, teamId), updates);
 }
 
+export async function updateTeamGroup(teamId: string, groupId: string | null): Promise<void> {
+  await updateDoc(doc(db, TEAMS_COL, teamId), { groupId });
+}
+
 // ─── Draft Session ────────────────────────────────────────────────────────────
 
 const draftDocRef = () => doc(db, DRAFT_COL, DRAFT_DOC);

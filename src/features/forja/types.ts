@@ -88,6 +88,7 @@ export interface ForjaTeam {
   captain_id: string;
   members: string[];
   pick_order: number;
+  groupId?: string; // ID do Grupo (A, B, C, D)
 }
 
 // ─── Schedule ─────────────────────────────────────────────────────────────────

@@ -279,6 +279,7 @@ export type ForjaTabId =
   | 'schedule'
   | 'times'
   | 'tabela'
+  | 'custom-draft'
   | 'admin-draft'
   | 'draft-room'
   | 'obs';

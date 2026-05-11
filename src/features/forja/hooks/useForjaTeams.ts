@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { ForjaTeam } from '../types';
-import { subscribeToForjaTeams } from '../services/forjaService';
+import { subscribeToForjaTeams, getForjaTeamsOnce, cachedTeams } from '../services/forjaService';
 
-export function useForjaTeams() {
-  const [teams, setTeams]   = useState<ForjaTeam[]>([]);
-  const [loading, setLoading] = useState(true);
+export function useForjaTeams(isLive = false) {
+  const [teams, setTeams]     = useState<ForjaTeam[]>(!isLive && cachedTeams ? cachedTeams : []);
+  const [loading, setLoading] = useState(!(!isLive && cachedTeams));
   const [error, setError]     = useState<string | null>(null);
 
   useEffect(() => {
@@ -13,12 +13,31 @@ export function useForjaTeams() {
       setTimeout(() => { setTeams([]); setLoading(false); }, 400);
       return;
     }
-    const unsub = subscribeToForjaTeams(
-      data => { setTeams(data); setLoading(false); setError(null); },
-      ()   => { setError('Erro ao carregar times.'); setLoading(false); }
-    );
-    return () => unsub();
-  }, []);
+
+    if (isLive) {
+      const unsub = subscribeToForjaTeams(
+        data => { setTeams(data); setLoading(false); setError(null); },
+        ()   => { setError('Erro ao carregar times.'); setLoading(false); }
+      );
+      return () => unsub();
+    } else {
+      if (cachedTeams) return;
+      let isMounted = true;
+      getForjaTeamsOnce().then(data => {
+        if (isMounted) {
+          setTeams(data);
+          setLoading(false);
+          setError(null);
+        }
+      }).catch(err => {
+        if (isMounted) {
+          setError('Erro ao carregar times.');
+          setLoading(false);
+        }
+      });
+      return () => { isMounted = false; };
+    }
+  }, [isLive]);
 
   return { teams, loading, error };
 }

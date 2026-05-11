@@ -130,10 +130,11 @@ export function useDraft(
         mapOrder.push({ player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
       } else if (gameNumber === 2) {
         mapOrder.push({ player: 'B', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-      } else if (gameNumber === 3 && cfg.preset === 'FORJA') {
+      } else if (gameNumber === 3 && (cfg.preset === 'FORJA' || cfg.hasMap3RandomRoll)) {
+        // FORJA: Mapa 3 sempre sorteado pelo sistema (ADMIN turn)
         mapOrder.push({ player: 'ADMIN', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
       }
-      // God picks happen every game in MCL
+      // MCL puro: Mapa 3 é pré-determinado pelo round (seriesMaps[2] já está preenchido)
     } else if (cfg.seriesType !== 'BO1') {
       // Standard Series Logic (BO3, BO5, etc.)
       
@@ -223,6 +224,10 @@ export function useDraft(
           godOrder.push({ player: startsWithB ? 'A' : 'B', action: 'BAN', target: 'GOD', modifier: cfg.isExclusive ? 'EXCLUSIVE' : 'GLOBAL', execution: 'NORMAL' });
         }
       }
+    } else if (cfg.hasPerMapBans) {
+      // FORJA Playoffs: 1 Ban de Deus por time antes dos picks em cada mapa
+      godOrder.push({ player: startsWithB ? 'B' : 'A', action: 'BAN', target: 'GOD', modifier: 'GLOBAL', execution: 'NORMAL' });
+      godOrder.push({ player: startsWithB ? 'A' : 'B', action: 'BAN', target: 'GOD', modifier: 'GLOBAL', execution: 'NORMAL' });
     }
 
     let picksPerTeam = cfg.teamSize;
@@ -462,6 +467,38 @@ export function useDraft(
     const timeout = setTimeout(() => {
       if (currentTurn.target === 'MAP') {
         if (currentTurn.action === 'PICK' || currentTurn.action === 'BAN') {
+          // ── FORJA: Sorteio do Mapa 3 via pool cacheada (Cold Fetch) ───────────
+          if (
+            lobby.config.hasMap3RandomRoll &&
+            lobby.currentGame === 3 &&
+            lobby.config.preset === 'FORJA'
+          ) {
+            import('../features/forja/services/forjaService').then(({ getForjaMapPoolOnce }) => {
+              getForjaMapPoolOnce().then(poolDoc => {
+                const allowed = poolDoc?.active_map_ids ?? lobby.config.allowedMaps ?? [];
+                const available = allowed.filter(id =>
+                  !mapBans.includes(id) &&
+                  !seriesMaps.includes(id)
+                );
+                if (available.length > 0) {
+                  const randomId = available[Math.floor(Math.random() * available.length)];
+                  handleAction(randomId);
+                }
+              }).catch(() => {
+                // Fallback: usa lista local de mapas
+                const fallbackMaps = MAPS.filter(m =>
+                  !mapBans.includes(m.id) &&
+                  !seriesMaps.includes(m.id)
+                );
+                if (fallbackMaps.length > 0) {
+                  handleAction(fallbackMaps[Math.floor(Math.random() * fallbackMaps.length)].id);
+                }
+              });
+            });
+            return; // Não executa o fluxo padrão abaixo
+          }
+          // ── Fluxo padrão ─────────────────────────────────────────────────────
+
           const allowedMaps = lobby.config.allowedMaps && lobby.config.allowedMaps.length > 0 
             ? lobby.config.allowedMaps 
             : MAPS.map(m => m.id);

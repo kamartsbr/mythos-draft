@@ -78,7 +78,7 @@ function PickCard({ player, onPick, disabled }: {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function ForjaDraftRoom({ discordUser, isAdmin }: ForjaViewProps) {
   const { rankedPlayers: players, loading: playersLoading } = useForjaPlayers();
-  const { teams }                               = useForjaTeams();
+  const { teams }                               = useForjaTeams(true);
   const { session, loading: sessionLoading } = useForjaDraftSession();
 
   // 🚨 CORRIGIDO: Fim do Loop Infinito de Leituras e Gravações 🚨

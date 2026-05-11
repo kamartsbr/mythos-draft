@@ -19,9 +19,10 @@ import { cn } from './lib/utils';
 
 import { ErrorBoundary } from './components/UI/ErrorBoundary';
 import { Footer } from './components/UI/Footer';
+import { lazyWithRetry } from './lib/lazyWithRetry';
 
 // ── Forja de Hefesto — Lazy-loaded para isolamento total ──────────
-const ForjaHub = lazy(() => import('./features/forja/ForjaHub'));
+const ForjaHub = lazyWithRetry(() => import('./features/forja/ForjaHub'));
 function ForjaLoader() {
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center">

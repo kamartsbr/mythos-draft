@@ -373,31 +373,79 @@ export function subscribeToForjaPlayer(
 
 // ─── Schedule ─────────────────────────────────────────────────────────────────
 
+export let cachedSchedule: ForjaScheduleEntry[] | null = null;
+export let schedulePromise: Promise<ForjaScheduleEntry[]> | null = null;
+
+export async function getForjaScheduleOnce(): Promise<ForjaScheduleEntry[]> {
+  if (cachedSchedule) return cachedSchedule;
+  if (!schedulePromise) {
+    const q = query(collection(db, SCHEDULE_COL), orderBy('date', 'asc'));
+    schedulePromise = getDocs(q)
+      .then(snap => snap.docs.map(d => ({ ...(d.data() as ForjaScheduleEntry), id: d.id })))
+      .catch(() => []);
+  }
+  cachedSchedule = await schedulePromise;
+  return cachedSchedule;
+}
+
+export function invalidateScheduleCache() {
+  cachedSchedule = null;
+  schedulePromise = null;
+}
+
 export function subscribeToForjaSchedule(
   onData: (entries: ForjaScheduleEntry[]) => void,
   onError?: (err: Error) => void
 ): Unsubscribe {
   const q = query(collection(db, SCHEDULE_COL), orderBy('date', 'asc'));
   return onSnapshot(q,
-    snap => onData(snap.docs.map(d => ({ ...(d.data() as ForjaScheduleEntry), id: d.id }))),
+    snap => {
+      const data = snap.docs.map(d => ({ ...(d.data() as ForjaScheduleEntry), id: d.id }));
+      cachedSchedule = data;
+      schedulePromise = Promise.resolve(data);
+      onData(data);
+    },
     err  => { console.error('[Forja] schedule:', err); onError?.(err); }
   );
 }
 
 export async function addScheduleEntry(entry: Omit<ForjaScheduleEntry, 'id'>): Promise<string> {
   const ref = await addDoc(collection(db, SCHEDULE_COL), { ...entry, date: entry.date ?? null });
+  invalidateScheduleCache();
   return ref.id;
 }
 
 export async function updateScheduleEntry(id: string, data: Partial<Omit<ForjaScheduleEntry, 'id'>>): Promise<void> {
   await updateDoc(doc(db, SCHEDULE_COL, id), data as any);
+  invalidateScheduleCache();
 }
 
 export async function deleteScheduleEntry(id: string): Promise<void> {
   await deleteDoc(doc(db, SCHEDULE_COL, id));
+  invalidateScheduleCache();
 }
 
 // ─── Teams ────────────────────────────────────────────────────────────────────
+
+export let cachedTeams: ForjaTeam[] | null = null;
+export let teamsPromise: Promise<ForjaTeam[]> | null = null;
+
+export async function getForjaTeamsOnce(): Promise<ForjaTeam[]> {
+  if (cachedTeams) return cachedTeams;
+  if (!teamsPromise) {
+    const q = query(collection(db, TEAMS_COL), orderBy('pick_order', 'asc'));
+    teamsPromise = getDocs(q)
+      .then(snap => snap.docs.map(d => ({ ...(d.data() as ForjaTeam), id: d.id })))
+      .catch(() => []);
+  }
+  cachedTeams = await teamsPromise;
+  return cachedTeams;
+}
+
+export function invalidateTeamsCache() {
+  cachedTeams = null;
+  teamsPromise = null;
+}
 
 export function subscribeToForjaTeams(
   onData: (teams: ForjaTeam[]) => void,
@@ -405,7 +453,12 @@ export function subscribeToForjaTeams(
 ): Unsubscribe {
   const q = query(collection(db, TEAMS_COL), orderBy('pick_order', 'asc'));
   return onSnapshot(q,
-    snap => onData(snap.docs.map(d => ({ ...(d.data() as ForjaTeam), id: d.id }))),
+    snap => {
+      const data = snap.docs.map(d => ({ ...(d.data() as ForjaTeam), id: d.id }));
+      cachedTeams = data;
+      teamsPromise = Promise.resolve(data);
+      onData(data);
+    },
     err  => { console.error('[Forja] teams:', err); onError?.(err); }
   );
 }
@@ -416,10 +469,12 @@ export async function updateTeamName(teamId: string, name?: string, captainId?: 
   if (captainId !== undefined) updates.captain_id = captainId;
   if (Object.keys(updates).length === 0) return;
   await updateDoc(doc(db, TEAMS_COL, teamId), updates);
+  invalidateTeamsCache();
 }
 
 export async function updateTeamGroup(teamId: string, groupId: string | null): Promise<void> {
   await updateDoc(doc(db, TEAMS_COL, teamId), { groupId });
+  invalidateTeamsCache();
 }
 
 // ─── Draft Session ────────────────────────────────────────────────────────────
@@ -619,6 +674,25 @@ export async function resetForjaDraft(): Promise<void> {
 /** IDs dos documentos de conteúdo */
 export type ForjaContentId = 'rules' | 'format' | 'prizes' | 'settings';
 
+export let cachedContent: Record<string, any> = {};
+export let contentPromises: Record<string, Promise<any> | null> = {};
+
+export async function getForjaContentOnce<T = ForjaContentDoc>(docId: ForjaContentId): Promise<T | null> {
+  if (cachedContent[docId]) return cachedContent[docId] as T;
+  if (!contentPromises[docId]) {
+    contentPromises[docId] = getDoc(doc(db, CONTENT_COL, docId))
+      .then(snap => snap.exists() ? snap.data() : null)
+      .catch(() => null);
+  }
+  cachedContent[docId] = await contentPromises[docId];
+  return cachedContent[docId] as T | null;
+}
+
+export function updateCachedContent(docId: ForjaContentId, data: any) {
+  cachedContent[docId] = data;
+  contentPromises[docId] = Promise.resolve(data);
+}
+
 export function subscribeToForjaContent<T = ForjaContentDoc>(
   docId: ForjaContentId,
   onData: (data: T | null) => void,
@@ -626,12 +700,39 @@ export function subscribeToForjaContent<T = ForjaContentDoc>(
 ): Unsubscribe {
   return onSnapshot(
     doc(db, CONTENT_COL, docId),
-    snap => onData(snap.exists() ? (snap.data() as T) : null),
+    snap => {
+      const data = snap.exists() ? (snap.data() as T) : null;
+      if (data) {
+        cachedContent[docId] = data;
+        contentPromises[docId] = Promise.resolve(data);
+      }
+      onData(data);
+    },
     err  => { console.error(`[Forja] content/${docId}:`, err); onError?.(err); }
   );
 }
 
 // ─── Settings do Torneio ──────────────────────────────────────────────────────
+
+/** Subscrição em tempo real às configurações gerais do torneio. */
+export let cachedSettings: ForjaSettings | null = null;
+export let settingsPromise: Promise<ForjaSettings | null> | null = null;
+
+export async function getForjaSettingsOnce(): Promise<ForjaSettings | null> {
+  if (cachedSettings) return cachedSettings;
+  if (!settingsPromise) {
+    settingsPromise = getDoc(doc(db, CONTENT_COL, 'settings'))
+      .then(snap => snap.exists() ? snap.data() as ForjaSettings : null)
+      .catch(() => null);
+  }
+  cachedSettings = await settingsPromise;
+  return cachedSettings;
+}
+
+export function updateCachedSettings(data: ForjaSettings) {
+  cachedSettings = data;
+  settingsPromise = Promise.resolve(data);
+}
 
 /** Subscrição em tempo real às configurações gerais do torneio. */
 export function subscribeToForjaSettings(
@@ -640,7 +741,14 @@ export function subscribeToForjaSettings(
 ): Unsubscribe {
   return onSnapshot(
     doc(db, CONTENT_COL, 'settings'),
-    snap => onData(snap.exists() ? (snap.data() as ForjaSettings) : null),
+    snap => {
+      const data = snap.exists() ? (snap.data() as ForjaSettings) : null;
+      if (data) {
+        cachedSettings = data;
+        settingsPromise = Promise.resolve(data);
+      }
+      onData(data);
+    },
     err  => { console.error('[Forja] settings:', err); onError?.(err); }
   );
 }
@@ -658,6 +766,12 @@ export async function saveForjaSettings(
     updated_at: serverTimestamp(),
     updated_by: updatedBy,
   }, { merge: true });
+  
+  if (cachedSettings) {
+    updateCachedSettings({ ...cachedSettings, ...settings } as ForjaSettings);
+  } else {
+    settingsPromise = null;
+  }
 }
 
 // ─── Adição Manual de Jogador (Admin) ────────────────────────────────────────
@@ -734,6 +848,12 @@ export async function updateForjaContent(
     updated_at: serverTimestamp(),
     updated_by: updatedBy,
   }, { merge: true });
+  
+  if (cachedContent[docId]) {
+    updateCachedContent(docId, { ...cachedContent[docId], ...data });
+  } else {
+    updateCachedContent(docId, data);
+  }
 }
 
 /** Seeds os defaults de conteúdo caso o documento não exista */
@@ -785,6 +905,31 @@ export async function seedDefaultContent(updatedBy: string): Promise<void> {
 
 const RULES_DOC_ID = 'rules_v2';
 
+export let cachedRulesBlocks: ForjaRulesBlock[] | null = null;
+export let rulesBlocksPromise: Promise<ForjaRulesBlock[] | null> | null = null;
+
+export async function getForjaRulesBlocksOnce(): Promise<ForjaRulesBlock[]> {
+  if (cachedRulesBlocks) return cachedRulesBlocks;
+  if (!rulesBlocksPromise) {
+    rulesBlocksPromise = getDoc(doc(db, CONTENT_COL, RULES_DOC_ID))
+      .then(snap => {
+         if (snap.exists()) {
+           const raw = snap.data();
+           const blocks: ForjaRulesBlock[] = (raw.blocks ?? []);
+           return [...blocks].sort((a, b) => a.order - b.order);
+         }
+         return [];
+      }).catch(() => []);
+  }
+  cachedRulesBlocks = await rulesBlocksPromise;
+  return cachedRulesBlocks || [];
+}
+
+export function updateCachedRulesBlocks(blocks: ForjaRulesBlock[]) {
+  cachedRulesBlocks = blocks;
+  rulesBlocksPromise = Promise.resolve(blocks);
+}
+
 export function subscribeToForjaRulesBlocks(
   onData: (blocks: ForjaRulesBlock[]) => void,
   onError?: (err: Error) => void
@@ -795,8 +940,11 @@ export function subscribeToForjaRulesBlocks(
       if (snap.exists()) {
         const raw = snap.data();
         const blocks: ForjaRulesBlock[] = (raw.blocks ?? []);
-        onData([...blocks].sort((a, b) => a.order - b.order));
+        const sorted = [...blocks].sort((a, b) => a.order - b.order);
+        updateCachedRulesBlocks(sorted);
+        onData(sorted);
       } else {
+        updateCachedRulesBlocks([]);
         onData([]);
       }
     },
@@ -815,30 +963,31 @@ export async function saveRulesBlocks(
     updated_at: serverTimestamp(),
     updated_by: updatedBy,
   }, { merge: false });
+  updateCachedRulesBlocks(normalized);
 }
 
 /** Adiciona um novo bloco vazio. */
 export async function addRulesBlock(updatedBy: string): Promise<void> {
-  const snap = await getDoc(doc(db, CONTENT_COL, RULES_DOC_ID));
-  const existing: ForjaRulesBlock[] = snap.exists() ? (snap.data().blocks ?? []) : [];
+  const existing = await getForjaRulesBlocksOnce();
   const newBlock: ForjaRulesBlock = {
     id: `block_${Date.now()}`,
     title: 'Novo Bloco',
     content: 'Escreva o conteúdo aqui...',
     order: existing.length,
   };
+  const newBlocks = [...existing, newBlock];
   await setDoc(doc(db, CONTENT_COL, RULES_DOC_ID), {
-    blocks: [...existing, newBlock],
+    blocks: newBlocks,
     updated_at: serverTimestamp(),
     updated_by: updatedBy,
   }, { merge: false });
+  updateCachedRulesBlocks(newBlocks);
 }
 
 /** Remove um bloco por id e reordena. */
 export async function deleteRulesBlock(blockId: string, updatedBy: string): Promise<void> {
-  const snap = await getDoc(doc(db, CONTENT_COL, RULES_DOC_ID));
-  if (!snap.exists()) return;
-  const filtered = (snap.data().blocks as ForjaRulesBlock[])
+  const existing = await getForjaRulesBlocksOnce();
+  const filtered = existing
     .filter(b => b.id !== blockId)
     .map((b, i) => ({ ...b, order: i }));
   await setDoc(doc(db, CONTENT_COL, RULES_DOC_ID), {
@@ -846,6 +995,7 @@ export async function deleteRulesBlock(blockId: string, updatedBy: string): Prom
     updated_at: serverTimestamp(),
     updated_by: updatedBy,
   }, { merge: false });
+  updateCachedRulesBlocks(filtered);
 }
 
 // ─── Fase 3: Configuração do Torneio (grupos) ────────────────────────────────
@@ -885,6 +1035,7 @@ export async function createForjaTeam(name: string): Promise<string> {
     members: [],
     pick_order: 0,
   });
+  invalidateTeamsCache();
   return ref.id;
 }
 
@@ -904,6 +1055,7 @@ export async function deleteForjaTeam(teamId: string): Promise<void> {
   });
   batch.delete(doc(db, TEAMS_COL, teamId));
   await batch.commit();
+  invalidateTeamsCache();
 }
 
 /**
@@ -931,6 +1083,7 @@ export async function movePlayerToTeam(
     status: 'drafted',
   });
   await batch.commit();
+  invalidateTeamsCache();
 }
 
 /**
@@ -953,6 +1106,7 @@ export async function movePlayerToReserve(
     status: 'available',
   });
   await batch.commit();
+  invalidateTeamsCache();
 }
 
 /**
@@ -974,6 +1128,7 @@ export async function movePlayerToPool(
     status: 'available',
   });
   await batch.commit();
+  invalidateTeamsCache();
 }
 
 // ─── Fase 3+: Pool de Mapas Dinâmica ─────────────────────────────────────────
@@ -987,13 +1142,36 @@ const MAX_POOL_SIZE   = 15;
  * Fallback: se não existir no Firestore, retorna null e o
  * cliente pode usar FORJA_MAP_POOL local como padrão.
  */
+export let cachedMapPool: ForjaMapPool | null = null;
+export let mapPoolPromise: Promise<ForjaMapPool | null> | null = null;
+
+export async function getForjaMapPoolOnce(): Promise<ForjaMapPool | null> {
+  if (cachedMapPool) return cachedMapPool;
+  if (!mapPoolPromise) {
+    mapPoolPromise = getDoc(doc(db, CONTENT_COL, MAP_POOL_DOC_ID))
+      .then(snap => snap.exists() ? snap.data() as ForjaMapPool : null)
+      .catch(() => null);
+  }
+  cachedMapPool = await mapPoolPromise;
+  return cachedMapPool;
+}
+
+export function updateCachedMapPool(pool: ForjaMapPool) {
+  cachedMapPool = pool;
+  mapPoolPromise = Promise.resolve(pool);
+}
+
 export function subscribeToForjaMapPool(
   onData: (pool: ForjaMapPool | null) => void,
   onError?: (err: Error) => void
 ): () => void {
   return onSnapshot(
     doc(db, CONTENT_COL, MAP_POOL_DOC_ID),
-    snap => onData(snap.exists() ? (snap.data() as ForjaMapPool) : null),
+    snap => {
+      const data = snap.exists() ? (snap.data() as ForjaMapPool) : null;
+      if (data) updateCachedMapPool(data);
+      onData(data);
+    },
     err  => { console.error('[Forja] map_pool:', err); onError?.(err); }
   );
 }
@@ -1024,6 +1202,8 @@ export async function saveForjaMapPool(
     ...payload,
     updated_at: serverTimestamp(),
   });
+  
+  updateCachedMapPool(payload);
 }
 
 /**

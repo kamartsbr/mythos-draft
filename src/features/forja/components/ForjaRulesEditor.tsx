@@ -14,7 +14,8 @@ import {
 import { ForjaViewProps } from '../types';
 import { ForjaRulesBlock } from '../types';
 import {
-  subscribeToForjaRulesBlocks,
+  getForjaRulesBlocksOnce,
+  cachedRulesBlocks,
   saveRulesBlocks,
   addRulesBlock,
   deleteRulesBlock,
@@ -154,8 +155,8 @@ function StaticBlock({ block }: { block: ForjaRulesBlock }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function ForjaRulesEditor({ discordUser, isAdmin }: ForjaViewProps) {
-  const [blocks, setBlocks]     = useState<ForjaRulesBlock[]>([]);
-  const [loading, setLoading]   = useState(true);
+  const [blocks, setBlocks]     = useState<ForjaRulesBlock[]>(cachedRulesBlocks || []);
+  const [loading, setLoading]   = useState(!cachedRulesBlocks);
   const [saving, setSaving]     = useState(false);
   const [dirty, setDirty]       = useState(false);
   const [error, setError]       = useState<string | null>(null);
@@ -163,11 +164,14 @@ export default function ForjaRulesEditor({ discordUser, isAdmin }: ForjaViewProp
   
   const { data: prizes } = useForjaPrizes();
 
-  // Subscribe to blocks
+  // Load blocks
   useEffect(() => {
-    const unsub = subscribeToForjaRulesBlocks(
-      (data) => {
-        // CORREÇÃO AQUI: Garantindo que todos os blocos antigos tenham um 'id'
+    if (cachedRulesBlocks) return;
+    
+    let isMounted = true;
+    getForjaRulesBlocksOnce().then(data => {
+      if (isMounted) {
+        // Garantindo que todos os blocos antigos tenham um 'id'
         const safeData = data.map((block, index) => ({
           ...block,
           id: block.id || `legacy-block-${index}`,
@@ -175,10 +179,15 @@ export default function ForjaRulesEditor({ discordUser, isAdmin }: ForjaViewProp
         }));
         setBlocks(safeData);
         setLoading(false);
-      },
-      (err)  => { setError(err.message); setLoading(false); }
-    );
-    return unsub;
+      }
+    }).catch(err => {
+      if (isMounted) {
+        setError(err.message);
+        setLoading(false);
+      }
+    });
+
+    return () => { isMounted = false; };
   }, []);
 
   // ── Handlers ────────────────────────────────────────────────────────────────

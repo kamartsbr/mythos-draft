@@ -8,26 +8,28 @@ import React, { useState, lazy, Suspense, useEffect, useCallback } from 'react';
 import { ForjaTab, ForjaTabId } from './types';
 import { useForjaDiscordAuth } from './hooks/useForjaDiscordAuth';
 import { useForjaPlayers } from './hooks/useForjaPlayers';
-import { useForjaSettings } from './hooks/useForjaContent';
+import { useForjaSettings } from './hooks/useForjaSettings';
 import { useForjaDraftSession } from './hooks/useForjaDraftSession';
 import { seedDefaultContent } from './services/forjaService';
 import ForjaRegistrationModal from './components/ForjaRegistrationModal';
+import { lazyWithRetry } from '../../lib/lazyWithRetry';
 import './forja.css';
 
 // ── Sub-abas (Lazy) ───────────────────────────────────────────────────────────
-const ForjaInicio      = lazy(() => import('./views/ForjaInicio'));
-const ForjaRegras      = lazy(() => import('./views/ForjaRegras'));
-const ForjaMapas       = lazy(() => import('./views/ForjaMapas'));
-const ForjaFormato     = lazy(() => import('./views/ForjaFormato'));
-const ForjaSchedule    = lazy(() => import('./views/ForjaSchedule'));
-const ForjaTimes       = lazy(() => import('./views/ForjaTimes'));
-const ForjaTabela      = lazy(() => import('./views/ForjaTabela'));
-const ForjaAdminDraft  = lazy(() => import('./views/ForjaAdminDraft'));
-const ForjaDraftRoom   = lazy(() => import('./views/ForjaDraftRoom'));
-const ForjaDraftOBS    = lazy(() => import('./views/ForjaDraftOBS'));
+const ForjaInicio      = lazyWithRetry(() => import('./views/ForjaInicio'));
+const ForjaRegras      = lazyWithRetry(() => import('./views/ForjaRegras'));
+const ForjaMapas       = lazyWithRetry(() => import('./views/ForjaMapas'));
+const ForjaFormato     = lazyWithRetry(() => import('./views/ForjaFormato'));
+const ForjaSchedule    = lazyWithRetry(() => import('./views/ForjaSchedule'));
+const ForjaTimes       = lazyWithRetry(() => import('./views/ForjaTimes'));
+const ForjaTabela      = lazyWithRetry(() => import('./views/ForjaTabela'));
+const ForjaAdminDraft  = lazyWithRetry(() => import('./views/ForjaAdminDraft'));
+const ForjaDraftRoom   = lazyWithRetry(() => import('./views/ForjaDraftRoom'));
+const ForjaDraftOBS    = lazyWithRetry(() => import('./views/ForjaDraftOBS'));
+const ForjaCustomDraft = lazyWithRetry(() => import('./views/ForjaCustomDraft'));
 // Fase 3
-const ForjaRulesEditor  = lazy(() => import('./components/ForjaRulesEditor'));
-const ForjaTimesManager = lazy(() => import('./components/ForjaTimesManager'));
+const ForjaRulesEditor  = lazyWithRetry(() => import('./components/ForjaRulesEditor'));
+const ForjaTimesManager = lazyWithRetry(() => import('./components/ForjaTimesManager'));
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 const PUBLIC_TABS: ForjaTab[] = [
@@ -41,8 +43,9 @@ const PUBLIC_TABS: ForjaTab[] = [
 ];
 
 const ADMIN_TABS: ForjaTab[] = [
-  { id: 'admin-draft' as ForjaTabId, label: 'Draft Admin', icon: '🎯' },
-  { id: 'obs' as ForjaTabId,         label: 'OBS Mode',    icon: '📺' },
+  { id: 'custom-draft' as ForjaTabId, label: 'Draft Rápido', icon: '⚡' },
+  { id: 'admin-draft' as ForjaTabId,  label: 'Draft Admin',  icon: '🎯' },
+  { id: 'obs' as ForjaTabId,          label: 'OBS Mode',     icon: '📺' },
 ];
 
 // ── Countdown ─────────────────────────────────────────────────────────────────
@@ -274,6 +277,7 @@ export default function ForjaHub() {
             : <ForjaTimes {...sharedProps} />)}
           {activeTab === 'tabela'      && <ForjaTabela {...sharedProps} />}
           {activeTab === 'draft-room'  && <ForjaDraftRoom {...sharedProps} />}
+          {activeTab === 'custom-draft' && <ForjaCustomDraft {...sharedProps} />}
           {activeTab === 'admin-draft' && <ForjaAdminDraft {...sharedProps} />}
         </Suspense>
       </main>

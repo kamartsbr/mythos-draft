@@ -24,7 +24,7 @@ function EmptySlot() {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function ForjaDraftOBS(_: ForjaViewProps) {
   const { rankedPlayers: players } = useForjaPlayers();
-  const { teams }              = useForjaTeams();
+  const { teams }              = useForjaTeams(true);
   const { session, loading }   = useForjaDraftSession();
 
   const playerMap = useMemo(() => {

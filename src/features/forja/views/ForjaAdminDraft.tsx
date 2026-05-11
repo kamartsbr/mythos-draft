@@ -291,7 +291,7 @@ function DraftBoard({ session, teams, players }: {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function ForjaAdminDraft({ isAdmin }: ForjaViewProps) {
   const { rankedPlayers: players, bannedPlayers, loading: playersLoading } = useForjaPlayers();
-  const { teams }                                            = useForjaTeams();
+  const { teams }                                            = useForjaTeams(true);
   const { session, loading: sessionLoading } = useForjaDraftSession();
   const { tierMode } = useForjaSettings();
 

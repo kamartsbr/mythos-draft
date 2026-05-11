@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { ForjaScheduleEntry } from '../types';
-import { subscribeToForjaSchedule } from '../services/forjaService';
+import { getForjaScheduleOnce, cachedSchedule } from '../services/forjaService';
 
 export function useForjaSchedule() {
-  const [entries, setEntries] = useState<ForjaScheduleEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [entries, setEntries] = useState<ForjaScheduleEntry[]>(cachedSchedule || []);
+  const [loading, setLoading] = useState(!cachedSchedule);
   const [error, setError]     = useState<string | null>(null);
 
   useEffect(() => {
@@ -13,11 +13,23 @@ export function useForjaSchedule() {
       setTimeout(() => { setEntries([]); setLoading(false); }, 400);
       return;
     }
-    const unsub = subscribeToForjaSchedule(
-      data => { setEntries(data); setLoading(false); setError(null); },
-      ()   => { setError('Erro ao carregar schedule.'); setLoading(false); }
-    );
-    return () => unsub();
+    
+    if (cachedSchedule) return;
+
+    let isMounted = true;
+    getForjaScheduleOnce().then(data => {
+      if (isMounted) {
+        setEntries(data);
+        setLoading(false);
+      }
+    }).catch(err => {
+      if (isMounted) {
+        setError('Erro ao carregar schedule.');
+        setLoading(false);
+      }
+    });
+
+    return () => { isMounted = false; };
   }, []);
 
   return { entries, loading, error };

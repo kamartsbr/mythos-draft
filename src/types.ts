@@ -69,6 +69,12 @@ export type LobbyConfig = {
   forjaTeamA?: string;
   forjaTeamB?: string;
   forjaGroupId?: string;
+
+  // Forja Custom Draft Flags
+  /** Se true, o Game 3 terá o mapa sorteado via pool cacheada da Forja (ADMIN turn automático) */
+  hasMap3RandomRoll?: boolean;
+  /** Se true, introduz 1 Ban de Deus por time (Host + Guest) antes dos god picks em CADA mapa */
+  hasPerMapBans?: boolean;
 };
 
 export type PickEntry = {

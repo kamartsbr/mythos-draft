@@ -204,6 +204,12 @@ function isAdmin() {
 // Por isso, algumas operações admin são feitas via Cloud Functions com admin SDK.
 ```
 
+### 8.6 Arquitetura de Leituras (Cold Fetch vs Real-Time)
+**NUNCA utilize `onSnapshot` por padrão para dados CMS ou estáticos** (Regras, Map Pool, Settings, Cronograma). O uso indiscriminado de tempo real causa picos massivos de custo (Zombie Listeners / Multiplicação de Reads em navegação).
+- **Dados CMS / Estáticos:** Utilize **Busca Fria (`get...Once()`) atrelada a Cache em Memória (Singleton)** no módulo de serviço (`forjaService.ts`).
+- **Mutação de Cache:** Operações de escrita pelo Admin devem mutar o Cache local IMEDIATAMENTE após sucesso no Firestore, para atualização seamless sem F5.
+- **Eventos Ao Vivo (Draft):** Para dados como `forja_teams`, utilize `useForjaTeams(true)` (flag `isLive`) apenas nas views de Draft/Admin para habilitar o Web Socket, mantendo as demais rotas públicas com fetch frio.
+
 ---
 
 ## 9. BUGS CONHECIDOS E ARMADILHAS

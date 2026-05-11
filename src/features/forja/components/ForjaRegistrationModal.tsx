@@ -6,7 +6,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ForjaDiscordUser, ForjaRegistrationForm, AomProfileData } from '../types';
 import { parseAomProfileId, registerForjaPlayer, isPlayerRegistered, isPlayerBanned } from '../services/forjaService';
-import { useForjaSettings, useForjaContent } from '../hooks/useForjaContent';
+import { useForjaContent } from '../hooks/useForjaContent';
+import { useForjaSettings } from '../hooks/useForjaSettings';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const AVAILABILITY_OPTIONS = [

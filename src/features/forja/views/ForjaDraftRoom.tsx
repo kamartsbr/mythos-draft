@@ -10,11 +10,11 @@ import { useForjaTeams }            from '../hooks/useForjaTeams';
 import { useForjaDraftSession } from '../hooks/useForjaDraftSession';
 import { makeDraftPick, updateCaptainPresence } from '../services/forjaService';
 
-const PRESENCE_INTERVAL_MS = 120_000;
+const PRESENCE_INTERVAL_MS = 120_000; // 🚨 CORRIGIDO: Agora pulsa a cada 2 minutos
 
 // ─── Online indicator ─────────────────────────────────────────────────────────
 function OnlineDot({ lastSeenMs }: { lastSeenMs?: number }) {
-  const isOnline = lastSeenMs && Date.now() - lastSeenMs < 60_000;
+  const isOnline = lastSeenMs && Date.now() - lastSeenMs < 150_000; // Ajustado visualmente para combinar com o novo tempo
   return (
     <span
       title={isOnline ? 'Online' : 'Offline'}
@@ -81,13 +81,22 @@ export default function ForjaDraftRoom({ discordUser, isAdmin }: ForjaViewProps)
   const { teams }                               = useForjaTeams();
   const { session, loading: sessionLoading } = useForjaDraftSession();
 
-  // Heartbeat de presença
+  // 🚨 CORRIGIDO: Fim do Loop Infinito de Leituras e Gravações 🚨
   useEffect(() => {
-    if (!discordUser || !session) return;
-    updateCaptainPresence(discordUser.discord_id);
-    const interval = setInterval(() => updateCaptainPresence(discordUser.discord_id), PRESENCE_INTERVAL_MS);
+    // Sai rápido se não tivermos a identificação do usuário
+    if (!discordUser?.discord_id) return;
+    
+    const myId = discordUser.discord_id;
+    
+    // Atualiza a presença na entrada da sala
+    updateCaptainPresence(myId);
+    
+    // Configura o relógio num intervalo longo e seguro
+    const interval = setInterval(() => updateCaptainPresence(myId), PRESENCE_INTERVAL_MS);
+    
+    // Limpeza do relógio ao sair da tela
     return () => clearInterval(interval);
-  }, [discordUser, session]);
+  }, [discordUser?.discord_id]); // A variável 'session' foi removida das dependências para não triggar loop
 
   const playerMap = useMemo(() => {
     const m: Record<string, ForjaPlayer> = {};

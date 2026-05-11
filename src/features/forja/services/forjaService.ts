@@ -107,18 +107,20 @@ export async function registerForjaPlayer(
   form: ForjaRegistrationForm,
 ): Promise<void> {
   const profileId = parseAomProfileId(form.aomstats_url);
-  if (!profileId) throw new Error('URL do aomstats inválida — não foi possível extrair o profile_id.');
+  if (!profileId) throw new Error('URL do aomstats inválida.');
+
+  // 1. BUSCA AS CONFIGURAÇÕES TÉCNICAS (Deadline)
+  const settingsRef = doc(db, CONTENT_COL, 'settings');
+  const settingsSnap = await getDoc(settingsRef);
+  const settings = settingsSnap.data() as ForjaSettings | undefined;
+
+  // 2. LÓGICA DE RESERVA DINÂMICA
+  // Se não houver settings, ou se o tempo atual passou da deadline, vira reserva.
+  const now = Date.now();
+  const isLate = settings ? now > settings.registration_deadline_ms : true;
 
   const pd = form.aom_profile_data;
-
-  // Avatar: scraped do aomstats (Steam) > Discord
   const avatar_url = pd?.avatar_url ?? discordUser.avatar_url;
-
-  // ELO e top_gods: use os valores do scraper se disponíveis (valores iniciais
-  // antes do snapshot oficial de sábado)
-  const initial_elo_1v1 = pd?.elo_1v1  ?? 0;
-  const initial_elo_tg  = pd?.elo_tg   ?? 0;
-  const initial_gods    = pd?.top_gods  ?? [];
   
   const normalizedNick = form.nick.trim().toLowerCase();
   const esportsElo = ESPORTS_ELO_OVERRIDES[normalizedNick] ?? ESPORTS_ELO_OVERRIDES[String(profileId)] ?? undefined;
@@ -132,20 +134,20 @@ export async function registerForjaPlayer(
     is_brazilian:       form.is_brazilian,
     pitch_quote:        form.pitch_quote.slice(0, 50),
     availability:       form.availability,
-    elo_1v1:            initial_elo_1v1,
-    elo_tg:             initial_elo_tg,
-    top_gods:           initial_gods,
-    elo_snapshot:       initial_elo_1v1,
+    elo_1v1:            pd?.elo_1v1 ?? 0,
+    elo_tg:             pd?.elo_tg ?? 0,
+    top_gods:           pd?.top_gods ?? [],
+    elo_snapshot:       pd?.elo_1v1 ?? 0,
     ...(esportsElo !== undefined && { esports_elo: esportsElo }),
     status:             'available',
     tier:               null,
     team_id:            null,
-    seed:               null,
+    // ✅ AGORA É DINÂMICO:
+    is_reserve:         isLate, 
     registered_at:      serverTimestamp() as any,
     consent_rules:      form.consent_rules,
     consent_format:     form.consent_format,
   };
-
 
   await setDoc(doc(db, PLAYERS_COL, discordUser.discord_id), player);
 }
@@ -442,7 +444,7 @@ export async function makeDraftPick(
     forced_by_admin: forcedByAdmin,
   };
 
-  batch.update(doc(db, PLAYERS_COL, player.discord_id), { status: 'drafted', team_id: teamId });
+  batch.update(doc(db, PLAYERS_COL, player.discord_id), { status: 'drafted', team_id: teamId, is_reserve: false });
   batch.update(doc(db, TEAMS_COL, teamId), { members: arrayUnion(player.discord_id) });
   batch.update(draftDocRef(), {
     picks: arrayUnion(pick),

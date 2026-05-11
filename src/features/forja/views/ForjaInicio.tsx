@@ -468,12 +468,18 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
   const deadlinePassed = deadlineMs ? now > deadlineMs : false;
   const activePlayersCount = rankedPlayers.filter(p => !p.is_reserve).length;
   const limitReached = activePlayersCount >= maxParticipants;
-  const registrationBlocked = !isRegistrationOpen || deadlinePassed || limitReached;
+  const isReservesOpen = settings?.reserves_open ?? false;
+  
+  // Inscrições fechadas se: (toggle off OU deadline passou OU máx atingido) E reserves_open for false
+  // Se reserves_open for true, a inscrição nunca é totalmente bloqueada (sempre permite reserva)
+  const registrationBlocked = (!isRegistrationOpen || deadlinePassed || limitReached) && !isReservesOpen;
 
-  const registrationBlockReason = !isRegistrationOpen
+  const registrationBlockReason = !isRegistrationOpen && !isReservesOpen
     ? 'Inscrições encerradas pelo organizador.'
-    : deadlinePassed
+    : deadlinePassed && !isReservesOpen
     ? 'O prazo de inscrições encerrou.'
+    : (limitReached || !isRegistrationOpen || deadlinePassed) && isReservesOpen
+    ? `Inscrições principais encerradas. Novos jogadores entram como reserva.`
     : limitReached
     ? `Limite de ${maxParticipants} participantes atingido. Novos jogadores entram como reserva.`
     : null;
@@ -581,10 +587,10 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
               id="forja-cta-register-btn"
               className="forja-btn forja-btn--primary forja-btn--lg forja-btn--glow"
               onClick={handleRegisterClick}
-              disabled={!!(registrationBlocked && !limitReached)}
-              style={(registrationBlocked && !limitReached) ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+              disabled={registrationBlocked}
+              style={registrationBlocked ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
             >
-              <span>🔥</span> {limitReached ? 'Entrar como Reserva' : 'Inscreva-se no Torneio'}
+              <span>🔥</span> {(limitReached || !isRegistrationOpen || deadlinePassed) ? 'Entrar como Reserva' : 'Inscreva-se no Torneio'}
             </button>
             <span className="forja-cta-note">
               {discordUser ? `Logado como ${discordUser.username}` : 'Necessário login com Discord'}

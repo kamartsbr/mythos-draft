@@ -40,6 +40,7 @@ export default function ForjaTournamentSettingsModal({ discordUserId, currentSet
   const [tierASize,        setTierASize]        = useState(String(currentSettings?.tier_a_size ?? 16));
   const [tierBSize,        setTierBSize]        = useState(String(currentSettings?.tier_b_size ?? 16));
   const [tierMode,         setTierMode]         = useState<ForjaTierMode>(currentSettings?.tier_mode ?? 'ABC');
+  const [reservesOpen,     setReservesOpen]     = useState(currentSettings?.reserves_open ?? false);
 
   useEffect(() => {
     if (!currentSettings) return;
@@ -52,6 +53,7 @@ export default function ForjaTournamentSettingsModal({ discordUserId, currentSet
     setTierASize(String(a));
     setTierBSize(String(b));
     setTierMode(currentSettings.tier_mode ?? 'ABC');
+    setReservesOpen(currentSettings.reserves_open ?? false);
   }, [currentSettings]);
 
   // Preview em tempo real dos tamanhos de tier
@@ -90,6 +92,7 @@ export default function ForjaTournamentSettingsModal({ discordUserId, currentSet
         tier_mode:        tierMode,
         tier_a_size:      tierA,
         ...(tierMode === 'ABC' && { tier_b_size: tierB }),
+        reserves_open: reservesOpen,
       }, discordUserId);
       setSuccess(true);
       setTimeout(() => { setSuccess(false); onClose(); }, 1200);
@@ -152,6 +155,19 @@ export default function ForjaTournamentSettingsModal({ discordUserId, currentSet
           <button id="forja-reg-open-toggle" onClick={() => setRegistrationOpen(v => !v)}
             style={{ width: '3rem', height: '1.5rem', borderRadius: '1rem', background: registrationOpen ? '#10b981' : '#475569', border: 'none', cursor: 'pointer', transition: 'background 0.2s', position: 'relative', flexShrink: 0 }}>
             <span style={{ position: 'absolute', top: '0.175rem', left: registrationOpen ? '1.4rem' : '0.175rem', width: '1.15rem', height: '1.15rem', background: '#fff', borderRadius: '50%', transition: 'left 0.2s' }} />
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.875rem 1rem', background: 'rgba(30,41,59,0.7)', borderRadius: '0.75rem', border: '1px solid #1e293b', marginBottom: '1rem' }}>
+          <label htmlFor="forja-reserves-open-toggle" style={{ color: '#f8fafc', fontWeight: 600, flex: 1, cursor: 'pointer', margin: 0 }}>
+            Inscrições para Reservas
+            <span style={{ display: 'block', fontSize: '0.7rem', color: '#64748b', fontWeight: 400 }}>
+              Ativado → permite inscrição como reserva mesmo após fechamento principal
+            </span>
+          </label>
+          <button id="forja-reserves-open-toggle" onClick={() => setReservesOpen(v => !v)}
+            style={{ width: '3rem', height: '1.5rem', borderRadius: '1rem', background: reservesOpen ? '#10b981' : '#475569', border: 'none', cursor: 'pointer', transition: 'background 0.2s', position: 'relative', flexShrink: 0 }}>
+            <span style={{ position: 'absolute', top: '0.175rem', left: reservesOpen ? '1.4rem' : '0.175rem', width: '1.15rem', height: '1.15rem', background: '#fff', borderRadius: '50%', transition: 'left 0.2s' }} />
           </button>
         </div>
 

@@ -226,6 +226,8 @@ export interface ForjaSettings {
    * Default: Math.floor((max_participants - tier_a_size) / 2)
    */
   tier_b_size?: number;
+  /** Inscrições abertas especificamente para reservas */
+  reserves_open?: boolean;
   updated_at: FirestoreTimestamp;
 }
 

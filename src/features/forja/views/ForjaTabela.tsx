@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { ForjaViewProps, ForjaTeam } from '../types';
+import { ForjaViewProps, ForjaTeam, ForjaPlayer } from '../types';
 import { useForjaTeams } from '../hooks/useForjaTeams';
+import { useForjaPlayers } from '../hooks/useForjaPlayers';
 import { db } from '../../../firebase';
 import { collection, query, where, getDocs, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
 import { LobbyConfig } from '../../../types';
@@ -10,6 +11,7 @@ import { updateTeamGroup } from '../services/forjaService';
 
 export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
   const { teams } = useForjaTeams();
+  const { rankedPlayers } = useForjaPlayers();
   const [lobbies, setLobbies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -266,18 +268,34 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
                         </tr>
                       </thead>
                       <tbody style={{ color: '#cbd5e1' }}>
-                        {standings.map((row, idx) => (
-                          <tr key={row.id} style={{ borderBottom: '1px solid #1e293b' }}>
-                            <td style={{ padding: '0.75rem', fontWeight: 600 }}>
-                               <span style={{ marginRight: '0.5rem', opacity: 0.5 }}>{idx + 1}.</span>
-                               {row.team_name}
-                            </td>
-                            <td style={{ padding: '0.75rem', textAlign: 'center' }}>{row.matchesPlayed}</td>
-                            <td style={{ padding: '0.75rem', textAlign: 'center', color: '#4ade80' }}>{row.gamesWon}</td>
-                            <td style={{ padding: '0.75rem', textAlign: 'center', color: '#f87171' }}>{row.gamesLost}</td>
-                            <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 800, color: '#facc15' }}>{row.points}</td>
-                          </tr>
-                        ))}
+                        {standings.map((row, idx) => {
+                          const isTop2 = idx < 2;
+                          const captain = rankedPlayers.find(p => p.discord_id === row.captain_id);
+                          const captainNick = captain ? captain.nick : '...';
+
+                          return (
+                            <tr 
+                              key={row.id} 
+                              style={{ 
+                                borderBottom: '1px solid #1e293b',
+                                background: isTop2 ? 'rgba(74, 222, 128, 0.05)' : undefined,
+                                borderLeft: isTop2 ? '4px solid #4ade80' : '4px solid transparent'
+                              }}
+                            >
+                              <td style={{ padding: '0.75rem', fontWeight: 600 }}>
+                                 <span style={{ marginRight: '0.5rem', opacity: 0.5 }}>{idx + 1}.</span>
+                                 {row.team_name}
+                                 <span style={{ marginLeft: '0.5rem', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 400 }}>
+                                   (Cap: {captainNick})
+                                 </span>
+                              </td>
+                              <td style={{ padding: '0.75rem', textAlign: 'center' }}>{row.matchesPlayed}</td>
+                              <td style={{ padding: '0.75rem', textAlign: 'center', color: '#4ade80' }}>{row.gamesWon}</td>
+                              <td style={{ padding: '0.75rem', textAlign: 'center', color: '#f87171' }}>{row.gamesLost}</td>
+                              <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 800, color: '#facc15' }}>{row.points}</td>
+                            </tr>
+                          );
+                        })}
                         {standings.length === 0 && (
                           <tr><td colSpan={5} style={{ padding: '2rem', textAlign: 'center', opacity: 0.5 }}>Nenhum time atribuído a este grupo.</td></tr>
                         )}

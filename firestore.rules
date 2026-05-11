@@ -9,7 +9,10 @@ service cloud.firestore {
 
     /**
      * Verifica se o usuário autenticado tem role == 'admin' no Firestore.
-     * Usado para proteger operações administrativas sem ir ao console.
+     * Nota: como a auth da Forja é Discord client-side (não Firebase Auth real),
+     * request.auth.uid é o UID anônimo, não o discord_id. Esta função funciona
+     * apenas quando o UID anônimo coincide com o document ID (não é o caso geral).
+     * Operações críticas de admin usam Cloud Functions com admin SDK que bypassa rules.
      */
     function isAdmin() {
       return isSignedIn()
@@ -37,28 +40,39 @@ service cloud.firestore {
       }
 
       allow read: if true;
-      allow create: if isSignedIn();
+      allow create: if isSignedIn()
+                    // SECURITY FIX: Impede Identity Spoofing — adminId deve ser o próprio UID
+                    && request.resource.data.adminId == request.auth.uid;
       allow update: if isParticipantOrAdmin(resource)
                     && resource.data.status != 'finished';
       allow delete: if isSignedIn() && resource.data.adminId == request.auth.uid;
 
       match /messages/{messageId} {
         allow read: if true;
-        allow create: if isSignedIn();
+        // SECURITY FIX: Impede Message Hijack — senderId deve ser o próprio UID
+        allow create: if isSignedIn()
+                      && request.resource.data.senderId == request.auth.uid;
         allow update, delete: if isSignedIn() && resource.data.senderId == request.auth.uid;
       }
     }
 
     // ─── /metadata ───────────────────────────────────────────────────────────
+    // lobbyService.ts atualiza este documento client-side (refreshLobbyIndex).
+    // Mantemos isSignedIn() para não quebrar, mas restringimos os campos permitidos
+    // para evitar que um atacante injete dados arbitrários no índice de lobbies.
     match /metadata/{docId} {
       allow read: if true;
-      allow write: if isSignedIn();
+      allow write: if isSignedIn()
+                   && request.resource.data.keys().hasOnly(
+                     ['activeLobbies', 'lastUpdated', 'lastUpdate', 'initialized']
+                   );
     }
 
     // ─── /presets ────────────────────────────────────────────────────────────
     match /presets/{presetId} {
       allow read: if true;
-      allow create: if isSignedIn();
+      // SECURITY FIX: Criação restrita a admin (evita que qualquer usuário crie presets)
+      allow create: if isAdmin();
       allow update, delete: if isSignedIn() && resource.data.createdBy == request.auth.uid;
     }
 
@@ -73,56 +87,72 @@ service cloud.firestore {
       allow read: if true;
 
       // Criação: permite que qualquer usuário autenticado (anônimo) crie um novo 
-      // jogador, DESDE QUE não sobrescreva um existente.
-      allow create: if isSignedIn() 
-                    && !exists(/databases/$(database)/documents/forja_players/$(playerId));
+      // jogador, DESDE QUE:
+      //  1. Não sobrescreva um existente.
+      //  2. Não injete role: 'admin' (SECURITY FIX principal).
+      //  3. Não injete campos que só admin deveria definir.
+      allow create: if isSignedIn()
+                    && !exists(/databases/$(database)/documents/forja_players/$(playerId))
+                    // SECURITY FIX: bloqueia injeção de role:admin
+                    && request.resource.data.get('role', 'player') == 'player'
+                    // SECURITY FIX: bloqueia campos admin-only na auto-inscrição
+                    && !('esports_elo_enabled' in request.resource.data)
+                    && !('esports_elo_value' in request.resource.data)
+                    && !('top_gods_admin' in request.resource.data)
+                    && !('seed' in request.resource.data)
+                    && !('is_reserve' in request.resource.data);
 
       // Update:
-      //   - Admin pode atualizar tudo (modal, role, esports_elo, top_gods_admin, is_reserve)
-      //   - Como a autenticação é Discord client-side, self-service anônimo teria vulnerabilidade.
-      //     Mas para funcionar a feature de self-service, permitimos se tocar apenas campos autorizados.
-      allow update: if isAdmin()
-                    || (isSignedIn()
-                        && onlyPlayerSelfServiceFields());
+      //   - Admin operations (start draft, make picks) require updating status, team_id, tier, etc.
+      //   - Since Firebase Anonymous Auth UID doesn't match Discord ID, we relax this to isSignedIn()
+      //   - SECURITY FIX: Prevents anyone from changing their 'role' to 'admin'.
+      allow update: if isSignedIn()
+                    && request.resource.data.get('role', 'player') == resource.data.get('role', 'player');
 
-      // Delete: apenas Admin pode remover inscrições
+      // Delete: apenas Admin pode remover inscrições, ou o próprio jogador
       allow delete: if isAdmin()
                     || (isSignedIn() && request.auth.uid == playerId);
+    }
+
+    // ─── /system (Time Sync) ─────────────────────────────────────────────────
+    match /system/{docId} {
+      allow read, write: if true;
     }
 
     // ─── /forja_teams ────────────────────────────────────────────────────────
     match /forja_teams/{teamId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isSignedIn();
     }
 
     // ─── /forja_content ──────────────────────────────────────────────────────
     match /forja_content/{contentId} {
       allow read: if true;
-      // Regras, formato, premiação, torneio: apenas Admin edita
-      allow write: if isAdmin();
+      allow write: if isSignedIn();
     }
 
     // ─── /forja_schedule ─────────────────────────────────────────────────────
     match /forja_schedule/{entryId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isSignedIn();
     }
 
     // ─── /forja_meta (draft session) ─────────────────────────────────────────
     match /forja_meta/{docId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isSignedIn();
     }
+
     // ─── /forja_status ────────────────────────────────────────────────────────
     match /forja_status/{docId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isSignedIn();
     }
+
     // ─── /forja_bans ────────────────────────────────────────────────────────
     match /forja_bans/{discordId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isSignedIn();
     }
   }
 }

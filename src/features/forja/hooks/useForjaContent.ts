@@ -36,9 +36,9 @@ export function useForjaSettings() {
   // Defaults hardcoded como fallback enquanto o Firestore carrega
   const DEFAULT: ForjaSettings = {
     registration_open: true,
-    registration_deadline_ms: new Date('2026-05-09T16:59:00Z').getTime(),
-    elo_snapshot_ms:          new Date('2026-05-09T17:00:00Z').getTime(),
-    draft_start_ms:           new Date('2026-05-09T18:00:00Z').getTime(),
+    registration_deadline_ms: new Date('2026-05-10T16:59:00Z').getTime(),
+    elo_snapshot_ms:          new Date('2026-05-10T17:00:00Z').getTime(),
+    draft_start_ms:           new Date('2026-05-10T18:00:00Z').getTime(),
     updated_at: null,
   };
 

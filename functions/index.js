@@ -4,15 +4,19 @@
 
 const { onCall, onRequest } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2");
+const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const { getFirestore } = require("firebase-admin/firestore");
 const axios = require("axios");
+
+// Secret gerenciado pelo Firebase — nunca exposto no código-fonte
+const VERCEL_API_KEY = defineSecret('VERCEL_API_KEY');
 
 if (!admin.apps.length) { admin.initializeApp(); }
 
 setGlobalOptions({ region: "us-central1" });
 
-const API_KEY = 'mythosdraftweb_8b73781cc25e8f45b77bb760146a19dad427168c22fa8cad';
+// API_KEY removida daqui — use VERCEL_API_KEY.value() dentro das funções
 const TARGET_ORIGIN = 'https://mythosdraft.com';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -36,7 +40,7 @@ async function fetchVercelData(profileId, nick = null) {
     const config = { 
       timeout: 10000, 
       headers: { 
-        'X-API-Key': API_KEY,
+        'X-API-Key': VERCEL_API_KEY.value(),
         'Origin': TARGET_ORIGIN 
       } 
     };
@@ -85,7 +89,7 @@ async function fetchVercelData(profileId, nick = null) {
 }
 
 // --- FUNÇÃO 1: Snapshot (Uso do Admin) ---
-exports.updateEloSnapshot = onCall({ timeoutSeconds: 540, memory: "256MiB" }, async (request) => {
+exports.updateEloSnapshot = onCall({ timeoutSeconds: 540, memory: "256MiB", secrets: [VERCEL_API_KEY] }, async (request) => {
   const db = getFirestore("mythosdraft-prod");
   const snapshot = await db.collection("forja_players").get();
   
@@ -170,7 +174,7 @@ exports.updateEloSnapshot = onCall({ timeoutSeconds: 540, memory: "256MiB" }, as
 });
 
 // --- FUNÇÃO 2: Busca Individual ---
-exports.fetchaomprofile = onRequest({ cors: ["https://mythosdraft.com", "http://localhost:5173", "http://localhost:3000"] }, async (req, res) => {
+exports.fetchaomprofile = onRequest({ cors: true, secrets: [VERCEL_API_KEY] }, async (req, res) => {
   const profileId = req.query.id;
   if (!profileId) return res.status(400).send("ID ausente");
   const result = await fetchVercelData(profileId);

@@ -6,32 +6,64 @@
  * ============================================================
  */
 
-import { ForjaPlayer, ForjaTier } from './types';
+import { ForjaPlayer, ForjaTier, ForjaSettings, ForjaTierMode } from './types';
 
-// ─── Tiers (baseado em 48 players) ───────────────────────────────────────────
-const TIER_A_MAX = 16;
-const TIER_B_MAX = 32;
+// ─── Tiers (dinâmico baseado em settings, fallback para 48 players) ───────────
+const DEFAULT_MAX_PARTICIPANTS = 48;
+
+/**
+ * Retorna os cortes de tier com base nas configurações do torneio.
+ * - 'ABC' (padrão): Tier A + Tier B + Tier C
+ * - 'AB': Tier A + pool livre (todos os não-A = Tier B, tierCSize = 0)
+ */
+export function getTierCutoffs(settings?: Pick<ForjaSettings, 'max_participants' | 'tier_a_size' | 'tier_b_size' | 'tier_mode'>): {
+  tierAMax: number; tierBMax: number; tierASize: number; tierBSize: number; tierCSize: number; tierMode: ForjaTierMode;
+} {
+  const maxParticipants = settings?.max_participants ?? DEFAULT_MAX_PARTICIPANTS;
+  const tierMode: ForjaTierMode = settings?.tier_mode ?? 'ABC';
+  const tierASize = settings?.tier_a_size ?? Math.floor(maxParticipants / 3);
+
+  let tierBSize: number;
+  let tierCSize: number;
+
+  if (tierMode === 'AB') {
+    // Pool livre: Tier B absorbe tudo que não é Tier A
+    tierBSize = maxParticipants - tierASize;
+    tierCSize = 0;
+  } else {
+    // Modo padrão ABC
+    const remaining = maxParticipants - tierASize;
+    tierBSize = settings?.tier_b_size ?? Math.floor(remaining / 2);
+    tierCSize = maxParticipants - tierASize - tierBSize;
+  }
+
+  return {
+    tierAMax: tierASize,
+    tierBMax: tierASize + tierBSize,
+    tierASize,
+    tierBSize,
+    tierCSize,
+    tierMode,
+  };
+}
 
 /**
  * Retorna o Tier dinâmico com base na posição (1-indexed) no rank geral.
- * Posição 1–16  → A
- * Posição 17–32 → B
- * Posição 33–48 → C
+ * No modo 'AB', retorna apenas 'A' ou 'B' (nunca 'C').
  */
-export function getTierByRank(rank: number): ForjaTier {
-  if (rank <= TIER_A_MAX) return 'A';
-  if (rank <= TIER_B_MAX) return 'B';
+export function getTierByRank(rank: number, settings?: Pick<ForjaSettings, 'max_participants' | 'tier_a_size' | 'tier_b_size' | 'tier_mode'>): ForjaTier {
+  const { tierAMax, tierBMax, tierMode } = getTierCutoffs(settings);
+  if (rank <= tierAMax) return 'A';
+  if (tierMode === 'AB') return 'B'; // modo pool livre: tudo fora do A é B
+  if (rank <= tierBMax) return 'B';
   return 'C';
 }
 
 // ─── Effective ELO ────────────────────────────────────────────────────────────
 
 /**
- * ELO efetivo de um jogador — nunca salvo, sempre computado.
- * Prioridade:
- *  1. esports_elo_enabled === true → usa esports_elo_value (Admin toggle)
- *  2. esports_elo legado (campo antigo, compatibilidade)
- *  3. elo_1v1 (padrão)
+ * ELO médio de um jogador (1v1 + TG / 2).
+ * Anteriormente chamado de ELO efetivo.
  */
 export function getEffectiveElo(player: ForjaPlayer): number {
   const elo1v1 = player.elo_1v1 ?? 0;
@@ -79,38 +111,73 @@ export interface RankedPlayer extends ForjaPlayer {
  * - Ordenado do maior para o menor effectiveElo
  * - Com rank (1-indexed) e computedTier atribuídos
  * - Players is_reserve === true são incluídos por último (sem tier)
+ *
+ * @param players - Array de jogadores
+ * @param settings - Opções do torneio (para cortes dinâmicos de tier)
  */
-export function computeRankedPlayers(players: ForjaPlayer[]): RankedPlayer[] {
+export function computeRankedPlayers(players: ForjaPlayer[], settings?: Pick<ForjaSettings, 'max_participants' | 'tier_a_size' | 'tier_b_size'>): RankedPlayer[] {
   // Filtra banidos
   const nonBanned = players.filter(p => p.status !== 'banned');
 
+  const maxParticipants = settings?.max_participants ?? DEFAULT_MAX_PARTICIPANTS;
+
   // Separa reservas e participantes ativos
+  // Se houver mais ativos do que max_participants, os excedentes viram reserva implicitamente
   const active  = nonBanned.filter(p => !p.is_reserve);
   const reserve = nonBanned.filter(p => p.is_reserve);
 
-  // Sort decrescente por effectiveElo, tiebreak por elo_tg
+  // Sort decrescente:
+  // 1. Quem tem Esports ELO fica sempre acima
+  // 2. Se ambos têm, compara pelo valor do Esports ELO
+  // 3. Se nenhum tem, compara pelo ELO médio (effectiveElo)
+  // 4. Tiebreak por elo_tg
   const sorted = [...active].sort((a, b) => {
+    const hasA = hasEsportsElo(a);
+    const hasB = hasEsportsElo(b);
+
+    if (hasA && !hasB) return -1;
+    if (!hasA && hasB) return 1;
+
+    if (hasA && hasB) {
+      const eA = getEsportsEloDisplay(a) ?? 0;
+      const eB = getEsportsEloDisplay(b) ?? 0;
+      if (eB !== eA) return eB - eA;
+    }
+
     const eloA = getEffectiveElo(a);
     const eloB = getEffectiveElo(b);
     if (eloB !== eloA) return eloB - eloA;
     return (b.elo_tg ?? 0) - (a.elo_tg ?? 0);
   });
 
-  const rankedActive: RankedPlayer[] = sorted.map((p, idx) => ({
+  // Jogadores dentro do limite = participantes; acima do limite = reserva dinâmica
+  const withinLimit = sorted.slice(0, maxParticipants);
+  const overflow    = sorted.slice(maxParticipants);
+
+  const rankedActive: RankedPlayer[] = withinLimit.map((p, idx) => ({
     ...p,
     rank: idx + 1,
-    computedTier: getTierByRank(idx + 1),
+    computedTier: getTierByRank(idx + 1, settings),
     effectiveElo: getEffectiveElo(p),
   }));
 
-  const rankedReserve: RankedPlayer[] = reserve.map((p, idx) => ({
+  // Overflow tratado como reserva dinâmica (não altera o Firestore)
+  const overflowReserve: RankedPlayer[] = overflow.map((p, idx) => ({
     ...p,
     rank: rankedActive.length + idx + 1,
     computedTier: null,
     effectiveElo: getEffectiveElo(p),
+    is_reserve: true, // Forçado como reserva local apenas para exibição
   }));
 
-  return [...rankedActive, ...rankedReserve];
+  const rankedReserve: RankedPlayer[] = reserve.map((p, idx) => ({
+    ...p,
+    rank: rankedActive.length + overflowReserve.length + idx + 1,
+    computedTier: null,
+    effectiveElo: getEffectiveElo(p),
+  }));
+
+  return [...rankedActive, ...overflowReserve, ...rankedReserve];
 }
 
 // ─── Cor de ELO ───────────────────────────────────────────────────────────────

@@ -36,7 +36,7 @@ export type DraftTurn = {
 };
 
 export type TeamSize = 1 | 2 | 3;
-export type SeriesType = 'BO1' | 'BO3' | 'BO5' | 'BO7' | 'BO9' | 'CUSTOM';
+export type SeriesType = 'BO1' | 'BO3' | 'BO5' | 'BO7' | 'BO9' | 'CUSTOM' | '3G';
 
 export type PickType = 'alternated' | 'blind';
 

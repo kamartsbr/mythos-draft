@@ -13,7 +13,7 @@ import { db } from '../../../firebase';
 import {
   ForjaPlayer, ForjaRegistrationForm, ForjaDiscordUser,
   ForjaScheduleEntry, ForjaTeam, ForjaDraftSession, ForjaDraftPick,
-  ForjaTier, ForjaContentDoc, ForjaPrizeConfig, ForjaSettings,
+  ForjaTier, ForjaContentDoc, ForjaPrizeConfig, ForjaSettings, ForjaTierMode,
   ForjaRole, ForjaTournamentConfig, ForjaRulesBlock, ForjaMapPool,
 } from '../types';
 import { FORJA_MAP_POOL } from '../../../data/maps';
@@ -252,6 +252,70 @@ export async function updatePlayerAdminFields(
 }
 
 /**
+ * Resultado da consulta à API do AoM para um jogador.
+ */
+export interface AomApiResult {
+  elo_1v1: number;
+  elo_tg: number;
+  top_gods: Array<{ god: string; winRate: number; playRate: number }>;
+  alias: string;
+  avatar_url: string | null;
+}
+
+/**
+ * Consulta a API do AoM (/api/forja/fetch-aom-profile) para um jogador
+ * e retorna os dados sem salvar. O Admin decide o que aplicar.
+ */
+export async function fetchAomProfileForPlayer(profileId: number): Promise<AomApiResult> {
+  const url = `https://us-central1-boxwood-plating-368522.cloudfunctions.net/fetchaomprofile?id=${profileId}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `Erro ${res.status} ao consultar API`);
+  }
+  
+  const json = await res.json();
+  if (!json.success || !json.data) {
+    throw new Error(json.error ?? 'Erro inesperado no retorno da API');
+  }
+  
+  return {
+    elo_1v1: json.data.elo_1v1,
+    elo_tg: json.data.elo_tg,
+    top_gods: json.data.top_gods,
+    alias: json.data.alias || String(profileId),
+    avatar_url: json.data.avatar_url,
+  };
+}
+
+/**
+ * Aplica dados frescos da API do AoM ao perfil de um jogador no Firestore.
+ * O Admin controla quais campos atualizar.
+ */
+export async function refreshPlayerFromApi(
+  discordId: string,
+  profileId: number,
+  opts: { elo: boolean; gods: boolean }
+): Promise<AomApiResult> {
+  const data = await fetchAomProfileForPlayer(profileId);
+
+  const payload: Record<string, unknown> = {};
+  if (opts.elo) {
+    payload['elo_1v1'] = data.elo_1v1;
+    payload['elo_tg']  = data.elo_tg;
+  }
+  if (opts.gods) {
+    payload['top_gods'] = data.top_gods;
+  }
+
+  if (Object.keys(payload).length > 0) {
+    await updateDoc(doc(db, PLAYERS_COL, discordId), payload);
+  }
+
+  return data;
+}
+
+/**
  * Campos que o próprio jogador pode alterar (self-service).
  * Não inclui ELOs, avatar, deuses ou time.
  */
@@ -342,6 +406,10 @@ export async function updateTeamName(teamId: string, name?: string, captainId?: 
   await updateDoc(doc(db, TEAMS_COL, teamId), updates);
 }
 
+export async function updateTeamGroup(teamId: string, groupId: string | null): Promise<void> {
+  await updateDoc(doc(db, TEAMS_COL, teamId), { groupId });
+}
+
 // ─── Draft Session ────────────────────────────────────────────────────────────
 
 const draftDocRef = () => doc(db, DRAFT_COL, DRAFT_DOC);
@@ -414,17 +482,30 @@ export async function startForjaDraft(captainIds: string[]): Promise<void> {
  */
 export async function makeDraftPick(
   session: ForjaDraftSession,
-  player: ForjaPlayer,
+  player: ForjaPlayer & { computedTier?: ForjaTier | null },
   forcedByAdmin = false
 ): Promise<void> {
   const N = session.pick_order_sequence.length / 2; // metade = num times
 
-  // Validação de tier
+  // Fetch settings dynamically to support tier_mode = 'AB' (Pool Livre)
+  const { getDoc } = await import('firebase/firestore');
+  const settingsSnap = await getDoc(doc(db, CONTENT_COL, 'settings'));
+  const tierMode = (settingsSnap.data()?.tier_mode as ForjaTierMode) ?? 'ABC';
+
+  // Valida tier: prioridade para computedTier (calculado pelo forjaUtils,
+  // que respeita overflow e tier_mode) sobre player.tier (campo Firestore).
+  // Isso garante que jogadores de overflow (37º-44º quando max=36) não
+  // possam ser selecionados mesmo que Firestore ainda tenha tier: null.
+  const effectiveTier: ForjaTier = (player.computedTier !== undefined ? player.computedTier : player.tier);
   const expectedTier: 'B' | 'C' = session.current_round;
-  if (player.tier !== expectedTier) {
-    throw new Error(
-      `Este jogador é Tier ${player.tier ?? '?'}, mas a rodada atual exige Tier ${expectedTier}.`
-    );
+
+  if (effectiveTier !== expectedTier) {
+    const isPoolLivreException = tierMode === 'AB' && expectedTier === 'C' && effectiveTier === 'B';
+    if (!isPoolLivreException) {
+      throw new Error(
+        `Este jogador é Tier ${effectiveTier ?? '?'}, mas a rodada atual exige Tier ${expectedTier}.`
+      );
+    }
   }
 
   const batch        = writeBatch(db);
@@ -536,6 +617,99 @@ export function subscribeToForjaContent<T = ForjaContentDoc>(
     snap => onData(snap.exists() ? (snap.data() as T) : null),
     err  => { console.error(`[Forja] content/${docId}:`, err); onError?.(err); }
   );
+}
+
+// ─── Settings do Torneio ──────────────────────────────────────────────────────
+
+/** Subscrição em tempo real às configurações gerais do torneio. */
+export function subscribeToForjaSettings(
+  onData: (settings: ForjaSettings | null) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  return onSnapshot(
+    doc(db, CONTENT_COL, 'settings'),
+    snap => onData(snap.exists() ? (snap.data() as ForjaSettings) : null),
+    err  => { console.error('[Forja] settings:', err); onError?.(err); }
+  );
+}
+
+/**
+ * Salva as configurações gerais do torneio (apenas Admin via Firestore Rules).
+ * Usa merge: true para não apagar campos não incluídos no update.
+ */
+export async function saveForjaSettings(
+  settings: Partial<Omit<ForjaSettings, 'updated_at'>>,
+  updatedBy: string
+): Promise<void> {
+  await setDoc(doc(db, CONTENT_COL, 'settings'), {
+    ...settings,
+    updated_at: serverTimestamp(),
+    updated_by: updatedBy,
+  }, { merge: true });
+}
+
+// ─── Adição Manual de Jogador (Admin) ────────────────────────────────────────
+
+/**
+ * Adiciona um jogador manualmente pelo Discord ID (apenas Admin).
+ * Usado quando o Admin conhece o jogador e quer inscrevê-lo sem OAuth Discord.
+ * O avatar usa o CDN do Discord como placeholder; o snapshot de ELO oficial atualiza depois.
+ */
+export async function adminRegisterPlayer(params: {
+  discordId: string;
+  nick: string;
+  aomProfileId: number;
+  elo1v1?: number;
+  eloTg?: number;
+  topGods?: any[];
+  avatarUrl?: string;
+  /** Frase de efeito do jogador (admin pode preencher pelo jogador) */
+  pitchQuote?: string;
+  /** Disponibilidade selecionada pelo admin */
+  availability?: string[];
+  /** Nacionalidade (default: brasileiro) */
+  isBrazilian?: boolean;
+  addedBy: string;
+}): Promise<void> {
+  const {
+    discordId, nick, aomProfileId, elo1v1 = 0, eloTg = 0,
+    topGods = [], avatarUrl, pitchQuote, availability = [],
+    isBrazilian = true, addedBy,
+  } = params;
+
+  // Verifica se já existe
+  const existing = await getDoc(doc(db, PLAYERS_COL, discordId));
+  if (existing.exists()) {
+    throw new Error(`Jogador com Discord ID ${discordId} já está inscrito.`);
+  }
+
+  // Avatar placeholder do CDN do Discord
+  const defaultAvatar = `https://cdn.discordapp.com/embed/avatars/${parseInt(discordId.slice(-1)) % 6}.png`;
+
+  const player: Omit<import('../types').ForjaPlayer, 'discord_id'> = {
+    aom_profile_id:     aomProfileId,
+    aom_id:             String(aomProfileId),
+    nick:               nick.trim(),
+    avatar_url:         avatarUrl || defaultAvatar,
+    discord_avatar_url: avatarUrl || defaultAvatar,
+    is_brazilian:       isBrazilian,
+    pitch_quote:        pitchQuote?.trim() || `Adicionado manualmente por ${addedBy}`,
+    availability,
+    elo_1v1:            elo1v1,
+    elo_tg:             eloTg,
+    top_gods:           topGods,
+    elo_snapshot:       elo1v1,
+    status:             'available',
+    tier:               null,
+    team_id:            null,
+    seed:               null,
+    registered_at:      serverTimestamp() as any,
+    consent_rules:      true,   // Admin assume responsabilidade
+    consent_format:     true,
+    role:               'player',
+  };
+
+  await setDoc(doc(db, PLAYERS_COL, discordId), player);
 }
 
 export async function updateForjaContent(

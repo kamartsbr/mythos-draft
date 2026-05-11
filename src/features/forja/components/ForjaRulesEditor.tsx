@@ -19,6 +19,8 @@ import {
   addRulesBlock,
   deleteRulesBlock,
 } from '../services/forjaService';
+import { useForjaPrizes } from '../hooks/useForjaContent';
+import ForjaPremiacaoEditor from './ForjaPremiacaoEditor';
 
 // ─── Block Editor (Admin Inline) ──────────────────────────────────────────────
 
@@ -158,6 +160,8 @@ export default function ForjaRulesEditor({ discordUser, isAdmin }: ForjaViewProp
   const [dirty, setDirty]       = useState(false);
   const [error, setError]       = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState(false);
+  
+  const { data: prizes } = useForjaPrizes();
 
   // Subscribe to blocks
   useEffect(() => {
@@ -323,6 +327,15 @@ export default function ForjaRulesEditor({ discordUser, isAdmin }: ForjaViewProp
           ))}
         </div>
       )}
+
+      {/* Premiação */}
+      <div style={{ marginTop: '3rem' }}>
+        <ForjaPremiacaoEditor
+          data={prizes}
+          updatedBy={discordUser?.username ?? 'admin'}
+          readOnly={!isAdmin}
+        />
+      </div>
     </section>
   );
 }

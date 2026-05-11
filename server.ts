@@ -7,6 +7,7 @@ import {
   getFirestore, 
   collection, 
   getDocs, 
+  getDoc,
   doc, 
   deleteField, 
   writeBatch,
@@ -21,6 +22,33 @@ const __dirname = path.dirname(__filename);
 // Identifica produção ou Cloud Run
 const isProd = process.env.NODE_ENV === 'production' || !!process.env.CLOUD_RUN_JOB;
 const isDev = !isProd;
+
+function corsApiHeaders(res: express.Response) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+
+function serializeFirestoreValue(val: unknown): unknown {
+  if (val === null || val === undefined) return val;
+  if (typeof val === 'object' && typeof (val as { toDate?: () => Date }).toDate === 'function') {
+    try {
+      return (val as { toDate: () => Date }).toDate().toISOString();
+    } catch {
+      return null;
+    }
+  }
+  if (val instanceof Date) return val.toISOString();
+  if (Array.isArray(val)) return val.map(serializeFirestoreValue);
+  if (typeof val === 'object' && val !== null) {
+    const o: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
+      o[k] = serializeFirestoreValue(v);
+    }
+    return o;
+  }
+  return val;
+}
 
 async function startServer() {
   const app = express();
@@ -46,7 +74,40 @@ async function startServer() {
     console.error('[Firebase] Initialization error:', error);
   }
 
-  // Lógica de Limpeza Periódica de Lobbies Velhos
+  /**
+   * Public JSON snapshot of a lobby (HUD / external tools). Does not require auth.
+   * This is used by HudAoM import: GET /api/lobby/:id
+   */
+  app.options('/api/lobby/:lobbyId', (req, res) => {
+    corsApiHeaders(res);
+    res.status(204).end();
+  });
+
+  app.get('/api/lobby/:lobbyId', async (req, res) => {
+    corsApiHeaders(res);
+    const lobbyId = String(req.params.lobbyId ?? '');
+    if (!lobbyId || !/^[a-z0-9_-]{4,64}$/i.test(lobbyId)) {
+      return res.status(400).json({ ok: false, message: 'Invalid lobby id' });
+    }
+    if (!db) {
+      return res.status(503).json({ ok: false, message: 'Database not initialized' });
+    }
+    try {
+      const ref = doc(db, 'lobbies', lobbyId);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) {
+        return res.status(404).json({ ok: false, message: 'Lobby not found' });
+      }
+      const raw = snap.data();
+      const lobby = serializeFirestoreValue(raw) as Record<string, unknown>;
+      return res.json({ ok: true, lobby: { id: snap.id, ...lobby } });
+    } catch (e) {
+      console.error('[api/lobby] Error:', e);
+      return res.status(500).json({ ok: false, message: 'Internal error' });
+    }
+  });
+
+  // Lógica de Limpeza Periódica
   async function performCleanup() {
     if (!db || isDev) return;
     const now = new Date();
@@ -189,6 +250,9 @@ async function startServer() {
     app.use(express.static(distPath));
 
     app.get('*', (req, res) => {
+      if (req.path.startsWith('/api')) {
+        return res.status(404).json({ ok: false, message: 'Not found' });
+      }
       const indexPath = path.join(distPath, 'index.html');
       if (fs.existsSync(indexPath)) {
         res.sendFile(indexPath);

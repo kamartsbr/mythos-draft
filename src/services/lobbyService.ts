@@ -305,11 +305,10 @@ export const lobbyService = {
   async getLobbiesPaginated(isFirstPage: boolean = true) {
     if (IS_DEV) return getLocalIndex();
     try {
-      // 1. Define a base da query ordenada por atividade recente
       let lobbyQuery = query(
         collection(db, 'lobbies'), 
         orderBy('createdAt', 'desc'), 
-        limit(20) // LOBBIES_PER_PAGE
+        limit(40) // LOBBIES_PER_PAGE (increased to handle post-filter reductions)
       );
 
       // 2. Se n├úo for a primeira p├ígina, come├ºa ap├│s o ├║ltimo documento visto
@@ -356,15 +355,12 @@ export const lobbyService = {
       if ((this as any)._isRefreshingIndex) return;
       (this as any)._isRefreshingIndex = true;
 
-      // We use 'lastActivityAt' instead of 'createdAt' for ordering. 
-      // This is crucial because Firestore's query engine automatically excludes any documents 
-      // from the result set if they are missing the field specified in an 'orderBy' or 'where' clause. 
-      // By using a field that is consistently updated during the lifecycle of a draft, 
-      // we ensure older, but still relevant drafts are not dropped from the index queries.
+      // We use 'createdAt' for ordering to ensure a stable chronological list 
+      // where the most recently created drafts always appear first.
       const q = query(
         collection(db, 'lobbies'),
         orderBy('createdAt', 'desc'),
-        limit(50)
+        limit(100)
       );
 
       const snap = await getDocs(q);

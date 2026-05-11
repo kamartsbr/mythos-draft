@@ -141,6 +141,20 @@ export default function ForjaHub() {
   // Mostrar banner de deadline apenas se < 24h e inscrições ainda abertas
   const showDeadlineBanner = registrationOpen && msToDeadline < 24 * 3600 * 1000 && msToDeadline > 0;
 
+  // Formatar label dinâmica da deadline (ex: "Sáb 10/05 às 13h59 BRT")
+  const deadlineLabel = (() => {
+    const deadlineMs = settings?.registration_deadline_ms;
+    if (!deadlineMs) return '';
+    const d = new Date(deadlineMs);
+    const weekdays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    const dayName  = weekdays[d.getDay()];
+    const day      = String(d.getDate()).padStart(2, '0');
+    const month    = String(d.getMonth() + 1).padStart(2, '0');
+    const hh       = String(d.getHours()).padStart(2, '0');
+    const mm       = String(d.getMinutes()).padStart(2, '0');
+    return `${dayName} ${day}/${month} às ${hh}h${mm} BRT`;
+  })();
+
   return (
     <div className="forja-hub">
 
@@ -151,7 +165,7 @@ export default function ForjaHub() {
           <span>
             Inscrições encerram em{' '}
             <strong>{countdown.h}h {countdown.m}m {countdown.s}s</strong>
-            {' '}— Sábado 09/05 às 13h59 BRT
+            {deadlineLabel && <>{' '}— {deadlineLabel}</>}
           </span>
           <button
             className="forja-btn forja-btn--primary"
@@ -251,9 +265,7 @@ export default function ForjaHub() {
       <main className="forja-tab-content">
         <Suspense fallback={<TabFallback />}>
           {activeTab === 'inicio'      && <ForjaInicio {...sharedProps} onRegisterClick={() => setShowRegModal(true)} />}
-          {activeTab === 'regras'      && (isAdmin
-            ? <ForjaRulesEditor {...sharedProps} />
-            : <ForjaRegras {...sharedProps} />)}
+          {activeTab === 'regras'      && <ForjaRulesEditor {...sharedProps} />}
           {activeTab === 'mapas'       && <ForjaMapas {...sharedProps} />}
           {activeTab === 'formato'     && <ForjaFormato {...sharedProps} />}
           {activeTab === 'schedule'    && <ForjaSchedule {...sharedProps} />}

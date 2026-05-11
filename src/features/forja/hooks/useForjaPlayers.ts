@@ -1,15 +1,16 @@
 /**
  * ============================================================
- *  useForjaPlayers — Hook de listagem em tempo real
- *  Retorna players rankeados (computedTier + effectiveElo)
- *  com subscrição ao Firestore e fallback para mock em dev.
+ * useForjaPlayers — Hook de listagem (Modo Busca Fria)
+ * Retorna players rankeados (computedTier + effectiveElo)
+ * com busca única ao Firestore e fallback para mock em dev.
  * ============================================================
  */
 
 import { useState, useEffect, useMemo } from 'react';
 import { ForjaPlayer } from '../types';
 import { RankedPlayer, computeRankedPlayers } from '../forjaUtils';
-import { subscribeToForjaPlayers } from '../services/forjaService';
+// 🚨 MUDANÇA: Importando a busca "fria" no lugar da subscrição em tempo real
+import { getForjaPlayersOnce } from '../services/forjaService';
 import { useForjaSettings } from './useForjaSettings';
 
 // ─── Mock Data (dev) ──────────────────────────────────────────────────────────
@@ -146,7 +147,7 @@ interface UseForjaPlayersResult {
 export function useForjaPlayers(): UseForjaPlayersResult {
   const [rawPlayers, setRawPlayers] = useState<ForjaPlayer[]>([]);
   const [loading, setLoading]       = useState(true);
-  const [error,   setError]         = useState<string | null>(null);
+  const [error,  setError]          = useState<string | null>(null);
   const [isLive,  setIsLive]        = useState(false);
 
   useEffect(() => {
@@ -161,25 +162,34 @@ export function useForjaPlayers(): UseForjaPlayersResult {
       return () => clearTimeout(timer);
     }
 
-    // Produção: subscrição Firestore em tempo real
-    // O sort/tier são computados aqui, não dependemos de campos estáticos no Firestore
-    const unsub = subscribeToForjaPlayers(
-      (data) => {
-        setRawPlayers(data);
-        setLoading(false);
-        setIsLive(true);
-        setError(null);
-      },
-      (err) => {
-        console.error('[useForjaPlayers]', err);
-        setRawPlayers(MOCK_PLAYERS);
-        setError('Não foi possível conectar ao banco de dados. Exibindo dados de demonstração.');
-        setLoading(false);
-        setIsLive(false);
-      }
-    );
+    // Produção: Busca fria única no Firestore
+    let isMounted = true;
 
-    return () => unsub();
+    async function fetchPlayers() {
+      setLoading(true);
+      try {
+        const data = await getForjaPlayersOnce();
+        if (isMounted) {
+          setRawPlayers(data);
+          setIsLive(true);
+          setError(null);
+        }
+      } catch (err) {
+        console.error('[useForjaPlayers]', err);
+        if (isMounted) {
+          setRawPlayers(MOCK_PLAYERS);
+          setError('Não foi possível conectar ao banco de dados. Exibindo dados de demonstração.');
+          setIsLive(false);
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    fetchPlayers();
+
+    // Cleanup caso o componente seja desmontado antes de carregar
+    return () => { isMounted = false; };
   }, []);
 
   // Configurações em tempo real (tier_mode, cortes de tier, etc.)

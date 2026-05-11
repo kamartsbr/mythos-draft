@@ -193,6 +193,18 @@ export async function updatePlayerStatsSnapshot(discordId: string, updates: Part
   await updateDoc(doc(db, PLAYERS_COL, discordId), updates);
 }
 
+// Busca "fria" (Lê apenas 1 vez, sem ficar escutando o banco)
+export async function getForjaPlayersOnce(): Promise<ForjaPlayer[]> {
+  try {
+    const q = query(collection(db, PLAYERS_COL));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ ...(d.data() as ForjaPlayer), discord_id: d.id }));
+  } catch (err) {
+    console.error('[Forja] Erro na busca fria de players:', err);
+    return [];
+  }
+}
+
 // ─── Admin Player Management (Schema v2) ──────────────────────────────────────
 
 /**

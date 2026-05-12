@@ -51,7 +51,13 @@ mythos-draft-2/
 │           ├── forja.css    # CSS exclusivo da Forja (~63KB)
 │           ├── forjaUtils.ts# Helpers (effectiveElo, tier, etc.)
 │           ├── services/forjaService.ts  # CRUD Firestore da Forja (~31KB)
-│           ├── views/       # Páginas da Forja (ForjaInicio, ForjaTabela…)
+│           ├── views/       # Páginas da Forja:
+│           │   ├── ForjaHome.tsx      # Hub principal (fase, tabela compacta, premiação)
+│           │   ├── ForjaInicio.tsx    # Lista de inscritos (aba 'Inscritos')
+│           │   ├── ForjaTabela.tsx    # Classificação + partidas
+│           │   ├── ForjaFormato.tsx   # Snake Draft visualizer (16 capitães)
+│           │   ├── ForjaCustomDraft.tsx # Draft Rápido (visível p/ logados)
+│           │   └── ...               # Regras, Mapas, Schedule, Times, OBS…
 │           └── components/  # Modais da Forja (AdminPlayerModal, etc.)
 ├── functions/
 │   └── index.js             # Cloud Functions (updateEloSnapshot, fetchaomprofile)
@@ -348,3 +354,71 @@ Antes de implementar qualquer coisa, confirme:
 - [ ] Estou usando `getEffectiveElo()` de `forjaUtils.ts` para calcular ELO exibido?
 - [ ] Timestamps do Firestore não estão sendo serializados para JSON sem tratamento especial?
 - [ ] Novo campo adicionado a `ForjaPlayer` ou `Lobby` está nas Firestore Rules se necessário?
+
+---
+
+## 16. ESTADO ATUAL DO TORNEIO — DECISÕES RECENTES (Maio 2026)
+
+### 16.1 Torneio tem 16 capitães (não 12)
+O torneio Forja de Hefesto opera com **16 capitães (Tier A)**, totalizando 48 jogadores (16 × 3).
+O visualizador em `ForjaFormato.tsx` foi atualizado para refletir isso. Qualquer novo visualizador deve usar 16.
+
+### 16.2 Estrutura de Abas do ForjaHub
+
+| Tab ID | Label | Visibilidade |
+|---|---|---|
+| `inicio` | Início | Pública — renderiza `ForjaHome.tsx` (hub) |
+| `inscritos` | Inscritos | Pública — renderiza `ForjaInicio.tsx` (lista + inscrição) |
+| `regras` | Regras | Pública |
+| `mapas` | Mapas | Pública |
+| `formato` | Formato | Pública |
+| `schedule` | Schedule | Pública |
+| `times` | Times | Pública |
+| `tabela` | Tabela | Pública |
+| `custom-draft` | Draft Rápido | Usuário Discord logado (`discordUser != null`) |
+| `admin-draft` | Draft Admin | Admin only |
+| `obs` | OBS Mode | Admin only |
+
+### 16.3 ForjaHome (nova aba Início)
+`src/features/forja/views/ForjaHome.tsx` — Hub visual do torneio:
+- Status de inscrição compacto (usuário logado)
+- Cards: fase atual, contagem de times, premiação via CMS
+- Próximas partidas (lobbies FORJA não finalizados, max 3)
+- Tabela de grupos compacta com **popover de membros** ao hover (desktop + tap mobile)
+- Botões de navegação para outras abas (`onTabChange`)
+- A aba `inscritos` (`ForjaInicio.tsx`) mantém toda a UI de hero de inscrição e listagem de jogadores
+
+### 16.4 ForjaSettings — Campos Adicionados
+```ts
+interface ForjaSettings {
+  // ... campos existentes ...
+  current_phase?: 'pre_tournament' | 'group_stage' | 'playoffs' | 'finished';
+  playoff_format?: 'single_elim' | 'double_elim'; // 'double_elim' em breve (disabled)
+}
+```
+Configurável via `ForjaTournamentSettingsModal` (aba Inscritos → botão ⚙️ Configurações).
+
+### 16.5 Reset do Game 3 no Preset FORJA
+**Bug corrigido (Maio 2026):** `resetCurrentGame` em `lobbyService.ts` zerava o `seriesMaps[2]` para lobbies FORJA porque não havia lógica equivalente à do MCL.
+
+**Regra fixada (dois caminhos: DEV e Firestore):**
+- **FORJA Game 3:** mapa foi **sorteado aleatoriamente** — deve ser **preservado** (`restoredMap = data.seriesMaps[2]`).
+- **MCL Game 3:** mapa é **pré-determinado pelo round** (`MCL_ROUND_MAPS[mclRound]`) — deve ser **restaurado**.
+- **G1 e G2 (qualquer preset):** slot limpo para novo pick de mapa.
+
+### 16.6 LobbyConfig — Flags da Forja
+```ts
+interface LobbyConfig {
+  // Flags específicas da Forja:
+  hasMap3RandomRoll?: boolean;  // G3 tem mapa sorteado aleatoriamente
+  hasPerMapBans?: boolean;      // 1 ban de deus por mapa antes dos picks (Playoffs)
+}
+```
+
+### 16.7 Draft Rápido (ForjaCustomDraft)
+- Cria lobbies pré-configurados com regras MCL injetadas automaticamente.
+- Visível para **qualquer usuário Discord logado** (não apenas admins).
+- Inicializa os picks com esqueleto 3v3 via `getMCLPicks()` para o DraftUI renderizar.
+
+### 16.8 useDraft — startsWithB para FORJA
+O hook `useDraft.ts` tem uma condição `startsWithB` que determina que, no Game 3, o perdedor do Game 2 escolhe o mapa primeiro. Essa condição foi expandida para incluir o preset `FORJA` além do `MCL`.

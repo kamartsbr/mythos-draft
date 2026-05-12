@@ -16,6 +16,7 @@ import { lazyWithRetry } from '../../lib/lazyWithRetry';
 import './forja.css';
 
 // ── Sub-abas (Lazy) ───────────────────────────────────────────────────────────
+const ForjaHome        = lazyWithRetry(() => import('./views/ForjaHome'));
 const ForjaInicio      = lazyWithRetry(() => import('./views/ForjaInicio'));
 const ForjaRegras      = lazyWithRetry(() => import('./views/ForjaRegras'));
 const ForjaMapas       = lazyWithRetry(() => import('./views/ForjaMapas'));
@@ -33,19 +34,25 @@ const ForjaTimesManager = lazyWithRetry(() => import('./components/ForjaTimesMan
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 const PUBLIC_TABS: ForjaTab[] = [
-  { id: 'inicio' as ForjaTabId,   label: 'Início',   icon: '🏛️' },
-  { id: 'regras' as ForjaTabId,   label: 'Regras',   icon: '📜' },
-  { id: 'mapas' as ForjaTabId,    label: 'Mapas',    icon: '🗺️' },
-  { id: 'formato' as ForjaTabId,  label: 'Formato',  icon: '🐍' },
-  { id: 'schedule' as ForjaTabId, label: 'Schedule', icon: '📅' },
-  { id: 'times' as ForjaTabId,    label: 'Times',    icon: '🛡️' },
-  { id: 'tabela' as ForjaTabId,   label: 'Tabela',   icon: '📊' },
+  { id: 'inicio' as ForjaTabId,    label: 'Início',    icon: '🏛️' },
+  { id: 'inscritos' as ForjaTabId, label: 'Inscritos',  icon: '👥' },
+  { id: 'regras' as ForjaTabId,    label: 'Regras',    icon: '📜' },
+  { id: 'mapas' as ForjaTabId,     label: 'Mapas',     icon: '🗺️' },
+  { id: 'formato' as ForjaTabId,   label: 'Formato',   icon: '🐍' },
+  { id: 'schedule' as ForjaTabId,  label: 'Schedule',  icon: '📅' },
+  { id: 'times' as ForjaTabId,     label: 'Times',     icon: '🛡️' },
+  { id: 'tabela' as ForjaTabId,    label: 'Tabela',    icon: '📊' },
 ];
 
-const ADMIN_TABS: ForjaTab[] = [
+/** Visível para qualquer usuário Discord autenticado (participante ou admin). */
+const MEMBER_TABS: ForjaTab[] = [
   { id: 'custom-draft' as ForjaTabId, label: 'Draft Rápido', icon: '⚡' },
-  { id: 'admin-draft' as ForjaTabId,  label: 'Draft Admin',  icon: '🎯' },
-  { id: 'obs' as ForjaTabId,          label: 'OBS Mode',     icon: '📺' },
+];
+
+/** Visível apenas para admins. */
+const ADMIN_ONLY_TABS: ForjaTab[] = [
+  { id: 'admin-draft' as ForjaTabId, label: 'Draft Admin', icon: '🎯' },
+  { id: 'obs' as ForjaTabId,         label: 'OBS Mode',    icon: '📺' },
 ];
 
 // ── Countdown ─────────────────────────────────────────────────────────────────
@@ -87,7 +94,7 @@ export default function ForjaHub() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab') as ForjaTabId | null;
-    const allTabs = [...PUBLIC_TABS, ...ADMIN_TABS, { id: 'draft-room' as ForjaTabId }];
+    const allTabs = [...PUBLIC_TABS, ...MEMBER_TABS, ...ADMIN_ONLY_TABS, { id: 'draft-room' as ForjaTabId }];
     if (tab && allTabs.find(t => t.id === tab)) setActiveTab(tab);
   }, []);
 
@@ -138,7 +145,10 @@ export default function ForjaHub() {
   const allVisibleTabs: ForjaTab[] = [
     ...PUBLIC_TABS,
     ...(showDraftRoomTab ? [{ id: 'draft-room' as ForjaTabId, label: 'Sala de Draft', icon: '🎯' }] : []),
-    ...(isAdmin ? ADMIN_TABS : []),
+    // 'Draft Rápido' — visível para qualquer usuário Discord logado
+    ...(discordUser ? MEMBER_TABS : []),
+    // Abas de controle — apenas admins
+    ...(isAdmin ? ADMIN_ONLY_TABS : []),
   ];
 
   // Mostrar banner de deadline apenas se < 24h e inscrições ainda abertas
@@ -253,7 +263,7 @@ export default function ForjaHub() {
               id={`forja-tab-${tab.id}`}
               role="tab"
               aria-selected={activeTab === tab.id}
-              className={`forja-tab-btn ${activeTab === tab.id ? 'forja-tab-btn--active' : ''} ${ADMIN_TABS.find(t => t.id === tab.id) ? 'forja-tab-btn--admin' : ''} ${tab.id === 'draft-room' ? 'forja-tab-btn--draft-room' : ''}`}
+              className={`forja-tab-btn ${activeTab === tab.id ? 'forja-tab-btn--active' : ''} ${[...MEMBER_TABS, ...ADMIN_ONLY_TABS].find(t => t.id === tab.id) ? 'forja-tab-btn--admin' : ''} ${tab.id === 'draft-room' ? 'forja-tab-btn--draft-room' : ''}`}
               onClick={() => handleTabChange(tab.id)}
             >
               <span className="forja-tab-icon">{tab.icon}</span>
@@ -267,7 +277,8 @@ export default function ForjaHub() {
       {/* ── Tab Content ───────────────────────── */}
       <main className="forja-tab-content">
         <Suspense fallback={<TabFallback />}>
-          {activeTab === 'inicio'      && <ForjaInicio {...sharedProps} onRegisterClick={() => setShowRegModal(true)} />}
+          {activeTab === 'inicio'      && <ForjaHome {...sharedProps} onRegisterClick={() => setShowRegModal(true)} onTabChange={handleTabChange} />}
+          {activeTab === 'inscritos'    && <ForjaInicio {...sharedProps} onRegisterClick={() => setShowRegModal(true)} />}
           {activeTab === 'regras'      && <ForjaRulesEditor {...sharedProps} />}
           {activeTab === 'mapas'       && <ForjaMapas {...sharedProps} />}
           {activeTab === 'formato'     && <ForjaFormato {...sharedProps} />}

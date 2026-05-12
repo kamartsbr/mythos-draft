@@ -206,9 +206,11 @@ export function useDraft(
       }
     }
 
-    // MCL Game 2 starts with Team B. Game 3 starts with loser of Game 2.
-    const startsWithB = (cfg.preset === 'MCL' && gameNumber === 2) || 
-                        (cfg.preset === 'MCL' && gameNumber > 2 && lastWinner === 'A');
+    // MCL / FORJA: Game 2 começa com B (Guest escolhe mapa e abre bans/picks).
+    // Game 3: o PERDEDOR do G2 escolhe primeiro — se A ganhou G2, B (o perdedor) abre.
+    const startsWithB =
+      ((cfg.preset === 'MCL' || cfg.preset === 'FORJA') && gameNumber === 2) ||
+      ((cfg.preset === 'MCL' || cfg.preset === 'FORJA') && gameNumber > 2 && lastWinner === 'A');
 
     if (cfg.hasBans) {
       if (cfg.preset === 'CASCA') {

@@ -780,25 +780,35 @@ export const lobbyService = {
         let newPicks = (lobby.picks || []).map(p => ({ ...p, godId: null }));
 
         const newSeriesMaps = [...(lobby.seriesMaps || [])];
-        if (lobby.config.preset === 'MCL' && lobby.currentGame < 3) {
-           newSeriesMaps[lobby.currentGame - 1] = "";
+        // ── Limpeza de mapa: só limpa G1/G2. G3 sempre preserva o mapa
+        // (MCL: pré-determinado pelo round / FORJA: sorteado aleatoriamente).
+        const isForjaG3 = lobby.config.preset === 'FORJA' && lobby.currentGame === 3;
+        const isMCLG3   = lobby.config.preset === 'MCL'   && lobby.currentGame === 3;
+        if (!isForjaG3 && !isMCLG3) {
+          // G1 ou G2: limpa o slot para novo pick de mapa
+          if (newSeriesMaps.length >= lobby.currentGame) {
+            newSeriesMaps[lobby.currentGame - 1] = '';
+          }
         }
 
-        setLocalLobby(id, { 
-          ...lobby, 
-          status: 'drafting', 
-          phase: 'ready', 
-          turn: 0, 
+        // selectedMap: mantém o mapa no G3 (MCL/FORJA), null nos demais
+        const preservedMap3 = (isForjaG3 || isMCLG3) ? (lobby.seriesMaps?.[2] ?? null) : null;
+
+        setLocalLobby(id, {
+          ...lobby,
+          status: 'drafting',
+          phase: 'ready',
+          turn: 0,
           picks: newPicks,
           bans: [],
           mapBans: lobby.currentGame === 1 ? [] : lobby.mapBans,
           seriesMaps: newSeriesMaps,
-          selectedMap: ((lobby.config.preset === 'MCL' || lobby.config.preset === 'FORJA') && lobby.currentGame === 3) ? (lobby.seriesMaps ? lobby.seriesMaps[2] : null) : null,
+          selectedMap: preservedMap3,
           isPaused: false,
           timerStart: Date.now() as any,
           timerPausedAt: null,
           resetRequest: null,
-          lastActivityAt: Date.now() as any 
+          lastActivityAt: Date.now() as any,
         } as any);
       }
       return;
@@ -808,19 +818,27 @@ export const lobbyService = {
       await runTransaction(db, async (transaction) => {
         const docSnap = await transaction.get(docRef);
         if (!docSnap.exists()) return;
-        
+
         const data = normalizeLobbyData(docSnap.data());
-        
+
         const filteredReplayLog = (data.replayLog || []).filter((log: any) => log.gameNumber !== data.currentGame);
-        
+
         const newSeriesMaps = [...(data.seriesMaps || [])];
-        let restoredMap = "";
+        let restoredMap = '';
+
         if (data.config.preset === 'MCL' && data.config.mclRound) {
+          // MCL: mapa 3 é pré-determinado pelo round — restaurar sempre
           const roundMap = MCL_ROUND_MAPS[data.config.mclRound];
           const gameCount = data.config.seriesType === 'BO3' ? 3 : (data.config.customGameCount || 1);
           if (gameCount >= 3 && data.currentGame === 3) restoredMap = roundMap;
+        } else if (data.config.preset === 'FORJA' && data.currentGame === 3) {
+          // ── FORJA: mapa 3 foi SORTEADO aleatoriamente — preservar o valor já persistido.
+          // NÃO limpar seriesMaps[2]; usar o mapa que já estava lá.
+          restoredMap = (data.seriesMaps || [])[2] ?? '';
         }
 
+        // Para G1/G2 (ou qualquer preset sem mapa fixo no G3): limpa o slot.
+        // Para G3 MCL/FORJA: restaura o mapa correto (pré-determinado ou sorteado).
         if (newSeriesMaps.length >= data.currentGame) {
           newSeriesMaps[data.currentGame - 1] = restoredMap;
         }
@@ -829,7 +847,7 @@ export const lobbyService = {
           status: 'drafting',
           phase: 'ready',
           turn: 0,
-          picks: (Array.isArray(data.picks) ? data.picks : []).map(p => ({ ...(p as any), godId: null, isRandom: false })), // Keep players but remove gods
+          picks: (Array.isArray(data.picks) ? data.picks : []).map(p => ({ ...(p as any), godId: null, isRandom: false })),
           bans: [],
           mapBans: data.currentGame === 1 ? [] : data.mapBans,
           readyA: false,
@@ -841,7 +859,7 @@ export const lobbyService = {
           selectedMap: restoredMap || null,
           timerStart: now(),
           isPaused: false,
-          lastActivityAt: now()
+          lastActivityAt: now(),
         });
       });
     } catch (error) {

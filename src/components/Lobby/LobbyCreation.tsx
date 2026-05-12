@@ -1,12 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sword, Plus, ChevronRight, RefreshCw, Map as MapIcon, Trophy, Lock, Eye, Globe, Trash2, ChevronDown, ChevronUp, Shield } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { LobbyConfig, SeriesType, TeamSize } from '../../types';
-import { MAPS, MAJOR_GODS, PANTHEONS, MCL_ROUND_MAPS, CASCA_GROSSA_GROUP_POOL, CASCA_GROSSA_PLAYOFF_POOL, getMCLMapPool } from '../../constants';
+import { MAPS, MAJOR_GODS, PANTHEONS, MCL_ROUND_MAPS, getMCLMapPool } from '../../constants';
 import { PresetBuilder } from './PresetBuilder';
 import { lobbyService } from '../../services/lobbyService';
-import { useEffect } from 'react';
 
 interface LobbyCreationProps {
   t: any;
@@ -48,9 +47,19 @@ export function LobbyCreation({
   const [showPresetBuilder, setShowPresetBuilder] = useState(false);
   const [communityPresets, setCommunityPresets] = useState<any[]>([]);
   
+  // 🚨 MUDANÇA APLICADA: Substituição do subscribeToPresets pela Busca Fria
   useEffect(() => {
-    const unsub = lobbyService.subscribeToPresets(setCommunityPresets);
-    return () => unsub();
+    let isMounted = true;
+    
+    lobbyService.getPresetsOnce()
+      .then((presets) => {
+        if (isMounted) {
+          setCommunityPresets(presets);
+        }
+      })
+      .catch(err => console.error("Erro ao buscar presets:", err));
+      
+    return () => { isMounted = false; };
   }, []);
 
   const handleSaveCustomPreset = async (name: string, customConfig: LobbyConfig) => {
@@ -58,6 +67,9 @@ export function LobbyCreation({
       const id = await lobbyService.savePreset(name, customConfig);
       setConfig({ ...customConfig, preset: `custom_${id}` });
       setShowPresetBuilder(false);
+      
+      // Atualiza a lista localmente para o usuário ver o novo preset na hora
+      lobbyService.getPresetsOnce().then(setCommunityPresets);
     } catch (err) {
       console.error('Failed to save preset:', err);
     }
@@ -1054,7 +1066,6 @@ export function LobbyCreation({
             </div>
           </div>
         )}
-
 
         <button
           onClick={createLobby}

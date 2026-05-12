@@ -269,6 +269,10 @@ export const normalizeLobbyData = (data: any): Lobby => {
 /** Mapa de timers para debounce do hover ÔÇö evita writes/re-renders por pixel movido. */
 const _hoverDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+// 🚨 CACHE GLOBAL DE PRESETS (Evita leituras repetidas)
+let cachedPresets: any[] | null = null;
+let presetsPromise: Promise<any[]> | null = null;
+
 export const lobbyService = {
   async createLobby(id: string, lobby: Lobby): Promise<void> {
     if (IS_DEV) {
@@ -350,17 +354,13 @@ export const lobbyService = {
   async refreshLobbyIndex(): Promise<void> {
     if (IS_DEV) return;
     try {
-      // Optimization: Index refresh is heavy. We use a lightweight lock to prevent concurrent refreshes 
-      // from the same client session causing UI stutter.
       if ((this as any)._isRefreshingIndex) return;
       (this as any)._isRefreshingIndex = true;
 
-      // We use 'createdAt' for ordering to ensure a stable chronological list 
-      // where the most recently created drafts always appear first.
       const q = query(
         collection(db, 'lobbies'),
         orderBy('createdAt', 'desc'),
-        limit(100)
+        limit(30) // 🚨 OTIMIZAÇÃO: Alterado de 100 para 30 para economizar leituras!
       );
 
       const snap = await getDocs(q);
@@ -426,13 +426,10 @@ export const lobbyService = {
         lastActivityAt: now()
       }));
       
-      // Index is primarily for public/waiting lobbies. 
-      // Only refresh if visibility or status changes in a way that affects the list.
       const statusChanged = updates.status === 'finished' || updates.status === 'waiting' || updates.status === 'INCOMPLETE';
       const isVisibilityUpdate = updates.isHidden !== undefined;
       
       if (statusChanged || isVisibilityUpdate) {
-        // Optimization: Only refresh for major state changes that affect the public list
         await this.refreshLobbyIndex();
       }
     } catch (error) {
@@ -530,7 +527,6 @@ export const lobbyService = {
         const isTimerPhase = timerPhases.includes(data.phase);
         const wasPaused = data.isPaused ?? false;
         
-        // Admin Solo mode:captain1 === captain2. Don't auto-pause if captains are same (Solo Mode)
         const isSoloAdmin = data.captain1 && data.captain2 && data.captain1 === data.captain2;
         const nowPaused = isTimerPhase && !isSoloAdmin && (!c1Active || !c2Active);
         
@@ -781,11 +777,7 @@ export const lobbyService = {
     if (IS_DEV) {
       const lobby = getLocalLobby(id);
       if (lobby) {
-        // Clear MCL picks if needed
         let newPicks = (lobby.picks || []).map(p => ({ ...p, godId: null }));
-        if (lobby.config.preset === 'MCL') {
-          // If we are resetting, we might need to preserve the skeleton
-        }
 
         const newSeriesMaps = [...(lobby.seriesMaps || [])];
         if (lobby.config.preset === 'MCL' && lobby.currentGame < 3) {
@@ -819,10 +811,8 @@ export const lobbyService = {
         
         const data = normalizeLobbyData(docSnap.data());
         
-        // Remove current game's actions from replayLog
         const filteredReplayLog = (data.replayLog || []).filter((log: any) => log.gameNumber !== data.currentGame);
         
-        // Restore pre-determined map for MCL if applicable
         const newSeriesMaps = [...(data.seriesMaps || [])];
         let restoredMap = "";
         if (data.config.preset === 'MCL' && data.config.mclRound) {
@@ -919,12 +909,9 @@ export const lobbyService = {
         }
       };
 
-      // Tenta carregar imediatamente
       handler();
 
-      // Escuta mudan├ºas de OUTRAS abas (evento nativo)
       window.addEventListener('storage', handler);
-      // Escuta mudan├ºas da PR├ôPRIA aba (seu evento customizado)
       window.addEventListener('storage_update', handler);
 
       return () => {
@@ -944,49 +931,28 @@ export const lobbyService = {
     });
   },
 
-  subscribeToPublicLobbies(onUpdate: (lobbies: LobbySummary[]) => void): Unsubscribe {
-    if (IS_DEV) {
-      const handler = () => onUpdate(getLocalIndex());
-      handler();
-      
-      window.addEventListener('storage', handler);
-      window.addEventListener('storage_update', handler);
-      
-      return () => {
-        window.removeEventListener('storage', handler);
-        window.removeEventListener('storage_update', handler);
-      };
-    }
-
-    const indexRef = doc(db, 'metadata', 'lobby_index');
+  // 🚨 NOVA FUNÇÃO: Busca Fria de Lobbies Públicos
+  async getPublicLobbiesOnce(): Promise<LobbySummary[]> {
+    if (IS_DEV) return getLocalIndex();
     
-    // O gatilho checkAndCleanup foi removido para evitar leituras excessivas no frontend
-
-    return onSnapshot(indexRef, (snap) => {
-      if (snap.exists()) {
-        const data = snap.data() as any;
-        const lobbiesArray = Array.isArray(data.activeLobbies) ? data.activeLobbies : [];
-        onUpdate(lobbiesArray);
-      } else {
-        // Fallback para query direta se o ├¡ndice n├úo existir
-        this.fallbackToDirectQuery(onUpdate);
-      }
-    }, (error) => {
-      console.warn("[Lobby Index] Subscription failed, falling back to query:", error.message);
-      this.fallbackToDirectQuery(onUpdate);
-    });
-  },
-
-  async fallbackToDirectQuery(onUpdate: (lobbies: LobbySummary[]) => void): Promise<void> {
     try {
+      const indexSnap = await getDoc(doc(db, 'metadata', 'lobby_index'));
+      
+      if (indexSnap.exists()) {
+        const data = indexSnap.data() as any;
+        if (Array.isArray(data.activeLobbies) && data.activeLobbies.length > 0) {
+          return data.activeLobbies;
+        }
+      }
+
       const q = query(
         collection(db, 'lobbies'),
-        orderBy('lastActivityAt', 'desc'),
-        limit(50)
+        orderBy('createdAt', 'desc'),
+        limit(30)
       );
-      
-      const s = await getDocs(q);
-      const summaries = s.docs
+
+      const snap = await getDocs(q);
+      const summaries = snap.docs
         .map(d => {
           const data = normalizeLobbyData({ ...d.data(), id: d.id } as Lobby);
           if (!isLobbyEligibleForPublicList(data)) return null;
@@ -994,16 +960,13 @@ export const lobbyService = {
         })
         .filter((l): l is LobbySummary => l !== null)
         .slice(0, PUBLIC_LOBBIES_PAGE_SIZE);
-      
-      onUpdate(summaries);
+
+      return summaries;
     } catch (err) {
-      console.error("[Lobby Index] Fallback query failed:", err);
-      onUpdate([]);
+      console.error("[Lobby Index] Falha na busca fria de lobbies:", err);
+      return [];
     }
   },
-
-  // A fun├º├úo checkAndCleanup() foi totalmente removida para economizar cota do Firebase.
-  // A limpeza agora ├® responsabilidade exclusiva do servidor (server.ts).
 
   async joinLobby(
     id: string, 
@@ -1037,7 +1000,6 @@ export const lobbyService = {
         updates.captain1 = guestId;
         updates.captain1Active = true;
         
-        // Use nickname for 1v1 if no custom team name provided
         const is1v1 = data.config.teamSize === 1;
         const defaultNames = ['Team A (Host)', 'Time A (Host)', 'Team A', 'Time A', 'Host', 'Time A (Host)'];
         updates.captain1Name = playerNames[100] || nickname;
@@ -1056,7 +1018,6 @@ export const lobbyService = {
           });
         }
         
-        // Store roster for easier access
         const teamSlots = isMCL ? [1, 4, 5] : [1, 5, 4];
         updates.teamAPlayers = Object.entries(playerNames)
           .filter(([id]) => teamSlots.includes(Number(id)))
@@ -1069,7 +1030,6 @@ export const lobbyService = {
         updates.captain2 = guestId;
         updates.captain2Active = true;
         
-        // Use nickname for 1v1 if no custom team name provided
         const is1v1 = data.config.teamSize === 1;
         const defaultNames = ['Team B (Guest)', 'Time B (Guest)', 'Team B', 'Time B', 'Guest', 'Time B (Convidado)', 'Convidado'];
         updates.captain2Name = playerNames[200] || nickname;
@@ -1088,7 +1048,6 @@ export const lobbyService = {
           });
         }
 
-        // Store roster for easier access
         const teamSlots = isMCL ? [2, 3, 6] : [2, 6, 3];
         updates.teamBPlayers = Object.entries(playerNames)
           .filter(([id]) => teamSlots.includes(Number(id)))
@@ -1112,6 +1071,7 @@ export const lobbyService = {
     }
   },
 
+  // 🚨 ATUALIZADO: Salva o preset e limpa o cache local
   async savePreset(name: string, config: LobbyConfig): Promise<string> {
     if (IS_DEV) return "mock-preset-id";
     try {
@@ -1123,6 +1083,11 @@ export const lobbyService = {
         createdAt: now()
       };
       await setDoc(doc(db, 'presets', id), cleanData(preset));
+      
+      // MUTAÇÃO DE CACHE: Força a próxima leitura a buscar do banco
+      cachedPresets = null;
+      presetsPromise = null;
+      
       return id;
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'presets');
@@ -1142,17 +1107,14 @@ export const lobbyService = {
       const isReadyWaitPhase = isGame1Ready || data.phase === 'ready_picker';
       
       if (isReadyWaitPhase) {
-        // Solo Dev Mode: auto-ready both sides
         updates.readyA = isReady;
         updates.readyB = isReady;
         
-        // Ensure we have a captain 2 for solo testing
         if (!data.captain2) {
             updates.captain2 = 'dev-bot-b';
             updates.captain2Name = 'Bot B';
         }
 
-        // Initialize players for MCL/Team presets in Solo Mode if missing
         if (!data.teamAPlayers || data.teamAPlayers.length === 0) {
           if (data.config.preset === 'MCL' || data.config.teamSize === 3) {
             updates.teamAPlayers = [
@@ -1214,11 +1176,9 @@ export const lobbyService = {
           
           let preSelectedMap = data.seriesMaps?.[data.currentGame - 1];
 
-          // Ensure map is set if it's pre-determined for this game
           if (preSelectedMap && preSelectedMap !== "") {
             updates.selectedMap = preSelectedMap;
             
-            // If the first turn is a map pick, and we already have a map, skip that turn
             if (data.turnOrder?.[0]?.target === 'MAP' && data.turnOrder?.[0]?.action === 'PICK') {
               startingTurn = 1;
             }
@@ -1284,7 +1244,6 @@ export const lobbyService = {
             }
           }
         } else if (data.phase === 'ready') {
-          // Handle readiness for Game 2+
           if (team === 'A') {
             updates.readyA_nextGame = isReady;
             if (data.captain1 === data.captain2) updates.readyB_nextGame = isReady;
@@ -1306,7 +1265,6 @@ export const lobbyService = {
                 ? (currentTurn.action === 'BAN' ? 'map_ban' : 'map_pick') 
                 : (currentTurn.action === 'BAN' ? 'god_ban' : 'god_pick');
             }
-            // Clear next game ready for the game after this one
             updates.readyA_nextGame = false;
             updates.readyB_nextGame = false;
           }
@@ -1520,11 +1478,25 @@ export const lobbyService = {
     }
   },
 
-  subscribeToPresets(onUpdate: (presets: any[]) => void): Unsubscribe {
-    const q = query(collection(db, 'presets'), orderBy('createdAt', 'desc'), limit(20));
-    return onSnapshot(q, (snap) => onUpdate(snap.docs.map(d => d.data())), (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'presets');
-    });
+  // 🚨 NOVA FUNÇÃO FRIA DE PRESETS (Substituindo o antigo subscribe)
+  async getPresetsOnce(): Promise<any[]> {
+    if (cachedPresets) return cachedPresets;
+
+    if (!presetsPromise) {
+      const q = query(collection(db, 'presets'), orderBy('createdAt', 'desc'), limit(20));
+      presetsPromise = getDocs(q)
+        .then(snap => {
+          const data = snap.docs.map(d => d.data());
+          cachedPresets = data;
+          return data;
+        })
+        .catch(err => {
+          handleFirestoreError(err, OperationType.LIST, 'presets');
+          return [];
+        });
+    }
+
+    return presetsPromise;
   },
 
   async sendChatMessage(lobbyId: string, message: Omit<ChatMessage, 'id' | 'timestamp'>): Promise<void> {

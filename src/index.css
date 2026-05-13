@@ -29,12 +29,7 @@
     @apply bg-slate-950 text-slate-100 antialiased min-h-screen relative;
   }
 
-  body::before {
-    content: '';
-    @apply fixed inset-0 -z-20 bg-cover bg-center bg-no-repeat opacity-50;
-    background-image: url('https://static.wikia.nocookie.net/ageofempires/images/2/2f/AoMR_IP_HS_triptych.jpeg/revision/latest');
-    filter: brightness(1.1) contrast(1.1) saturate(1.1);
-  }
+
 
   body::after {
     content: '';

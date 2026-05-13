@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { motion } from 'motion/react';
-import { Sword, Loader2, AlertTriangle, Github, MessageSquare, Scroll, User, X, Key, Shield } from 'lucide-react';
+import { Sword, Loader2, AlertTriangle, Github, MessageSquare, Scroll, User, X, Key, Shield, Heart } from 'lucide-react';
 import { useLobby } from './hooks/useLobby';
 import { useDraft } from './hooks/useDraft';
 import { useDraftConfig } from './hooks/useDraftConfig';
@@ -433,6 +433,38 @@ function AppContent() {
         <StreamerHUD lobbyId={lobbyIdFromPath} />
       ) : (
         <>
+          {/* Top Left Donation Widget */}
+          <div className="fixed top-4 left-4 z-[100] hidden lg:flex items-center gap-2">
+            <div className="bg-slate-900/80 backdrop-blur-md border border-slate-800 p-1.5 rounded-xl flex items-center gap-3 group hover:border-amber-500/30 transition-all duration-300">
+              <div className="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                <Heart className="w-3.5 h-3.5 text-amber-500 fill-amber-500/20" />
+              </div>
+              <div className="flex flex-col pr-1">
+                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none mb-0.5">Support</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText("41345391889");
+                      alert("PIX Key copied!");
+                    }}
+                    className="text-[10px] font-black text-white hover:text-amber-500 transition-colors uppercase tracking-tight"
+                  >
+                    PIX
+                  </button>
+                  <div className="w-1 h-1 rounded-full bg-slate-700" />
+                  <a
+                    href="https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=joaocarfan@hotmail.com&currency_code=USD"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] font-black text-white hover:text-amber-500 transition-colors uppercase tracking-tight"
+                  >
+                    PayPal
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Global Language Toggle - Show when not in a lobby or when auth is required */}
           {(!lobbyId || (authError === 'anonymous_disabled' && !guestId)) && (
             <div className="fixed top-4 right-4 z-[100] flex items-center gap-2">
@@ -562,15 +594,18 @@ function AppContent() {
               <div className="mythic-glow top-[-10%] left-[-10%] w-[50%] h-[50%]" />
               <div className="mythic-glow bottom-[-10%] right-[-10%] w-[50%] h-[50%] opacity-10" />
 
-              {/* Hero Background Image */}
-              <div className="absolute top-0 left-0 right-0 h-[800px] opacity-40 pointer-events-none z-0">
-                <img
-                  src="https://static.wikia.nocookie.net/ageofempires/images/2/2f/AoMR_IP_HS_triptych.jpeg/revision/latest"
-                  alt=""
-                  className="w-full h-full object-cover object-top filter brightness-125 contrast-110 saturate-125"
-                  referrerPolicy="no-referrer"
-                  loading="lazy"
-                />
+              {/* Faded Background Video - Limited to Top Section */}
+              <div className="absolute top-0 left-0 right-0 h-[750px] z-0 overflow-hidden pointer-events-none">
+                <video
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="w-full h-full object-cover opacity-25 filter brightness-110 saturate-110"
+                >
+                  <source src="/mainmenubackground.mp4" type="video/mp4" />
+                </video>
+                {/* Bottom gradient mask for smooth transition */}
                 <div className="absolute inset-0 bg-gradient-to-b from-transparent via-slate-950/20 to-slate-950" />
               </div>
 
@@ -633,11 +668,11 @@ function AppContent() {
                 </p>
               </div>
 
-              <div className="max-w-6xl mx-auto px-6 py-12 relative z-10">
+              <div className="max-w-6xl mx-auto px-6 pt-2 pb-12 relative z-10">
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="text-center mb-24 relative"
+                  className="text-center mb-12 relative"
                 >
                   {/* Decorative Crest */}
                   <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] -z-10 opacity-5 pointer-events-none">
@@ -669,53 +704,6 @@ function AppContent() {
                     "{t.heroSubtitle}"
                   </p>
 
-                  {/* Pantheon GIFs Section */}
-                  <div className="mt-16 flex flex-col items-center gap-8 max-w-6xl mx-auto px-4">
-                    {/* Featured GIF (Atlantean - Last one) */}
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: 0.5 }}
-                      className="relative rounded-2xl overflow-hidden border-2 border-amber-500/30 group hover:border-amber-500/60 transition-all shadow-[0_0_50px_-12px_rgba(245,158,11,0.3)]"
-                    >
-                      <img
-                        src="https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExdjJrdzE4a3htbHZkbThxMmxsM2pwcGFnOXpycWdmcjNtcWVlbzRuMCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/el0mymYI09FZhdWNT8/giphy.gif"
-                        alt="Atlantean Pantheon"
-                        className="w-full h-auto max-w-[600px] opacity-90 group-hover:opacity-100 transition-all duration-700"
-                        referrerPolicy="no-referrer"
-                        loading="lazy"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/40 via-transparent to-transparent pointer-events-none" />
-                    </motion.div>
-
-                    {/* Secondary GIFs Row */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
-                      {[
-                        'https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExYnpueHVnZ3J0eGhsaWVzc2NjeXpjYmhiZDhxeDA0bXVxNzd0aXdubiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/F8SiwH88zI0xpqQX9n/giphy.gif',
-                        'https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExOGtmNDNmeTYxNnZmZ3NtYWFhc2lxcHE1MW1kNDk0anA2ajg4bmNjaCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Ja8kTzj7g8MMK1g0ex/giphy.gif',
-                        'https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExYXNpMGRtOXM5NmZlOXdkbmE1YjRvOWxwM3l0MHdjNWZ5dnhxbm55MiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Kclw9Lg7mHYVzf6ipM/giphy.gif',
-                      ].map((url, i) => (
-                        <motion.div
-                          key={url}
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.7 + i * 0.1 }}
-                          className="relative rounded-xl overflow-hidden border border-amber-500/20 group hover:border-amber-500/40 transition-all shadow-xl"
-                        >
-                          {url && (
-                            <img
-                              src={url}
-                              alt="Mythic Pantheon"
-                              className="w-full h-auto opacity-80 group-hover:opacity-100 transition-all duration-500"
-                              referrerPolicy="no-referrer"
-                              loading="lazy"
-                            />
-                          )}
-                          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/30 via-transparent to-transparent pointer-events-none" />
-                        </motion.div>
-                      ))}
-                    </div>
-                  </div>
 
                   <div className="mt-10 flex items-center justify-center gap-4">
                     <div className="h-px w-12 bg-gradient-to-r from-transparent to-amber-500/50" />

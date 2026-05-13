@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ForjaViewProps, ForjaTeam, ForjaPlayer } from '../types';
 import { useForjaTeams } from '../hooks/useForjaTeams';
 import { useForjaPlayers } from '../hooks/useForjaPlayers';
@@ -20,6 +20,10 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
   const [selectedTeamB, setSelectedTeamB] = useState('');
   const [matchStage, setMatchStage] = useState<'GROUP' | 'PLAYOFFS_BO3' | 'PLAYOFFS_BO5'>('GROUP');
   const [matchGroup, setMatchGroup] = useState<string>('A');
+  
+  // 🚨 NOVOS ESTADOS PARA NOMENCLATURA INTELIGENTE
+  const [groupRound, setGroupRound] = useState<string>('1');
+  const [playoffRound, setPlayoffRound] = useState<string>('Quartas');
 
   // Gestão de Grupos
   const [isManagingGroups, setIsManagingGroups] = useState(false);
@@ -43,6 +47,81 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
     fetchMatches();
   }, []);
 
+  const calculateStandings = (groupId: string) => {
+    const groupTeams = teams.filter(t => t.groupId === groupId);
+    const groupLobbies = lobbies.filter(l => l.config.tournamentStage === 'GROUP' && l.config.forjaGroupId === groupId && l.status === 'completed');
+
+    const standings = groupTeams.map(team => {
+      let gamesWon = 0;
+      let gamesLost = 0;
+      let matchesPlayed = 0;
+
+      groupLobbies.forEach(lobby => {
+        if (lobby.config.forjaTeamA === team.id) {
+          gamesWon += (lobby.teamAScore || 0);
+          gamesLost += (lobby.teamBScore || 0);
+          matchesPlayed++;
+        } else if (lobby.config.forjaTeamB === team.id) {
+          gamesWon += (lobby.teamBScore || 0);
+          gamesLost += (lobby.teamAScore || 0);
+          matchesPlayed++;
+        }
+      });
+
+      return {
+        ...team,
+        gamesWon,
+        gamesLost,
+        matchesPlayed,
+        points: gamesWon
+      };
+    });
+
+    return standings.sort((a, b) => b.points - a.points || (b.gamesWon - b.gamesLost) - (a.gamesWon - a.gamesLost));
+  };
+
+  // ==========================================
+  // LÓGICA DE UX: FILTROS E AUTO-SWAP (JUIZ)
+  // ==========================================
+
+  useEffect(() => {
+    setSelectedTeamA('');
+    setSelectedTeamB('');
+  }, [matchGroup, matchStage]);
+
+  const availableTeamsForA = useMemo(() => {
+    if (matchStage === 'GROUP') {
+      return teams.filter(t => t.groupId === matchGroup);
+    }
+    return teams;
+  }, [teams, matchGroup, matchStage]);
+
+  const availableTeamsForB = useMemo(() => {
+    return availableTeamsForA.filter(t => t.id !== selectedTeamA);
+  }, [availableTeamsForA, selectedTeamA]);
+
+  useEffect(() => {
+    if (selectedTeamA && selectedTeamB && matchStage === 'GROUP') {
+      const standings = calculateStandings(matchGroup);
+      const teamAData = standings.find(t => t.id === selectedTeamA);
+      const teamBData = standings.find(t => t.id === selectedTeamB);
+
+      if (teamAData && teamBData) {
+        const teamBIsBetter = 
+          teamBData.points > teamAData.points || 
+          (teamBData.points === teamAData.points && (teamBData.gamesWon - teamBData.gamesLost) > (teamAData.gamesWon - teamAData.gamesLost));
+
+        if (teamBIsBetter) {
+          setSelectedTeamA(selectedTeamB);
+          setSelectedTeamB(selectedTeamA);
+        }
+      }
+    }
+  }, [selectedTeamA, selectedTeamB, matchGroup, matchStage, lobbies, teams]);
+
+  // ==========================================
+  // CRIAÇÃO DO LOBBY COM NOME DINÂMICO
+  // ==========================================
   const handleCreateMatch = async () => {
     if (!selectedTeamA || !selectedTeamB || selectedTeamA === selectedTeamB) {
       alert('Selecione dois times diferentes.');
@@ -52,11 +131,18 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
     const teamA = teams.find(t => t.id === selectedTeamA);
     const teamB = teams.find(t => t.id === selectedTeamB);
 
-    const stageLabel = matchStage === 'GROUP' ? 'Fase de Grupos (3 Games)' : (matchStage === 'PLAYOFFS_BO3' ? 'Playoffs (BO3)' : 'Playoffs (BO5)');
-    const matchName = `FdH ${stageLabel} - ${teamA?.team_name} x ${teamB?.team_name}`;
+    // 🚨 Geração do Nome Bonito 
+    let matchName = '';
+    if (matchStage === 'GROUP') {
+      // Ex: GrC - R1 - Time Host x Time Guest
+      matchName = `Gr${matchGroup} - R${groupRound} - ${teamA?.team_name} x ${teamB?.team_name}`;
+    } else {
+      // Ex: Quartas - Time Host x Time Guest
+      matchName = `${playoffRound} - ${teamA?.team_name} x ${teamB?.team_name}`;
+    }
 
     const config: LobbyConfig = {
-      name: matchName,
+      name: matchName, // Injetando o nome gerado aqui
       preset: 'FORJA',
       tournamentStage: matchStage,
       forjaTeamA: teamA?.id,
@@ -66,7 +152,7 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
       allowedMaps: FORJA_MAP_POOL,
       allowedPantheons: MAJOR_GODS.map(g => g.id),
       teamSize: 3,
-      customGameCount: 3,
+      customGameCount: matchStage === 'GROUP' ? 3 : (matchStage === 'PLAYOFFS_BO5' ? 5 : 3),
       mapBanCount: 0,
       banCount: 0,
       acePick: false,
@@ -104,45 +190,12 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
       alert(`Partida criada com sucesso! ID: ${docRef.id}`);
       setSelectedTeamA('');
       setSelectedTeamB('');
-      // Refresh
+      
       const snap = await getDocs(query(collection(db, 'lobbies'), where('config.preset', '==', 'FORJA'), orderBy('createdAt', 'desc')));
       setLobbies(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (err: any) {
       alert(`Erro: ${err.message}`);
     }
-  };
-
-  const calculateStandings = (groupId: string) => {
-    const groupTeams = teams.filter(t => t.groupId === groupId);
-    const groupLobbies = lobbies.filter(l => l.config.tournamentStage === 'GROUP' && l.config.forjaGroupId === groupId && l.status === 'completed');
-
-    const standings = groupTeams.map(team => {
-      let gamesWon = 0;
-      let gamesLost = 0;
-      let matchesPlayed = 0;
-
-      groupLobbies.forEach(lobby => {
-        if (lobby.config.forjaTeamA === team.id) {
-          gamesWon += (lobby.teamAScore || 0);
-          gamesLost += (lobby.teamBScore || 0);
-          matchesPlayed++;
-        } else if (lobby.config.forjaTeamB === team.id) {
-          gamesWon += (lobby.teamBScore || 0);
-          gamesLost += (lobby.teamAScore || 0);
-          matchesPlayed++;
-        }
-      });
-
-      return {
-        ...team,
-        gamesWon,
-        gamesLost,
-        matchesPlayed,
-        points: gamesWon // Na Forja de Grupos, cada game vencido vale 1 ponto
-      };
-    });
-
-    return standings.sort((a, b) => b.points - a.points || (b.gamesWon - b.gamesLost) - (a.gamesWon - a.gamesLost));
   };
 
   const handleUpdateTeamGroup = async (teamId: string, groupId: string) => {
@@ -173,7 +226,7 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
       {isAdmin && isManagingGroups && (
         <div style={{ background: 'rgba(30,41,59,0.5)', padding: '1.5rem', borderRadius: '1rem', border: '1px solid #334155', marginBottom: '2rem' }}>
           <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#facc15', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-             Distribuição de Times nos Grupos
+              Distribuição de Times nos Grupos
           </h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '1rem' }}>
             {teams.sort((a,b) => a.team_name.localeCompare(b.team_name)).map(team => (
@@ -201,36 +254,68 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
           <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#f8fafc', marginBottom: '1rem' }}>⚙️ Criar Lobby Oficial de Partida</h3>
           
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+            {/* LINHA 1: Fase e Rodada/Etapa */}
             <div>
-              <label className="forja-reg-label">Time A (Host)</label>
-              <select className="forja-reg-input" value={selectedTeamA} onChange={e => setSelectedTeamA(e.target.value)}>
-                <option value="">Selecione...</option>
-                {teams.map(t => <option key={t.id} value={t.id}>{t.team_name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="forja-reg-label">Time B (Guest)</label>
-              <select className="forja-reg-input" value={selectedTeamB} onChange={e => setSelectedTeamB(e.target.value)}>
-                <option value="">Selecione...</option>
-                {teams.map(t => <option key={t.id} value={t.id}>{t.team_name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="forja-reg-label">Fase</label>
+              <label className="forja-reg-label">Fase do Torneio</label>
               <select className="forja-reg-input" value={matchStage} onChange={e => setMatchStage(e.target.value as any)}>
                 <option value="GROUP">Fase de Grupos (3 Games)</option>
                 <option value="PLAYOFFS_BO3">Playoffs (Bo3)</option>
                 <option value="PLAYOFFS_BO5">Playoffs (Bo5)</option>
               </select>
             </div>
-            {matchStage === 'GROUP' && (
-              <div>
-                <label className="forja-reg-label">Grupo</label>
-                <select className="forja-reg-input" value={matchGroup} onChange={e => setMatchGroup(e.target.value)}>
-                  {['A', 'B', 'C', 'D'].map(g => <option key={g} value={g}>Grupo {g}</option>)}
-                </select>
-              </div>
+            
+            {matchStage === 'GROUP' ? (
+              <>
+                <div>
+                  <label className="forja-reg-label">Grupo</label>
+                  <select className="forja-reg-input" value={matchGroup} onChange={e => setMatchGroup(e.target.value)}>
+                    {['A', 'B', 'C', 'D'].map(g => <option key={g} value={g}>Grupo {g}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="forja-reg-label">Rodada</label>
+                  <select className="forja-reg-input" value={groupRound} onChange={e => setGroupRound(e.target.value)}>
+                    {['1', '2', '3', '4', '5', 'Desempate'].map(r => <option key={r} value={r}>Rodada {r}</option>)}
+                  </select>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <label className="forja-reg-label">Etapa do Playoff</label>
+                  <select className="forja-reg-input" value={playoffRound} onChange={e => setPlayoffRound(e.target.value)}>
+                    <option value="Oitavas">Oitavas de Final</option>
+                    <option value="Quartas">Quartas de Final</option>
+                    <option value="Semi">Semifinal</option>
+                    <option value="3º Lugar">Disputa de 3º Lugar</option>
+                    <option value="Final">Grande Final</option>
+                  </select>
+                </div>
+                <div></div> {/* Espaçador */}
+              </>
             )}
+
+            {/* LINHA 2: Times */}
+            <div>
+              <label className="forja-reg-label">Time A (Host)</label>
+              <select className="forja-reg-input" value={selectedTeamA} onChange={e => setSelectedTeamA(e.target.value)}>
+                <option value="">Selecione...</option>
+                {availableTeamsForA.map(t => <option key={t.id} value={t.id}>{t.team_name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="forja-reg-label">Time B (Guest)</label>
+              <select 
+                className="forja-reg-input" 
+                value={selectedTeamB} 
+                onChange={e => setSelectedTeamB(e.target.value)}
+                disabled={!selectedTeamA}
+              >
+                <option value="">{selectedTeamA ? 'Selecione...' : 'Escolha o Time A primeiro'}</option>
+                {availableTeamsForB.map(t => <option key={t.id} value={t.id}>{t.team_name}</option>)}
+              </select>
+            </div>
+            <div></div> {/* Espaçador */}
           </div>
 
           <button className="forja-btn forja-btn--primary" onClick={handleCreateMatch}>

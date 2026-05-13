@@ -190,7 +190,7 @@ export default function ForjaSchedule({ isAdmin }: ForjaViewProps) {
       {/* Footer */}
       <div className="forja-schedule-footer">
         <span>🕐 Todos os horários exibidos em BRT (UTC-3)</span>
-        <a href="https://discord.gg/seu-server" target="_blank" rel="noreferrer" style={{ color: '#60a5fa' }}>
+        <a href="https://discord.gg/ZnqDHtyXvc" target="_blank" rel="noreferrer" style={{ color: '#60a5fa' }}>
           Discord para notificações →
         </a>
       </div>

@@ -457,12 +457,12 @@ function AppContent() {
                   <Coffee className="w-4 h-4 text-amber-500 relative animate-bounce-subtle" />
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest leading-none mb-1">Buy me a coffee</span>
-                  <a 
-                    href="mailto:goldpentakill@gmail.com" 
+                  <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest leading-none mb-1">{t.donation.title}</span>
+                  <a
+                    href="mailto:goldpentakill@gmail.com"
                     className="text-[9px] text-slate-500 hover:text-amber-400 transition-colors flex items-center gap-1"
                   >
-                    goldpentakill@gmail.com
+                    {t.donation.email}
                   </a>
                 </div>
               </div>
@@ -506,7 +506,7 @@ function AppContent() {
                 animate={{ opacity: 1, y: 0 }}
                 className="absolute top-full left-0 mt-2 p-2 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] font-black whitespace-nowrap"
               >
-                PIX Key copied!
+                {t.donation.pixCopied}
               </motion.div>
             )}
           </div>

@@ -397,5 +397,10 @@
     "blood_river_crossing": "Blood River Crossing",
     "valley_of_the_sun_serpent": "Valley of the Sun Serpent",
     "temple_of_the_jaguar_moon": "Temple of the Jaguar Moon"
+  },
+  "donation": {
+    "title": "Buy me a coffee",
+    "email": "goldpentakill@gmail.com",
+    "pixCopied": "PIX Key copied!"
   }
 }

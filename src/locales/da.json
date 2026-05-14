@@ -371,5 +371,10 @@
     "blood_river_crossing": "Blodflodkrysset",
     "valley_of_the_sun_serpent": "Solsolens Dal",
     "temple_of_the_jaguar_moon": "Jaguarmånens Tempel"
+  },
+  "donation": {
+    "title": "Køb en kop kaffe til mig",
+    "email": "goldpentakill@gmail.com",
+    "pixCopied": "PIX-nøgle kopieret!"
   }
 }

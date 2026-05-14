@@ -399,5 +399,10 @@
     "blood_river_crossing": "Travessia do Rio de Sangue",
     "valley_of_the_sun_serpent": "Vale da Serpente Solar",
     "temple_of_the_jaguar_moon": "Templo da Lua Jaguar"
+  },
+  "donation": {
+    "title": "Me pague um café",
+    "email": "goldpentakill@gmail.com",
+    "pixCopied": "Chave PIX copiada!"
   }
 }

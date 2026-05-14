@@ -371,5 +371,10 @@
     "blood_river_crossing": "Blutfluss-Überquerung",
     "valley_of_the_sun_serpent": "Tal der Sonnenschlange",
     "temple_of_the_jaguar_moon": "Tempel des Jaguarmonds"
+  },
+  "donation": {
+    "title": "Kaufen Sie mir einen Kaffee",
+    "email": "goldpentakill@gmail.com",
+    "pixCopied": "PIX-Schlüssel kopiert!"
   }
 }

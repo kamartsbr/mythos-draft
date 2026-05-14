@@ -227,7 +227,7 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
       spectators: [],
       config,
       selectedMap: null,
-      seriesMaps: ['', '', ''],
+      seriesMaps: Array(config.customGameCount ?? 3).fill(''),
       mapBans: [],
       turn: 0,
       turnOrder: [],

@@ -333,7 +333,7 @@ export function PickBanPanel({
         whileTap={!isDisabled ? { scale: 0.95 } : {}}
         onClick={() => {
           if (isDisabled) return;
-          if (lobby.config.preset === 'MCL' && lobby.phase === 'god_pick') {
+          if ((lobby.config.preset === 'MCL' || lobby.config.preset === 'FORJA') && lobby.phase === 'god_pick') {
             setSelectedGodId(prev => prev === god.id ? null : god.id);
           } else {
             handleAction(god.id);
@@ -791,8 +791,8 @@ export function PickBanPanel({
         </div>
       </div>
 
-      {/* MCL Player Selection */}
-      {lobby.config.preset === 'MCL' && currentTurn?.target === 'GOD' && currentTurn?.action === 'PICK' && isMyTurn && (
+      {/* MCL / FORJA Player Selection */}
+      {(lobby.config.preset === 'MCL' || lobby.config.preset === 'FORJA') && currentTurn?.target === 'GOD' && currentTurn?.action === 'PICK' && isMyTurn && (
         <div className="mt-2 p-3 bg-slate-900 border border-slate-800 rounded-2xl">
           <h4 className="text-xs font-bold text-slate-300 mb-2 text-center uppercase tracking-widest">
             {selectedGodId ? t.selectPlayerForGod || "Select a player for this God" : t.selectGodFirst || "Select a God first"}

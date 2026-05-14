@@ -3,15 +3,16 @@ import { ForjaViewProps, ForjaTeam, ForjaPlayer } from '../types';
 import { useForjaTeams } from '../hooks/useForjaTeams';
 import { useForjaPlayers } from '../hooks/useForjaPlayers';
 import { db } from '../../../firebase';
-import { collection, query, where, getDocs, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
-import { LobbyConfig } from '../../../types';
+import { collection, query, where, onSnapshot, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
+import { LobbyConfig, Lobby } from '../../../types';
 import { MAJOR_GODS } from '../../../data/gods';
-import { FORJA_MAP_POOL } from '../../../constants';
-import { updateTeamGroup } from '../services/forjaService';
+import { FORJA_MAP_POOL, getMCLPicks } from '../../../constants';
+import { updateTeamGroup, deleteForjaLobby } from '../services/forjaService';
+import { lobbyService, generateId } from '../../../services/lobbyService';
 
 export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
-  const { teams } = useForjaTeams();
-  const { rankedPlayers } = useForjaPlayers();
+  const { teams } = useForjaTeams(true);
+  const { rankedPlayers } = useForjaPlayers(true);
   const [lobbies, setLobbies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -29,22 +30,24 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
   const [isManagingGroups, setIsManagingGroups] = useState(false);
 
   useEffect(() => {
-    const fetchMatches = async () => {
-      try {
-        const q = query(
-          collection(db, 'lobbies'),
-          where('config.preset', '==', 'FORJA'),
-          orderBy('createdAt', 'desc')
-        );
-        const snap = await getDocs(q);
-        setLobbies(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch (err) {
+    const q = query(
+      collection(db, 'lobbies'),
+      where('config.preset', '==', 'FORJA'),
+      orderBy('createdAt', 'desc')
+    );
+    const unsub = onSnapshot(q,
+      snap => {
+        const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        // Filtrar apenas partidas oficiais
+        setLobbies(docs.filter((d: any) => d.config?.isOfficialForjaMatch || d.config?.forjaTeamA));
+        setLoading(false);
+      },
+      err => {
         console.error('Erro ao buscar partidas Forja', err);
-      } finally {
         setLoading(false);
       }
-    };
-    fetchMatches();
+    );
+    return () => unsub();
   }, []);
 
   const calculateStandings = (groupId: string) => {
@@ -141,60 +144,107 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
       matchName = `${playoffRound} - ${teamA?.team_name} x ${teamB?.team_name}`;
     }
 
+    const isPlayoffs = matchStage !== 'GROUP';
+
     const config: LobbyConfig = {
-      name: matchName, // Injetando o nome gerado aqui
+      name: matchName,
       preset: 'FORJA',
+      isOfficialForjaMatch: true,
       tournamentStage: matchStage,
       forjaTeamA: teamA?.id,
       forjaTeamB: teamB?.id,
       forjaGroupId: matchStage === 'GROUP' ? matchGroup : undefined,
       seriesType: matchStage === 'GROUP' ? '3G' : (matchStage === 'PLAYOFFS_BO5' ? 'BO5' : 'BO3'),
-      allowedMaps: FORJA_MAP_POOL,
-      allowedPantheons: MAJOR_GODS.map(g => g.id),
       teamSize: 3,
       customGameCount: matchStage === 'GROUP' ? 3 : (matchStage === 'PLAYOFFS_BO5' ? 5 : 3),
-      mapBanCount: 0,
+      pickType: 'alternated',
+      isExclusive: true, // Official Forja is Exclusive
+      hasBans: false,
       banCount: 0,
+      mapBanCount: 0,
+      mapTurnOrder: [],
+      godTurnOrder: [],
+      allowedMaps: FORJA_MAP_POOL,
+      allowedPantheons: MAJOR_GODS.map(g => g.id),
+      firstMapRandom: false,
+      loserPicksNextMap: false,
       acePick: false,
       acePickHidden: false,
       isPrivate: false,
-      isExclusive: false,
-      pickType: 'alternated',
-      firstMapRandom: false,
-      loserPicksNextMap: false,
       timerDuration: 60,
-      mapTurnOrder: [],
-      godTurnOrder: [],
-      hasBans: false,
+      hasMap3RandomRoll: true,
+      hasPerMapBans: isPlayoffs,
+    };
+
+    const id = generateId();
+    const lobby: Lobby = {
+      id,
+      status: 'waiting',
+      phase: 'waiting',
+      captain1: null,
+      captain2: null,
+      captain1Name: '',
+      captain2Name: null,
+      teamAPlayers: [],
+      teamBPlayers: [],
+      readyA: false,
+      readyB: false,
+      readyA_report: false,
+      readyB_report: false,
+      readyA_nextGame: false,
+      readyB_nextGame: false,
+      rosterChangedA: false,
+      rosterChangedB: false,
+      lastSubs: [],
+      resetRequest: null,
+      spectators: [],
+      config,
+      selectedMap: null,
+      seriesMaps: ['', '', ''],
+      mapBans: [],
+      turn: 0,
+      turnOrder: [],
+      bans: [],
+      picks: getMCLPicks(1, null, null),
+      scoreA: 0,
+      scoreB: 0,
+      reportVoteA: null,
+      reportVoteB: null,
+      voteConflict: false,
+      voteConflictCount: 0,
+      currentGame: 1,
+      pickerVoteA: null,
+      pickerVoteB: null,
+      pickerPlayerA: null,
+      pickerPlayerB: null,
+      history: [],
+      replayLog: [],
+      lastWinner: null,
+      mapPool: [],
+      timerStart: serverTimestamp() as any,
+      createdAt: serverTimestamp() as any,
+      lastActivityAt: serverTimestamp() as any,
+      hiddenActions: [],
     };
 
     try {
-      const docRef = await addDoc(collection(db, 'lobbies'), {
-        config,
-        status: 'waiting',
-        hostId: null,
-        guestId: null,
-        hostConnected: false,
-        guestConnected: false,
-        spectators: [],
-        createdAt: serverTimestamp(),
-        currentGame: 1,
-        teamAScore: 0,
-        teamBScore: 0,
-        currentTurnIndex: 0,
-        seriesMaps: [],
-        selectedMap: null,
-        draftMapIndex: 0,
-      });
+      await lobbyService.createLobby(id, lobby);
 
-      alert(`Partida criada com sucesso! ID: ${docRef.id}`);
+      alert(`Partida criada com sucesso!`);
       setSelectedTeamA('');
       setSelectedTeamB('');
-      
-      const snap = await getDocs(query(collection(db, 'lobbies'), where('config.preset', '==', 'FORJA'), orderBy('createdAt', 'desc')));
-      setLobbies(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (err: any) {
       alert(`Erro: ${err.message}`);
+    }
+  };
+
+  const handleDeleteMatch = async (lobbyId: string) => {
+    if (!confirm('Tem certeza que deseja remover esta partida? Esta ação é irreversível.')) return;
+    try {
+      await deleteForjaLobby(lobbyId);
+      // onSnapshot listener will update the list automatically
+    } catch (err: any) {
+      alert(`Erro ao remover: ${err.message}`);
     }
   };
 
@@ -415,6 +465,16 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
                               Lobby
                             </a>
                           )}
+                          {isAdmin && (
+                            <button 
+                              onClick={() => handleDeleteMatch(lobby.id)}
+                              className="forja-btn forja-btn--ghost"
+                              style={{ padding: '0.4rem 0.6rem', fontSize: '0.75rem', color: '#f87171' }}
+                              title="Remover Partida"
+                            >
+                              🗑️
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -455,6 +515,16 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
                             Lobby
                           </a>
                         )}
+                          {isAdmin && (
+                            <button 
+                              onClick={() => handleDeleteMatch(lobby.id)}
+                              className="forja-btn forja-btn--ghost"
+                              style={{ padding: '0.5rem 0.75rem', color: '#f87171' }}
+                              title="Remover Partida"
+                            >
+                              🗑️
+                            </button>
+                          )}
                       </div>
                     </div>
                   ))}

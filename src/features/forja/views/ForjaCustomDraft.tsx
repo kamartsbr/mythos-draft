@@ -17,6 +17,8 @@ import { lobbyService, generateId } from '../../../services/lobbyService';
 import { serverTimestamp } from 'firebase/firestore';
 import { Lobby, LobbyConfig } from '../../../types';
 import { getMCLPicks } from '../../../constants';
+import { FORJA_MAP_POOL } from '../../../data/maps';
+import { MAJOR_GODS } from '../../../data/gods';
 import { auth } from '../../../firebase';
 import { signInAnonymously } from 'firebase/auth';
 
@@ -46,6 +48,7 @@ function buildForjaConfig(
     // ── Identidade ─────────────────────────────────────────────────────
     name: lobbyName.trim() || 'Forja — Partida Oficial',
     preset: 'FORJA',
+    isCustomDraft: true,
     tournamentStage: isPlayoffs ? 'PLAYOFFS' : 'GROUP',
 
     // ── Tamanho e Série ────────────────────────────────────────────────
@@ -67,8 +70,8 @@ function buildForjaConfig(
     mapBanCount: 0,
     mapTurnOrder: [],
     godTurnOrder: [],
-    allowedMaps: [],          // Usa a pool cacheada da Forja no roll do Mapa 3
-    allowedPantheons: ['Greek', 'Norse', 'Egyptian', 'Atlantean', 'Japanese', 'Chinese', 'Aztec'],
+    allowedMaps: FORJA_MAP_POOL,
+    allowedPantheons: MAJOR_GODS.map(g => g.id),
 
     // ── Regras de Série ────────────────────────────────────────────────
     firstMapRandom: false,
@@ -78,7 +81,7 @@ function buildForjaConfig(
 
     // ── Privacidade e Timer ────────────────────────────────────────────
     isPrivate: false,
-    timerDuration: 90,
+    timerDuration: 60,
 
     // ── Flags Exclusivas FORJA ─────────────────────────────────────────
     hasMap3RandomRoll: true,

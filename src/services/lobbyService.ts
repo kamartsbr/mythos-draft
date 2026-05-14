@@ -1172,7 +1172,15 @@ export const lobbyService = {
             updates.status = 'drafting';
             updates.turn = 0;
             updates.timerStart = Date.now() as any;
-            const currentTurn = data.turnOrder?.[0];
+            
+            let finalTurnOrder = data.turnOrder;
+            if ((!finalTurnOrder || finalTurnOrder.length === 0) && generateTurnOrder) {
+              const generated = generateTurnOrder(data.config, 1, null);
+              finalTurnOrder = [...generated.mapOrder, ...generated.godOrder];
+              updates.turnOrder = finalTurnOrder;
+            }
+
+            const currentTurn = finalTurnOrder?.[0];
             if (currentTurn) {
               updates.phase = currentTurn.target === 'MAP' 
                 ? (currentTurn.action === 'BAN' ? 'map_ban' : 'map_pick') 
@@ -1250,7 +1258,15 @@ export const lobbyService = {
               updates.status = 'drafting';
               updates.turn = 0;
               updates.timerStart = now();
-              const currentTurn = data.turnOrder[0];
+              
+              let finalTurnOrder = data.turnOrder;
+              if ((!finalTurnOrder || finalTurnOrder.length === 0) && generateTurnOrder) {
+                const generated = generateTurnOrder(data.config, 1, null);
+                finalTurnOrder = [...generated.mapOrder, ...generated.godOrder];
+                updates.turnOrder = finalTurnOrder;
+              }
+
+              const currentTurn = finalTurnOrder?.[0];
               if (currentTurn) {
                 updates.phase = currentTurn.target === 'MAP' 
                   ? (currentTurn.action === 'BAN' ? 'map_ban' : 'map_pick') 

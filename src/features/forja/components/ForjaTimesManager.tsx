@@ -205,8 +205,8 @@ function DroppableZone({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function ForjaTimesManager({ discordUser, isAdmin }: ForjaViewProps) {
-  const { rankedPlayers, loading: playersLoading } = useForjaPlayers();
-  const { teams, loading: teamsLoading }           = useForjaTeams();
+  const { rankedPlayers, loading: playersLoading } = useForjaPlayers(true);
+  const { teams, loading: teamsLoading }           = useForjaTeams(true);
 
   const [newTeamName, setNewTeamName] = useState('');
   const [creating, setCreating]       = useState(false);

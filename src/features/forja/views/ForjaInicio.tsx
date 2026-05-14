@@ -451,7 +451,7 @@ interface ForjaInicioProps extends ForjaViewProps {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: ForjaInicioProps) {
-  const { rankedPlayers, loading, error, isLive } = useForjaPlayers();
+  const { rankedPlayers, loading, error, isLive } = useForjaPlayers(true);
   const { settings, maxParticipants, tierASize, isRegistrationOpen, deadlineMs } = useForjaSettings();
   const [filter, setFilter]    = useState<'all' | 'A' | 'B' | 'C' | 'reserve'>('all');
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');

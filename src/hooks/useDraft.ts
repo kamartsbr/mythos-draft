@@ -255,8 +255,9 @@ export function useDraft(
     return { mapOrder, godOrder };
   }, []);
 
-  const handleAction = useCallback(async (actionIdArg: any, playerId?: number, playerName?: string, options?: { isRandom?: boolean }) => {
-    if (!lobby || isProcessing) return;
+  const handleAction = useCallback(async (actionIdArg: any, playerId?: number, playerName?: string, options?: { isRandom?: boolean; force?: boolean }) => {
+    if (!lobby) return;
+    if (isProcessing && !options?.force) return;
     
     if (typeof actionIdArg !== 'string') return;
     const actionId = actionIdArg;
@@ -443,7 +444,7 @@ export function useDraft(
                 );
                 if (available.length > 0) {
                   const randomId = available[Math.floor(Math.random() * available.length)];
-                  handleAction(randomId);
+                  handleAction(randomId, undefined, undefined, { force: true });
                 }
               }).catch(() => {
                 // Fallback: usa lista local de mapas
@@ -452,7 +453,7 @@ export function useDraft(
                   !seriesMaps.includes(m.id)
                 );
                 if (fallbackMaps.length > 0) {
-                  handleAction(fallbackMaps[Math.floor(Math.random() * fallbackMaps.length)].id);
+                  handleAction(fallbackMaps[Math.floor(Math.random() * fallbackMaps.length)].id, undefined, undefined, { force: true });
                 }
               });
             });
@@ -471,7 +472,7 @@ export function useDraft(
           );
           if (availableMaps.length > 0) {
             const randomMap = availableMaps[Math.floor(Math.random() * availableMaps.length)];
-            handleAction(randomMap.id);
+            handleAction(randomMap.id, undefined, undefined, { force: true });
           }
         }
       } else if (currentTurn.target === 'GOD') {
@@ -482,10 +483,10 @@ export function useDraft(
           );
           if (availableGods.length > 0) {
             const randomGod = availableGods[Math.floor(Math.random() * availableGods.length)];
-            handleAction(randomGod.id);
+            handleAction(randomGod.id, undefined, undefined, { force: true });
           }
         } else if (currentTurn.action === 'REVEAL') {
-          handleAction('REVEAL');
+          handleAction('REVEAL', undefined, undefined, { force: true });
         }
       }
     }, 2000);

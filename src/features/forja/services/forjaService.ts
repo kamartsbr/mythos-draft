@@ -477,6 +477,16 @@ export async function updateTeamGroup(teamId: string, groupId: string | null): P
   invalidateTeamsCache();
 }
 
+export async function updateTeamImageUrl(teamId: string, imageUrl: string | null): Promise<void> {
+  await updateDoc(doc(db, TEAMS_COL, teamId), { image_url: imageUrl });
+  invalidateTeamsCache();
+}
+
+export async function deleteForjaLobby(lobbyId: string): Promise<void> {
+  await deleteDoc(doc(db, 'lobbies', lobbyId));
+}
+
+
 // ─── Draft Session ────────────────────────────────────────────────────────────
 
 const draftDocRef = () => doc(db, DRAFT_COL, DRAFT_DOC);

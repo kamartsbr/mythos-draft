@@ -234,8 +234,8 @@ interface ForjaHomeProps extends ForjaViewProps {
 
 export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTabChange }: ForjaHomeProps) {
   const { settings }         = useForjaSettings();
-  const { teams }             = useForjaTeams();
-  const { rankedPlayers }     = useForjaPlayers();
+  const { teams }             = useForjaTeams(true);
+  const { rankedPlayers }     = useForjaPlayers(true);
   const { entries: schedule } = useForjaSchedule();
 
   const [prizeData,  setPrizeData]  = useState<any>(null);
@@ -256,7 +256,9 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
       if (cancelled) return;
       setPrizeData(prizes);
       // Upcoming: lobbies não concluídos primeiro, depois os mais recentes
-      const mapped: UpcomingMatch[] = (lobbiesRaw as any[]).map(l => ({
+      const officialLobbies = (lobbiesRaw as any[]).filter(l => l.config?.isOfficialForjaMatch || l.config?.forjaTeamA);
+      
+      const mapped: UpcomingMatch[] = officialLobbies.map(l => ({
         id:     l.id,
         name:   l.config?.name ?? 'Partida',
         status: l.status ?? 'waiting',

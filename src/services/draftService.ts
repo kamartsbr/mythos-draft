@@ -199,7 +199,8 @@ export const draftService = {
           if (updates.mapPool?.includes(id)) return false;
 
           if (turn.player === 'ADMIN') {
-            updates.seriesMaps![0] = id;
+            const targetIndex = freshLobby.currentGame ? freshLobby.currentGame - 1 : 0;
+            updates.seriesMaps![targetIndex] = id;
           } else {
             const emptySlotIndex = updates.seriesMaps!.indexOf("");
             if (emptySlotIndex !== -1) {

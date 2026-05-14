@@ -89,6 +89,7 @@ export interface ForjaTeam {
   members: string[];
   pick_order: number;
   groupId?: string; // ID do Grupo (A, B, C, D)
+  image_url?: string; // URL da imagem do time (bloco)
 }
 
 // ─── Schedule ─────────────────────────────────────────────────────────────────

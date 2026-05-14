@@ -283,9 +283,7 @@ export default function ForjaHub() {
           {activeTab === 'mapas'       && <ForjaMapas {...sharedProps} />}
           {activeTab === 'formato'     && <ForjaFormato {...sharedProps} />}
           {activeTab === 'schedule'    && <ForjaSchedule {...sharedProps} />}
-          {activeTab === 'times'       && (isAdmin
-            ? <ForjaTimesManager {...sharedProps} />
-            : <ForjaTimes {...sharedProps} />)}
+          {activeTab === 'times'       && <ForjaTimes {...sharedProps} />}
           {activeTab === 'tabela'      && <ForjaTabela {...sharedProps} />}
           {activeTab === 'draft-room'  && <ForjaDraftRoom {...sharedProps} />}
           {activeTab === 'custom-draft' && <ForjaCustomDraft {...sharedProps} />}

@@ -4,6 +4,36 @@ import { Lobby, LobbyConfig, LobbySummary } from '../types';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
+/**
+ * Manages lobby state, presence, authentication-derived identity, admin status, and lobby actions for the UI.
+ *
+ * Exposes reactive state and action helpers for joining, creating, leaving, and administrating a lobby, plus automatic presence updates, Discord webhook triggers, and public-lobbies fetching.
+ *
+ * @param initialNickname - Initial display name to use for the current guest
+ * @returns An object with current lobby state, identity, status flags, control actions, and utility setters:
+ * - `lobby` — current lobby data or `null`
+ * - `lobbyId` — active lobby identifier or `null`
+ * - `setLobbyId` — setter for `lobbyId`
+ * - `guestId` — guest identifier (from localStorage or auth) or `null`
+ * - `nickname` — current display name
+ * - `setNickname` — setter for `nickname`
+ * - `isCaptain1`, `isCaptain2` — booleans indicating captain slots
+ * - `isSpectator` — boolean indicating spectator role
+ * - `setIsSpectator` — setter for `isSpectator`
+ * - `isAdmin` — boolean admin flag
+ * - `authenticateAdmin(token)` — grants admin when `token` matches the admin token
+ * - `logoutAdmin()` — revokes admin status
+ * - `publicLobbies` — list of fetched public lobby summaries
+ * - `error`, `setError` — current error message and setter
+ * - `loading` — boolean operation-in-progress flag
+ * - `join(id, role, preferredPosition, playerNames, newNickname?)` — join a lobby
+ * - `soloJoin(id, newNickname?)` — join a lobby as a solo player
+ * - `create(id, newLobby)` — create a lobby
+ * - `leave()` — leave the current lobby locally (clears URL param)
+ * - `leaveSlot()` — leave the occupied captain slot and locally leave
+ * - `forceReset()`, `resetCurrentGame()`, `forceFinish()`, `forceUnpause()`, `forceStartDraft()` — admin management actions
+ * - `isAuthReady` — whether initial auth state has been resolved
+ */
 export function useLobby(initialNickname: string) {
   const [guestId, setGuestId] = useState<string | null>(() => {
     try {

@@ -3,6 +3,20 @@ import { Lobby } from '../types';
 import { MAPS, MAJOR_GODS } from '../constants';
 import { getServerTime } from '../lib/serverTime';
 
+/**
+ * Manage lobby countdown state and automatically trigger draft actions when the timer elapses.
+ *
+ * Tracks remaining seconds for the lobby draft timer, keeps the counter accurate across background tabs,
+ * and dispatches automatic random picks/bans/reveals (including god-picker support) when the lobby timer ends
+ * or when a delayed opponent window opens.
+ *
+ * @param lobby - The current lobby object or `null`. When `null` or when the lobby is not in an active drafting state, no timer runs.
+ * @param isCaptain1 - True when the caller represents captain A.
+ * @param isCaptain2 - True when the caller represents captain B.
+ * @param handleAction - Required callback to perform draft actions (e.g. picks, bans, reveals). Called with an action id and optional player info; the `options.isRandom` flag is set when the action was selected automatically.
+ * @param handlePickerAction - Optional callback used only during the `god_picker` phase to submit a god pick; receives the same arguments as `handleAction`.
+ * @returns An object containing `timeLeft` — the countdown in seconds remaining, or `null` when no active timer is available.
+ */
 export function useTimer(
   lobby: Lobby | null, 
   isCaptain1: boolean, 

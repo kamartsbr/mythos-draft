@@ -472,16 +472,33 @@ export async function updateTeamName(teamId: string, name?: string, captainId?: 
   invalidateTeamsCache();
 }
 
+/**
+ * Set or clear the group assignment for a team and refresh the teams cache.
+ *
+ * @param teamId - The ID of the team to update
+ * @param groupId - The group identifier to assign to the team; pass `null` to remove the team from any group
+ */
 export async function updateTeamGroup(teamId: string, groupId: string | null): Promise<void> {
   await updateDoc(doc(db, TEAMS_COL, teamId), { groupId });
   invalidateTeamsCache();
 }
 
+/**
+ * Set or clear a team's image URL and invalidate the local teams cache.
+ *
+ * @param teamId - Firestore document ID of the team to update
+ * @param imageUrl - New image URL to store, or `null` to remove the image
+ */
 export async function updateTeamImageUrl(teamId: string, imageUrl: string | null): Promise<void> {
   await updateDoc(doc(db, TEAMS_COL, teamId), { image_url: imageUrl });
   invalidateTeamsCache();
 }
 
+/**
+ * Deletes a lobby document from the `lobbies` collection.
+ *
+ * @param lobbyId - The Firestore document ID of the lobby to delete
+ */
 export async function deleteForjaLobby(lobbyId: string): Promise<void> {
   await deleteDoc(doc(db, 'lobbies', lobbyId));
 }

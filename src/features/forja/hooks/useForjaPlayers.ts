@@ -143,6 +143,18 @@ interface UseForjaPlayersResult {
   isLive: boolean;
 }
 
+/**
+ * Provide Forja players data and client-side rankings, using either a one-time fetch or a live subscription.
+ *
+ * @param wantsLive - When `true`, subscribe to live player updates; when `false`, perform a single fetch (or use development mock data if configured).
+ * @returns An object containing:
+ *  - `rankedPlayers` — players ranked according to current client settings,
+ *  - `bannedPlayers` — players whose `status` is `"banned"`,
+ *  - `rawPlayers` — the unmodified list of players from the source,
+ *  - `loading` — `true` while data is being fetched or subscription is initializing,
+ *  - `error` — an error message string when a fetch/subscription fails, or `null` otherwise,
+ *  - `isLive` — `true` when data is coming from an active live subscription, `false` for one-time fetch or mock data.
+ */
 export function useForjaPlayers(wantsLive = false): UseForjaPlayersResult {
   const [rawPlayers, setRawPlayers] = useState<ForjaPlayer[]>([]);
   const [loading, setLoading]       = useState(true);

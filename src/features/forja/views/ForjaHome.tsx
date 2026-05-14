@@ -54,7 +54,16 @@ const PLAYOFF_FORMAT_LABEL: Record<string, string> = {
   double_elim: 'Eliminação Dupla',
 };
 
-// ─── TeamMemberPopover ────────────────────────────────────────────────────────
+/**
+ * Renders a team member row with avatar, nickname, and an optional captain badge.
+ *
+ * If the member's avatar fails to load, uses a Discord CDN fallback avatar chosen from the
+ * default embed avatars based on the last digit of `member.discord_id`.
+ *
+ * @param member - The ForjaPlayer to display (avatar, nick, and discord_id used for fallback)
+ * @param isCaptain - Whether to display the "CAP" badge for this member
+ * @returns The rendered member row element
+ */
 
 function MemberRow({ member, isCaptain }: { member: ForjaPlayer; isCaptain: boolean }) {
   const [imgErr, setImgErr] = useState(false);
@@ -77,6 +86,14 @@ function MemberRow({ member, isCaptain }: { member: ForjaPlayer; isCaptain: bool
   );
 }
 
+/**
+ * Render a fixed-position popover that displays a team's name and its member rows at a given screen coordinate.
+ *
+ * @param team - The standing row for the team, containing `team_name`, `members` (array of discord IDs) and `captain_id`
+ * @param players - Array of `ForjaPlayer` objects used to resolve member details from `team.members`
+ * @param anchor - Screen coordinates `{ x, y }` where the popover's top-left corner will be placed
+ * @returns The popover JSX element positioned at `anchor` containing the team's title and member entries, or `null` if the team has no resolvable members
+ */
 function TeamMemberPopover({
   team,
   players,
@@ -119,7 +136,14 @@ function TeamMemberPopover({
   );
 }
 
-// ─── CompactStandings ─────────────────────────────────────────────────────────
+/**
+ * Renders a compact standings card for a group with hoverable rows that show a delayed member popover.
+ *
+ * @param group - Group label (e.g., "A", "B") displayed in the card header
+ * @param standings - Array of standing rows to render in rank order; each row supplies team id, name, matches/games stats and points
+ * @param players - List of players used to populate the member popover for each team
+ * @returns A styled compact standings table for the given group that reveals a team member popover when hovering a row
+ */
 
 function CompactStandings({
   group,
@@ -197,7 +221,14 @@ function CompactStandings({
   );
 }
 
-// ─── PrizeCard ────────────────────────────────────────────────────────────────
+/**
+ * Renders a prize summary card showing the total prize pool and the top three placement distributions.
+ *
+ * @param total - Total prize amount (numeric value in the provided currency)
+ * @param currency - Currency code; when `'BRL'` values are prefixed with `R$`, otherwise with `$`
+ * @param distribution - Array of placement entries where `percent` is the percentage share (0–100) for that place; only the first three entries are displayed
+ * @returns The JSX element representing the prize card with formatted currency values
+ */
 
 function PrizeCard({ total, currency, distribution }: {
   total: number;
@@ -243,6 +274,15 @@ interface ForjaHomeProps extends ForjaViewProps {
   onTabChange?: (tab: string) => void;
 }
 
+/**
+ * Renders the Forja tournament home dashboard with registration status, current phase, participants, prize display, upcoming matches, and compact group standings.
+ *
+ * @param discordUser - Authenticated Discord user profile shown in the registration status area; omitted when not provided.
+ * @param isAdmin - When true, displays an admin hint banner with configuration guidance.
+ * @param onRegisterClick - Callback invoked when the user clicks the register button.
+ * @param onTabChange - Optional callback used to navigate to other tabs (for example 'inscritos' or 'tabela').
+ * @returns The JSX element for the Forja home/dashboard view.
+ */
 export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTabChange }: ForjaHomeProps) {
   const { settings }         = useForjaSettings();
   const { teams }             = useForjaTeams(true);

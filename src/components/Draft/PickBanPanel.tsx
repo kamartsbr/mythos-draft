@@ -32,6 +32,15 @@ interface PickBanPanelProps {
   myTeam: 'A' | 'B' | 'BOTH' | null;
 }
 
+/**
+ * Render the pick/ban and map-draft panel for a lobby, managing local UI state, interactions, and export/confirmation flows.
+ *
+ * @param lobby - Lobby state and configuration that drives phase, turn order, picks/bans, maps, history, and scores
+ * @param handleAction - Callback invoked when the user performs a draft action (pick/ban/map selection); arguments depend on phase
+ * @param t - Translation strings and localized labels used by the component
+ * @param lang - Current language code (used for language-specific messages)
+ * @returns The rendered pick/ban panel UI as a React element
+ */
 export function PickBanPanel({ 
   lobby, isCaptain1, isCaptain2, handleAction, t, lang, reportScore, 
   viewGameIndex, setViewGameIndex, isAdmin, forceFinish, resetCurrentGame, requestReset, timeLeft,

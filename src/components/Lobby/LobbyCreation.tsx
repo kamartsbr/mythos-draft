@@ -25,6 +25,30 @@ interface LobbyCreationProps {
   generateStandardTurnOrder: (cfg: LobbyConfig) => any;
 }
 
+/**
+ * Render the lobby creation UI and manage local state for presets, maps, pantheons, and other matchmaking options.
+ *
+ * Renders controls to pick presets (including community presets), configure series/map/pantheon settings (with MCL-specific restrictions),
+ * toggle admin options, and create the final lobby. Handles fetching and saving community presets, applying custom presets,
+ * and mutating the provided `config` via `setConfig`.
+ *
+ * @param t - Localization strings used throughout the UI.
+ * @param lang - Current language code used for sorting and localized labels.
+ * @param lobbyName - Current lobby name value.
+ * @param setLobbyName - Setter for the lobby name.
+ * @param config - Current lobby configuration object.
+ * @param setConfig - Setter that updates the lobby configuration.
+ * @param isLocked - Function that returns whether a specific config field is locked by the active preset.
+ * @param applyPreset - Callback to apply a built-in preset by id.
+ * @param createLobby - Callback invoked to create the lobby with the current configuration.
+ * @param generateStandardTurnOrder - Utility to generate a standard turn order (passed through to consumers).
+ * @param isAdmin - Whether the current user has admin privileges (shows admin tools when true).
+ * @param isPermanent - Admin flag that toggles tournament persistence.
+ * @param setIsPermanent - Setter for the `isPermanent` admin flag.
+ * @param discordWebhookUrl - Admin-configured Discord webhook URL.
+ * @param setDiscordWebhookUrl - Setter for the Discord webhook URL.
+ * @returns The rendered lobby creation UI element.
+ */
 export function LobbyCreation({
   t,
   lang,
@@ -1038,6 +1062,12 @@ export function LobbyCreation({
 );
 }
 
+/**
+ * Renders a 24x24 checkmark SVG icon.
+ *
+ * @param className - Optional CSS class name applied to the root `<svg>` element
+ * @returns The SVG element representing a checkmark
+ */
 function Check({ className }: { className?: string }) {
   return (
     <svg 

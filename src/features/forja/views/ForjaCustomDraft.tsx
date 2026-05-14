@@ -34,9 +34,14 @@ interface CreateResult {
 // ─── Config Base FORJA ────────────────────────────────────────────────────────
 
 /**
- * Constrói a LobbyConfig base para um lobby FORJA (3v3, alternated picks,
- * sem map visualizer embutido — o motor usa as posições do MAPS[]).
- * Mutações aplicadas conforme a fase selecionada.
+ * Build a base LobbyConfig for a FORJA 3v3 BO3 custom draft with official rule defaults.
+ *
+ * The returned configuration sets series, team size, pick/ban behavior, allowed maps and pantheons,
+ * timer and privacy defaults, and phase-dependent flags (for example, per-map bans enabled in playoffs).
+ *
+ * @param lobbyName - Desired lobby name; an empty or whitespace name will be replaced with a standard default
+ * @param phase - Tournament phase that influences stage-specific rules (`'grupos'` or `'playoffs'`)
+ * @returns A fully populated LobbyConfig reflecting FORJA rules (3v3 BO3, alternated picks, FORJA map/pantheon constraints, and phase-adjusted settings)
  */
 function buildForjaConfig(
   lobbyName: string,
@@ -90,9 +95,15 @@ function buildForjaConfig(
 }
 
 /**
- * Constrói o objeto Lobby inicial (status: waiting, sem capitães ainda).
- * A série tem 3 slots: Game 1 e 2 são "" (serão preenchidos pelos picks);
- * Game 3 é "" (será sorteado pelo ADMIN automaticamente após o Ready).
+ * Create the initial Lobby object in a 'waiting' state with default players, draft skeleton, timers, and metadata.
+ *
+ * The returned lobby is preconfigured for a 3v3 BO3 Forja custom draft: captains and player lists are empty,
+ * series slots are three empty map entries, picks are initialized with a 3v3 skeleton for the Draft UI,
+ * and timing/audit fields use server timestamps.
+ *
+ * @param id - The lobby identifier
+ * @param config - The LobbyConfig to embed in the created lobby
+ * @returns The newly constructed Lobby object ready to be persisted
  */
 function buildInitialLobby(id: string, config: LobbyConfig): Lobby {
   return {

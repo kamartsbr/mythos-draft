@@ -5,6 +5,30 @@ import { Lobby, LobbyConfig, DraftTurn, TeamSize, PickEntry, SeriesType, Substit
 import { MAPS, MAJOR_GODS, PLAYER_COLORS, MCL_ROUND_MAPS } from '../constants';
 import { serverTimestamp } from 'firebase/firestore';
 
+/**
+ * Manage client-side draft state, permissions, optimistic updates, and actions for a lobby-based draft flow.
+ *
+ * Provides derived role flags, turn helpers, optimistic ready/action synchronization with lobby updates,
+ * a generator for standard map/god turn orders, and action helpers that call underlying services.
+ *
+ * @returns An object with:
+ *  - `error` / `setError`: current error message and setter.
+ *  - `loading`: unused loading flag.
+ *  - `handleAction`: perform a draft action (pick/ban/map pick/map ban) with optimistic state and in-flight protection.
+ *  - `handlePickerAction`: perform a picker-originated pick with optimistic state.
+ *  - `reportScore`: report match score and regenerate turn order when needed.
+ *  - `resetVotes`: reset vote state for the lobby.
+ *  - `handleReady`: set ready/unready for the caller's team with optimistic state.
+ *  - `isProcessing`: whether an action is currently being processed.
+ *  - `optimisticReady`: locally optimistic ready state (cleared when lobby confirms).
+ *  - `optimisticAction`: locally optimistic action pending confirmation.
+ *  - `generateStandardTurnOrder`: produce map and god draft turn orders from a lobby config, game number, and last winner.
+ *  - `updateRoster`: update team roster (picks and substitutions).
+ *  - `requestReset` / `respondReset`: request or respond to a lobby reset.
+ *  - `clearSubs`: clear last substitution records (admin/host action).
+ *  - `isMyTurn`: whether the current user (based on captain flags) has the current turn.
+ *  - `myTeam`: the caller's inferred team (`'A' | 'B' | null`).
+ */
 export function useDraft(
   lobby: Lobby | null, 
   isCaptain1: boolean, 

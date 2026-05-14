@@ -77,7 +77,13 @@ function TabFallback() {
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
+/**
+ * Renders the Forja Hub interface for the 3v3 tournament, including header, tab navigation, tab content and registration modal.
+ *
+ * The component displays a dynamic set of tabs (public, member-only, admin-only and a draft-room when applicable), a deadline banner when registration is about to close, Discord authentication UI, admin quick actions (seed content), and a fullscreen OBS mode. Tab selection is synced to the `tab` query parameter and visibility of admin tabs depends on the current user's admin status.
+ *
+ * @returns The React element for the Forja Hub page.
+ */
 export default function ForjaHub() {
   const [activeTab, setActiveTab]       = useState<ForjaTabId>('inicio');
   const [showRegModal, setShowRegModal] = useState(false);

@@ -27,6 +27,14 @@ function datetimeLocalToMs(val: string): number | null {
   return new Date(val).getTime();
 }
 
+/**
+ * Renders a modal for editing Forja tournament settings and saving changes.
+ *
+ * @param discordUserId - Discord user ID used when submitting saved settings.
+ * @param currentSettings - Initial settings used to populate the form; when `null` fields use sensible defaults.
+ * @param onClose - Callback invoked to close the modal.
+ * @returns A JSX element containing the tournament settings modal UI.
+ */
 export default function ForjaTournamentSettingsModal({ discordUserId, currentSettings, onClose }: Props) {
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState<string | null>(null);

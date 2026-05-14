@@ -42,6 +42,15 @@ export default function App() {
   );
 }
 
+/**
+ * Coordinates authentication, routing, lobby and draft state, global UI, and renders the main application content.
+ *
+ * Handles anonymous sign-in and connection testing, initializes and reacts to lobby/draft configuration and presets,
+ * manages modal and UI state (language, nickname, admin, donation widget, patch notes, invite/spectator/join flows),
+ * and selects the appropriate route views (Forja hub, overlay/streamer HUD, landing page, or draft UI).
+ *
+ * @returns The rendered application content as a React element
+ */
 function AppContent() {
   const [lang, setLang] = useState<string>('en');
   const t = TRANSLATIONS[lang as keyof typeof TRANSLATIONS] || TRANSLATIONS.en;

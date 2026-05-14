@@ -85,25 +85,30 @@ function TeamMemberPopover({
       <div style={{ fontSize: '0.7rem', color: '#f59e0b', fontWeight: 800, letterSpacing: '0.1em', marginBottom: '0.5rem', textTransform: 'uppercase' }}>
         {team.team_name}
       </div>
-      {members.map(p => {
-        const [imgErr, setImgErr] = useState(false);
-        const fallback = `https://cdn.discordapp.com/embed/avatars/${(parseInt(p.discord_id.slice(-1)) || 0) % 6}.png`;
-        return (
-          <div key={p.discord_id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
-            <img
-              src={imgErr ? fallback : p.avatar_url}
-              onError={() => setImgErr(true)}
-              alt={p.nick}
-              referrerPolicy="no-referrer"
-              style={{ width: '1.75rem', height: '1.75rem', borderRadius: '0.3rem', objectFit: 'cover' }}
-            />
-            <span style={{ color: '#f8fafc', fontSize: '0.82rem', fontWeight: 600 }}>{p.nick}</span>
-            {p.discord_id === team.captain_id && (
-              <span style={{ fontSize: '0.6rem', color: '#facc15', fontWeight: 700, background: 'rgba(250,204,21,0.1)', padding: '0.1rem 0.3rem', borderRadius: '0.2rem' }}>CAP</span>
-            )}
-          </div>
-        );
-      })}
+function MemberRow({ member, isCaptain }: { member: ForjaPlayer; isCaptain: boolean }) {
+  const [imgErr, setImgErr] = useState(false);
+  const fallback = `https://cdn.discordapp.com/embed/avatars/${(parseInt(member.discord_id.slice(-1)) || 0) % 6}.png`;
+  
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+      <img
+        src={imgErr ? fallback : member.avatar_url}
+        onError={() => setImgErr(true)}
+        alt={member.nick}
+        referrerPolicy="no-referrer"
+        style={{ width: '1.75rem', height: '1.75rem', borderRadius: '0.3rem', objectFit: 'cover' }}
+      />
+      <span style={{ color: '#f8fafc', fontSize: '0.82rem', fontWeight: 600 }}>{member.nick}</span>
+      {isCaptain && (
+        <span style={{ fontSize: '0.6rem', color: '#facc15', fontWeight: 700, background: 'rgba(250,204,21,0.1)', padding: '0.1rem 0.3rem', borderRadius: '0.2rem' }}>CAP</span>
+      )}
+    </div>
+  );
+}
+
+      {members.map(p => (
+        <MemberRow key={p.discord_id} member={p} isCaptain={p.discord_id === team.captain_id} />
+      ))}
     </div>
   );
 }

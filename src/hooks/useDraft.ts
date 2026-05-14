@@ -279,6 +279,24 @@ export function useDraft(
     return { mapOrder, godOrder };
   }, []);
 
+  /**
+   * Perform a draft action (pick/ban/map pick/map ban) with optimistic state and in-flight protection.
+   *
+   * @param actionIdArg - The ID of the action target (god ID, map ID, or 'REVEAL')
+   * @param playerId - Optional player ID for the pick
+   * @param playerName - Optional player name for the pick
+   * @param options - Optional configuration
+   * @param options.isRandom - Whether the action is a random selection
+   * @param options.force - Bypass the isProcessing guard to allow concurrent actions
+   *
+   * **SAFETY CONTRACT FOR `options.force`:**
+   * The `force` flag is intended for ADMIN auto-resolution only (e.g., ADMIN turns triggered by timeout).
+   * It bypasses the `isProcessing` guard and is safe because ADMIN use is single-threaded—driven by
+   * a setTimeout callback—and thus avoids concurrent races.
+   *
+   * **WARNING:** Do NOT use `force` in other contexts (e.g., manual user actions) as it can lead to
+   * race conditions where multiple actions fire simultaneously, corrupting draft state.
+   */
   const handleAction = useCallback(async (actionIdArg: any, playerId?: number, playerName?: string, options?: { isRandom?: boolean; force?: boolean }) => {
     if (!lobby) return;
     if (isProcessing && !options?.force) return;

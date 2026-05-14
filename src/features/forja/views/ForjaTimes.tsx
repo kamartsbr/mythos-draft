@@ -7,7 +7,6 @@ import { ForjaViewProps, ForjaTeam, ForjaPlayer } from '../types';
 import { useForjaTeams }   from '../hooks/useForjaTeams';
 import { useForjaPlayers } from '../hooks/useForjaPlayers';
 import { updateTeamName, updateTeamImageUrl }  from '../services/forjaService';
-import { getEffectiveElo } from '../forjaUtils';
 
 const ForjaTimesManager = React.lazy(() => import('../components/ForjaTimesManager'));
 
@@ -49,6 +48,12 @@ function TeamCard({ team, members, colorIdx, isAdmin, isCaptain }: {
   const canEdit = isAdmin || isCaptain;
 
   const handleSaveImage = async () => {
+    // Early exit if image URL hasn't changed
+    if (imageUrl.trim() === (team.image_url || '')) {
+      setShowImageEdit(false);
+      return;
+    }
+
     setSavingImage(true);
     try {
       await updateTeamImageUrl(team.id, imageUrl.trim() || null);

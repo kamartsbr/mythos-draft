@@ -149,12 +149,10 @@ function CompactStandings({
   group,
   standings,
   players,
-  onTabChange,
 }: {
   group: string;
   standings: StandingRow[];
   players: ForjaPlayer[];
-  onTabChange?: (tab: string) => void;
 }) {
   const [hovered, setHovered] = useState<{ team: StandingRow; x: number; y: number } | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -323,7 +321,10 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
           tournamentStage: l.config?.tournamentStage
         }
       }));
-      (window as any).__forjaLobbiesRaw__ = lobbiesRaw;
+      // Debug helper: expose raw lobbies in dev mode only (not shipped to production)
+      if (process.env.NODE_ENV === 'development') {
+        (window as any).__forjaLobbiesRaw__ = lobbiesRaw;
+      }
       setLobbies(mapped);
       setDataLoaded(true);
     });
@@ -538,8 +539,7 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
                 key={g}
                 group={g}
                 standings={calculateStandings(g)}
-                players={rankedPlayers as any}
-                onTabChange={onTabChange}
+                players={rankedPlayers}
               />
             ))}
           </div>

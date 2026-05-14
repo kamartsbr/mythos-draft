@@ -75,7 +75,7 @@ function buildForjaConfig(
     mapBanCount: 0,
     mapTurnOrder: [],
     godTurnOrder: [],
-    allowedMaps: FORJA_MAP_POOL,
+    allowedMaps: [...FORJA_MAP_POOL],
     allowedPantheons: MAJOR_GODS.map(g => g.id),
 
     // ── Regras de Série ────────────────────────────────────────────────

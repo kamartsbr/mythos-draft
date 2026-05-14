@@ -375,6 +375,7 @@
   "donation": {
     "title": "Køb en kop kaffe til mig",
     "email": "goldpentakill@gmail.com",
-    "pixCopied": "PIX-nøgle kopieret!"
+    "pixCopied": "PIX-nøgle kopieret!",
+    "pixCopyFailed": "Kunne ikke kopiere PIX-nøgle til udklipsholder"
   }
 }

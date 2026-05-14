@@ -403,6 +403,7 @@
   "donation": {
     "title": "Me pague um café",
     "email": "goldpentakill@gmail.com",
-    "pixCopied": "Chave PIX copiada!"
+    "pixCopied": "Chave PIX copiada!",
+    "pixCopyFailed": "Falha ao copiar chave PIX para a área de transferência"
   }
 }

@@ -477,7 +477,7 @@ function AppContent() {
                         setTimeout(() => setCopySuccess(false), 3000);
                       })
                       .catch(() => {
-                        setError('Failed to copy PIX key to clipboard');
+                        setError(t.donation.pixCopyFailed);
                         setTimeout(() => setError(null), 3000);
                       });
                   }}

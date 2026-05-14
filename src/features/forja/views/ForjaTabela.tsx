@@ -3,7 +3,7 @@ import { ForjaViewProps, ForjaTeam, ForjaPlayer } from '../types';
 import { useForjaTeams } from '../hooks/useForjaTeams';
 import { useForjaPlayers } from '../hooks/useForjaPlayers';
 import { db } from '../../../firebase';
-import { collection, query, where, onSnapshot, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, serverTimestamp } from 'firebase/firestore';
 import { LobbyConfig, Lobby } from '../../../types';
 import { MAJOR_GODS } from '../../../data/gods';
 import { FORJA_MAP_POOL, getMCLPicks } from '../../../constants';

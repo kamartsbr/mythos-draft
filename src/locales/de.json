@@ -375,6 +375,7 @@
   "donation": {
     "title": "Kaufen Sie mir einen Kaffee",
     "email": "goldpentakill@gmail.com",
-    "pixCopied": "PIX-Schlüssel kopiert!"
+    "pixCopied": "PIX-Schlüssel kopiert!",
+    "pixCopyFailed": "PIX-Schlüssel konnte nicht in die Zwischenablage kopiert werden"
   }
 }

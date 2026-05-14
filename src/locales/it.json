@@ -373,6 +373,7 @@
   "donation": {
     "title": "Offrimi un caffè",
     "email": "goldpentakill@gmail.com",
-    "pixCopied": "Chiave PIX copiata!"
+    "pixCopied": "Chiave PIX copiata!",
+    "pixCopyFailed": "Impossibile copiare la chiave PIX negli appunti"
   }
 }

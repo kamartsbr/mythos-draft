@@ -401,6 +401,7 @@
   "donation": {
     "title": "Buy me a coffee",
     "email": "goldpentakill@gmail.com",
-    "pixCopied": "PIX Key copied!"
+    "pixCopied": "PIX Key copied!",
+    "pixCopyFailed": "Failed to copy PIX key to clipboard"
   }
 }

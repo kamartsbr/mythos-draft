@@ -376,6 +376,7 @@
   "donation": {
     "title": "Купите мне кофе",
     "email": "goldpentakill@gmail.com",
-    "pixCopied": "Ключ PIX скопирован!"
+    "pixCopied": "Ключ PIX скопирован!",
+    "pixCopyFailed": "Не удалось скопировать ключ PIX в буфер обмена"
   }
 }

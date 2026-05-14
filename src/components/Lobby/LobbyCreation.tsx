@@ -69,7 +69,11 @@ export function LobbyCreation({
       setShowPresetBuilder(false);
       
       // Atualiza a lista localmente para o usuário ver o novo preset na hora
-      lobbyService.getPresetsOnce().then(setCommunityPresets);
+      lobbyService.getPresetsOnce()
+        .then(setCommunityPresets)
+        .catch(refreshErr => {
+          console.error('Failed to refresh presets:', refreshErr);
+        });
     } catch (err) {
       console.error('Failed to save preset:', err);
     }

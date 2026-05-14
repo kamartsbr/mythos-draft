@@ -90,7 +90,19 @@ function PlayerChip({
   );
 }
 
-// ─── DroppableZone ────────────────────────────────────────────────────────────
+/**
+ * Render a droppable container for a group of players (pool, reserve, or team) including a header,
+ * the list of draggable player chips, and optional admin controls (delete, set captain).
+ *
+ * @param players - The list of players to display inside this zone.
+ * @param isAdmin - When true, enables dragging and shows admin-only controls.
+ * @param onDelete - Optional handler invoked when the zone's delete button is clicked (visible only to admins).
+ * @param onSetCaptain - Optional handler invoked with a player's `discord_id` when the admin sets that player as captain.
+ * @param captainId - The `discord_id` of the current captain; used to highlight the captain badge.
+ * @param minHeight - Minimum height for the droppable body area (CSS value).
+ * @param color - Optional accent color used for header and shadow styling.
+ * @returns A React element representing the styled droppable zone with header, player list, and controls.
+ */
 
 function DroppableZone({
   id, label, color, players, isAdmin, minHeight = '80px', onDelete,

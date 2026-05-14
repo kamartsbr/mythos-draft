@@ -14,16 +14,16 @@ const ForjaTimesManager = React.lazy(() => import('../components/ForjaTimesManag
 const TEAM_COLORS = ['#f59e0b','#60a5fa','#a78bfa','#4ade80','#f87171','#fb923c'];
 
 /**
- * Render a team card displaying the team's image, name, stats and members, with inline edit controls for admins or the team captain.
+ * Render a team card showing the team's image, name, stats, and member list, and optionally expose inline edit controls for admins or the team's captain.
  *
- * Shows a blurred background and foreground image when `team.image_url` is present, otherwise a placeholder. Displays average TG ELO, pick order, and a list of members with avatar fallbacks, captain crown, tier label, and TG ELO. When `isAdmin` or `isCaptain` is true, provides UI to rename the team and to add/replace the team image URL.
+ * When editing is allowed, provides controls to rename the team and to add, change, or remove the team's image URL.
  *
- * @param team - The team object to display (includes id, team_name, image_url, pick_order, captain_id, etc.)
- * @param members - Array of player objects belonging to the team (used to compute average ELO and render member rows)
- * @param colorIdx - Index used to pick the accent color for the card (cycled through TEAM_COLORS)
+ * @param team - Team data to display (id, team_name, image_url, pick_order, captain_id, etc.)
+ * @param members - Players belonging to the team (used to compute average ELO and render member rows)
+ * @param colorIdx - Index selecting the accent color for the card (cycled through TEAM_COLORS)
  * @param isAdmin - Whether the current user has global admin privileges (enables management controls)
  * @param isCaptain - Whether the current user is the team's captain (enables management controls)
- * @returns The JSX element representing the rendered team card.
+ * @returns The JSX element representing the rendered team card
  */
 function TeamCard({ team, members, colorIdx, isAdmin, isCaptain }: {
   team: ForjaTeam;

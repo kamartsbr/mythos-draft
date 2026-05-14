@@ -36,12 +36,9 @@ const SNAKE_EXAMPLE = [
 const TIER_COLOR: Record<string, string> = { A: '#facc15', B: '#60a5fa', C: '#94a3b8' };
 
 /**
- * Render a static visual example of the 16-team snake draft layout.
+ * Renders a static visual example of a 16-team snake draft, including captain order, rounds B and C, and a final team composition summary.
  *
- * Renders the draft order (captains, rounds B and C) and a final team composition summary
- * as a read-only illustrative visualizer used in the "Formato" tab.
- *
- * @returns The rendered visualizer for the 16-team snake draft example.
+ * @returns A JSX element representing the static 16-team snake draft visualizer.
  */
 function SnakeVisualizer() {
   return (

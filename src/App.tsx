@@ -34,6 +34,11 @@ function ForjaLoader() {
   );
 }
 
+/**
+ * Root React component for the application that ensures runtime errors are caught.
+ *
+ * @returns The root JSX element which renders AppContent wrapped in an ErrorBoundary
+ */
 export default function App() {
   return (
     <ErrorBoundary>

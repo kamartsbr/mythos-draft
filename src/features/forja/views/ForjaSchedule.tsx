@@ -94,6 +94,15 @@ function formatDate(ts: any): string {
   } catch { return 'Data inválida'; }
 }
 
+/**
+ * Renders a schedule entry card with date, matchup, optional streamer info, and admin actions.
+ *
+ * @param entry - The schedule entry to render; expected fields include `matchup`, `date`, and optional `streamer_name` and `streamer_link`
+ * @param isAdmin - If `true`, shows Edit and Remove action buttons
+ * @param onEdit - Callback invoked when the Edit button is clicked
+ * @param onDelete - Callback invoked when the Remove button is clicked
+ * @returns A JSX element representing the schedule match card
+ */
 function MatchCard({ entry, isAdmin, onEdit, onDelete }: {
   entry: ForjaScheduleEntry;
   isAdmin: boolean;

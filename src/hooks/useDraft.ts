@@ -6,28 +6,25 @@ import { MAPS, MAJOR_GODS, PLAYER_COLORS, MCL_ROUND_MAPS } from '../constants';
 import { serverTimestamp } from 'firebase/firestore';
 
 /**
- * Manage client-side draft state, permissions, optimistic updates, and actions for a lobby-based draft flow.
+ * Manage local draft state and provide actions/helpers for a lobby-based pick/ban/map drafting flow.
  *
- * Provides derived role flags, turn helpers, optimistic ready/action synchronization with lobby updates,
- * a generator for standard map/god turn orders, and action helpers that call underlying services.
- *
- * @returns An object with:
- *  - `error` / `setError`: current error message and setter.
- *  - `loading`: unused loading flag.
- *  - `handleAction`: perform a draft action (pick/ban/map pick/map ban) with optimistic state and in-flight protection.
- *  - `handlePickerAction`: perform a picker-originated pick with optimistic state.
- *  - `reportScore`: report match score and regenerate turn order when needed.
- *  - `resetVotes`: reset vote state for the lobby.
- *  - `handleReady`: set ready/unready for the caller's team with optimistic state.
- *  - `isProcessing`: whether an action is currently being processed.
- *  - `optimisticReady`: locally optimistic ready state (cleared when lobby confirms).
- *  - `optimisticAction`: locally optimistic action pending confirmation.
- *  - `generateStandardTurnOrder`: produce map and god draft turn orders from a lobby config, game number, and last winner.
- *  - `updateRoster`: update team roster (picks and substitutions).
- *  - `requestReset` / `respondReset`: request or respond to a lobby reset.
- *  - `clearSubs`: clear last substitution records (admin/host action).
- *  - `isMyTurn`: whether the current user (based on captain flags) has the current turn.
- *  - `myTeam`: the caller's inferred team (`'A' | 'B' | null`).
+ * @returns An object exposing draft state, derived flags, turn helpers, and action callbacks:
+ *  - `error` / `setError` — current error message and setter
+ *  - `loading` — loading flag (unused)
+ *  - `isProcessing` — whether an action is in flight
+ *  - `optimisticReady` — locally optimistic ready state (cleared when lobby confirms)
+ *  - `optimisticAction` — optimistic pending action `{ id, type: 'pick'|'ban'|'map_pick'|'map_ban', playerId?, playerName? }`
+ *  - `isMyTurn` — whether the caller currently has the turn
+ *  - `myTeam` — inferred caller team `'A' | 'B' | null`
+ *  - `handleAction(actionId, playerId?, playerName?, options?)` — perform a pick/ban/map-pick/map-ban (supports `options.isRandom` and `options.force` for ADMIN auto-resolution)
+ *  - `handlePickerAction(godId, playerId?, playerName?, options?)` — perform a picker-originated pick
+ *  - `reportScore(winner)` — report match result and regenerate turn order when needed
+ *  - `resetVotes()` — reset lobby votes
+ *  - `handleReady(isReady?)` — set ready/unready for the caller's team (optimistic)
+ *  - `updateRoster(newPicks, subs)` — update team roster (picks and substitutions)
+ *  - `requestReset()` / `respondReset(accept)` — request or respond to a lobby reset
+ *  - `clearSubs()` — clear last substitution records (host action)
+ *  - `generateStandardTurnOrder(cfg, gameNumber?, lastWinner?)` — produce map and god draft turn orders from lobby config
  */
 export function useDraft(
   lobby: Lobby | null, 

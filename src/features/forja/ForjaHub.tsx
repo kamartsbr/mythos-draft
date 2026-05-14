@@ -68,6 +68,11 @@ function useCountdown(targetMs: number) {
   return { remaining, h, m, s, expired: remaining === 0 };
 }
 
+/**
+ * Render a compact loading fallback used while lazily loaded tab content is being fetched.
+ *
+ * @returns A React element containing a spinner and a "Carregando..." label
+ */
 function TabFallback() {
   return (
     <div className="forja-tab-loader">
@@ -78,11 +83,11 @@ function TabFallback() {
 }
 
 /**
- * Renders the Forja Hub interface for the 3v3 tournament, including header, tab navigation, tab content and registration modal.
+ * Render the Forja Hub interface for the 3v3 tournament.
  *
- * The component displays a dynamic set of tabs (public, member-only, admin-only and a draft-room when applicable), a deadline banner when registration is about to close, Discord authentication UI, admin quick actions (seed content), and a fullscreen OBS mode. Tab selection is synced to the `tab` query parameter and visibility of admin tabs depends on the current user's admin status.
+ * Displays a tabbed hub with dynamic tab visibility (public, member-only, admin-only, and a draft-room when active), a registration deadline banner, Discord authentication UI, admin quick actions (seed content), an OBS fullscreen mode, and an in-app registration modal. Tab selection is kept in sync with the `tab` query parameter.
  *
- * @returns The React element for the Forja Hub page.
+ * @returns The root React element for the Forja Hub page
  */
 export default function ForjaHub() {
   const [activeTab, setActiveTab]       = useState<ForjaTabId>('inicio');

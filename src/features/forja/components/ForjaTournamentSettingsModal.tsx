@@ -22,6 +22,12 @@ function msToDatetimeLocal(ms: number | undefined | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/**
+ * Convert a `datetime-local` input string into a millisecond Unix timestamp.
+ *
+ * @param val - A `datetime-local` formatted string (e.g. "YYYY-MM-DDTHH:mm")
+ * @returns The timestamp in milliseconds since the Unix epoch, or `null` if `val` is empty
+ */
 function datetimeLocalToMs(val: string): number | null {
   if (!val) return null;
   return new Date(val).getTime();

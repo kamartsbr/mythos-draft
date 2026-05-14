@@ -55,14 +55,14 @@ const PLAYOFF_FORMAT_LABEL: Record<string, string> = {
 };
 
 /**
- * Renders a team member row with avatar, nickname, and an optional captain badge.
+ * Render a team member row showing avatar, nickname, and an optional captain badge.
  *
- * If the member's avatar fails to load, uses a Discord CDN fallback avatar chosen from the
- * default embed avatars based on the last digit of `member.discord_id`.
+ * If the avatar image fails to load, a Discord CDN default avatar is used as a fallback
+ * (selected deterministically from the last digit of `member.discord_id`).
  *
- * @param member - The ForjaPlayer to display (avatar, nick, and discord_id used for fallback)
+ * @param member - Player data containing `avatar_url`, `nick`, and `discord_id`
  * @param isCaptain - Whether to display the "CAP" badge for this member
- * @returns The rendered member row element
+ * @returns A JSX element representing the member row
  */
 
 function MemberRow({ member, isCaptain }: { member: ForjaPlayer; isCaptain: boolean }) {

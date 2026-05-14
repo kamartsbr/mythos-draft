@@ -463,6 +463,15 @@ export function subscribeToForjaTeams(
   );
 }
 
+/**
+ * Update a team's display name and/or captain.
+ *
+ * If `name` is undefined or empty after trimming, the team's name is not changed. If `captainId` is undefined the captain is not changed; to clear the captain field pass an empty string. The teams cache is invalidated after a successful update.
+ *
+ * @param teamId - The ID of the team document to update
+ * @param name - New team name (trimmed); omitted or empty values are ignored
+ * @param captainId - New captain's discord ID, or an empty string to clear the field; omitted to leave unchanged
+ */
 export async function updateTeamName(teamId: string, name?: string, captainId?: string): Promise<void> {
   const updates: Record<string, string> = {};
   if (name !== undefined && name.trim()) updates.team_name = name.trim();

@@ -18,6 +18,21 @@ interface TeamColumnProps {
   optimisticAction?: { id: string, type: 'pick' | 'ban' | 'map_pick' | 'map_ban', playerId?: number, playerName?: string } | null;
 }
 
+/**
+ * Render a team's column for the lobby/god-draft UI, including header, active roster, substitution alert,
+ * map/god ban slots, player pick slots (or compact tiles for 1v1), and the team footer.
+ *
+ * @param team - Which team column to render ('A' or 'B')
+ * @param lobby - The current lobby state driving picks, bans, phase, turn order, hover state, substitutions, and config
+ * @param isCurrentTurn - Whether actions for this team should be treated as the current active turn (enables optimistic UI)
+ * @param t - Translation/labels object used for all visible text
+ * @param isCaptain1 - True if the current user is captain of team A
+ * @param isCaptain2 - True if the current user is captain of team B
+ * @param timeLeft - Remaining time value passed to PlayerSlot components
+ * @param timerDuration - Timer duration override passed to PlayerSlot components
+ * @param optimisticAction - Optional optimistic update to apply locally for immediate UI feedback (pick/ban/map actions)
+ * @returns A JSX element representing the fully rendered team column UI
+ */
 export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptain2, timeLeft, timerDuration, optimisticAction }: TeamColumnProps) {
   const [showSubAlert, setShowSubAlert] = useState(false);
   const prevGameRef = useRef<number>(0);
@@ -330,57 +345,7 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
             </div>
           )}
 
-          {/* Map Picks (Casca Grossa Playoffs) */}
-          {lobby.config.preset === 'CASCA' && lobby.config.tournamentStage === 'PLAYOFFS' && teamMapPicks.length > 0 && (
-            <div className="space-y-2">
-              <div className={cn(
-                "flex items-center gap-2 mb-1",
-                team === 'B' && "flex-row-reverse"
-              )}>
-                <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">{t.mapPicks || 'MAP PICKS'}</span>
-                <div className="h-px flex-1 bg-slate-900/50" />
-              </div>
-              <div className={cn(
-                "flex gap-2",
-                team === 'B' && "flex-row-reverse"
-              )}>
-                {teamMapPicks.map((pickStep, i) => {
-                  const mapId = pickStep.id;
-                  const map = MAPS.find(m => m.id === mapId);
-                  return (
-                    <div 
-                      key={i}
-                      className={cn(
-                        "w-36 h-24 rounded-2xl border-2 overflow-hidden transition-all duration-500 relative",
-                        "border-green-500 shadow-[0_0_20px_rgba(34,197,94,0.4)]"
-                      )}
-                    >
-                      {map && (
-                        <>
-                          <img 
-                            src={map.image} 
-                            alt={map.name}
-                            referrerPolicy="no-referrer"
-                            className="w-full h-full object-cover"
-                          />
-                          <div className="absolute inset-x-0 bottom-0 bg-slate-950/80 p-1 text-center">
-                            <span className="text-[8px] font-black text-white uppercase truncate block">
-                              {t.mapNames?.[map.id] || map.name}
-                            </span>
-                          </div>
-                          {pickStep.isRandom && (
-                            <div className="absolute top-2 right-2 bg-slate-950/80 rounded-full p-1">
-                              <Dices className="w-3 h-3 text-amber-500" />
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+
         </div>
       )}
 

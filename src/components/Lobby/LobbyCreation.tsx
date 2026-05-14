@@ -1,12 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sword, Plus, ChevronRight, RefreshCw, Map as MapIcon, Trophy, Lock, Eye, Globe, Trash2, ChevronDown, ChevronUp, Shield } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { LobbyConfig, SeriesType, TeamSize } from '../../types';
-import { MAPS, MAJOR_GODS, PANTHEONS, MCL_ROUND_MAPS, CASCA_GROSSA_GROUP_POOL, CASCA_GROSSA_PLAYOFF_POOL, getMCLMapPool } from '../../constants';
+import { MAPS, MAJOR_GODS, PANTHEONS, MCL_ROUND_MAPS, getMCLMapPool } from '../../constants';
 import { PresetBuilder } from './PresetBuilder';
 import { lobbyService } from '../../services/lobbyService';
-import { useEffect } from 'react';
 
 interface LobbyCreationProps {
   t: any;
@@ -26,6 +25,30 @@ interface LobbyCreationProps {
   generateStandardTurnOrder: (cfg: LobbyConfig) => any;
 }
 
+/**
+ * Render the lobby creation UI and manage local state for presets, maps, pantheons, and other matchmaking options.
+ *
+ * Renders controls to pick presets (including community presets), configure series/map/pantheon settings (with MCL-specific restrictions),
+ * toggle admin options, and create the final lobby. Handles fetching and saving community presets, applying custom presets,
+ * and mutating the provided `config` via `setConfig`.
+ *
+ * @param t - Localization strings used throughout the UI.
+ * @param lang - Current language code used for sorting and localized labels.
+ * @param lobbyName - Current lobby name value.
+ * @param setLobbyName - Setter for the lobby name.
+ * @param config - Current lobby configuration object.
+ * @param setConfig - Setter that updates the lobby configuration.
+ * @param isLocked - Function that returns whether a specific config field is locked by the active preset.
+ * @param applyPreset - Callback to apply a built-in preset by id.
+ * @param createLobby - Callback invoked to create the lobby with the current configuration.
+ * @param generateStandardTurnOrder - Utility to generate a standard turn order (passed through to consumers).
+ * @param isAdmin - Whether the current user has admin privileges (shows admin tools when true).
+ * @param isPermanent - Admin flag that toggles tournament persistence.
+ * @param setIsPermanent - Setter for the `isPermanent` admin flag.
+ * @param discordWebhookUrl - Admin-configured Discord webhook URL.
+ * @param setDiscordWebhookUrl - Setter for the Discord webhook URL.
+ * @returns The rendered lobby creation UI element.
+ */
 export function LobbyCreation({
   t,
   lang,
@@ -47,17 +70,35 @@ export function LobbyCreation({
   const [showManualPantheons, setShowManualPantheons] = useState(false);
   const [showPresetBuilder, setShowPresetBuilder] = useState(false);
   const [communityPresets, setCommunityPresets] = useState<any[]>([]);
-  
-  useEffect(() => {
-    const unsub = lobbyService.subscribeToPresets(setCommunityPresets);
-    return () => unsub();
+  const requestIdRef = useRef(0);
+
+  // Shared loader function to prevent race conditions
+  const loadPresets = useCallback(() => {
+    const requestId = ++requestIdRef.current;
+
+    lobbyService.getPresetsOnce()
+      .then((presets) => {
+        // Only update if this is still the latest request
+        if (requestId === requestIdRef.current) {
+          setCommunityPresets(presets);
+        }
+      })
+      .catch(err => console.error("Erro ao buscar presets:", err));
   }, []);
+
+  // Load presets on mount
+  useEffect(() => {
+    loadPresets();
+  }, [loadPresets]);
 
   const handleSaveCustomPreset = async (name: string, customConfig: LobbyConfig) => {
     try {
       const id = await lobbyService.savePreset(name, customConfig);
       setConfig({ ...customConfig, preset: `custom_${id}` });
       setShowPresetBuilder(false);
+
+      // Use shared loader to refresh presets
+      loadPresets();
     } catch (err) {
       console.error('Failed to save preset:', err);
     }
@@ -204,89 +245,42 @@ export function LobbyCreation({
               {
                 id: 'FORJA',
                 label: "Forja de Hefesto",
-                icon: "https://media.discordapp.net/attachments/1012117565860712499/1344686940029358172/f8d8393e-2b1b-4cf3-a72f-51ef1cceb3ca.webp"
+                icon: "/logo-forja.png"
               }
             ].map(preset => (
               <button
                 key={preset.id}
                 onClick={() => applyPreset(preset.id)}
                 className={cn(
-                  "py-2 px-1 rounded-lg border text-xs font-bold transition-all uppercase tracking-tighter text-center flex items-center justify-center gap-2",
+                  "py-3 px-4 rounded-xl border text-xs font-black transition-all uppercase tracking-tight flex items-center justify-start gap-4",
                   config.preset === preset.id 
-                    ? "bg-amber-500/10 border-amber-500 text-amber-500" 
+                    ? "bg-amber-500/10 border-amber-500 text-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.15)]" 
                     : "border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-slate-300"
                 )}
               >
-                    {preset.icon ? (
-                      <img 
-                        src={preset.icon} 
-                        alt="" 
-                        className="w-4 h-4 object-contain"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : null}
-                {preset.label}
+                    <div className="w-14 flex items-center justify-center flex-shrink-0">
+                      {preset.icon ? (
+                        <div className={cn(
+                          "flex items-center justify-center",
+                          preset.id === 'FORJA' ? "w-20 h-20 -ml-2" : "w-10 h-10"
+                        )}>
+                          <img 
+                            src={preset.icon} 
+                            alt="" 
+                            className="w-full h-full object-contain filter drop-shadow-md"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-10 h-10 rounded bg-slate-800/50" />
+                      )}
+                    </div>
+                <span className="flex-1 text-left">{preset.label}</span>
               </button>
             ))}
           </div>
           
-          <AnimatePresence mode="popLayout">
-            {config.preset === 'CASCA' && (
-              <motion.div
-                initial={{ height: 0, opacity: 0, marginBottom: 0 }}
-                animate={{ height: 'auto', opacity: 1, marginBottom: 16 }}
-                exit={{ height: 0, opacity: 0, marginBottom: 0 }}
-                className="overflow-hidden"
-              >
-                <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">
-                    {t.selectStage}
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { id: 'GROUP', label: t.cascaGrossaGroup },
-                      { id: 'PLAYOFFS', label: t.cascaGrossaPlayoffs }
-                    ].map(stage => (
-                      <button
-                        key={stage.id}
-                        onClick={() => {
-                          setConfig((prev: any) => {
-                            const newConfig = { ...prev, tournamentStage: stage.id as 'GROUP' | 'PLAYOFFS' };
-                            // Re-apply preset logic for the new stage
-                            newConfig.acePick = false;
-                            if (stage.id === 'GROUP') {
-                              newConfig.seriesType = 'BO1';
-                              newConfig.allowedMaps = CASCA_GROSSA_GROUP_POOL;
-                              newConfig.firstMapRandom = true;
-                              newConfig.mapBanCount = 0;
-                              newConfig.banCount = 0;
-                              newConfig.hasBans = false;
-                            } else {
-                              newConfig.seriesType = 'BO3';
-                              newConfig.allowedMaps = CASCA_GROSSA_PLAYOFF_POOL;
-                              newConfig.firstMapRandom = true;
-                              newConfig.mapBanCount = 2;
-                              newConfig.banCount = 2;
-                              newConfig.hasBans = true;
-                            }
-                            return newConfig;
-                          });
-                        }}
-                        className={cn(
-                          "py-2 rounded-lg border text-sm font-bold transition-all",
-                          config.tournamentStage === stage.id 
-                            ? "bg-amber-500 border-amber-500 text-slate-950" 
-                            : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700"
-                        )}
-                      >
-                        {stage.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+
 
           <AnimatePresence mode="popLayout">
             {config.preset === 'MCL' && (
@@ -1055,7 +1049,6 @@ export function LobbyCreation({
           </div>
         )}
 
-
         <button
           onClick={createLobby}
           className="w-full py-5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black mythic-text text-lg shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-3 group active:scale-[0.98]"
@@ -1069,6 +1062,12 @@ export function LobbyCreation({
 );
 }
 
+/**
+ * Renders a 24x24 checkmark SVG icon.
+ *
+ * @param className - Optional CSS class name applied to the root `<svg>` element
+ * @returns The SVG element representing a checkmark
+ */
 function Check({ className }: { className?: string }) {
   return (
     <svg 

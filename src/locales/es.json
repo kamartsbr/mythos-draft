@@ -378,5 +378,11 @@
     "blood_river_crossing": "Cruce del Río de Sangre",
     "valley_of_the_sun_serpent": "Valle de la Serpiente del Sol",
     "temple_of_the_jaguar_moon": "Templo de la Luna Jaguar"
+  },
+  "donation": {
+    "title": "Cómprame un café",
+    "email": "goldpentakill@gmail.com",
+    "pixCopied": "¡Clave PIX copiada!",
+    "pixCopyFailed": "Error al copiar la clave PIX al portapapeles"
   }
 }

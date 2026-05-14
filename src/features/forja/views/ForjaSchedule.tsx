@@ -121,7 +121,14 @@ function MatchCard({ entry, isAdmin, onEdit, onDelete }: {
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+/**
+ * Render the Forja schedule page showing listed matches, loading/error/empty states, and an admin-only modal for adding or editing entries.
+ *
+ * When `isAdmin` is true, the UI includes inline controls to add, edit, and remove schedule entries; saving opens a modal form and deleting prompts for confirmation. The footer indicates displayed times are in BRT (UTC-3) and includes a Discord link for notifications.
+ *
+ * @param isAdmin - Whether administrative actions (add/edit/delete) are enabled
+ * @returns The schedule page React element
+ */
 export default function ForjaSchedule({ isAdmin }: ForjaViewProps) {
   const { entries, loading, error } = useForjaSchedule();
   const [showForm, setShowForm]     = useState(false);
@@ -190,7 +197,7 @@ export default function ForjaSchedule({ isAdmin }: ForjaViewProps) {
       {/* Footer */}
       <div className="forja-schedule-footer">
         <span>🕐 Todos os horários exibidos em BRT (UTC-3)</span>
-        <a href="https://discord.gg/seu-server" target="_blank" rel="noreferrer" style={{ color: '#60a5fa' }}>
+        <a href="https://discord.gg/ZnqDHtyXvc" target="_blank" rel="noreferrer" style={{ color: '#60a5fa' }}>
           Discord para notificações →
         </a>
       </div>

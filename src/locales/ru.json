@@ -372,5 +372,11 @@
     "blood_river_crossing": "Переправа через Кровавую реку",
     "valley_of_the_sun_serpent": "Долина Солнечного Змея",
     "temple_of_the_jaguar_moon": "Храм Ягуаровой Луны"
+  },
+  "donation": {
+    "title": "Купите мне кофе",
+    "email": "goldpentakill@gmail.com",
+    "pixCopied": "Ключ PIX скопирован!",
+    "pixCopyFailed": "Не удалось скопировать ключ PIX в буфер обмена"
   }
 }

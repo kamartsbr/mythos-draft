@@ -27,6 +27,14 @@ function datetimeLocalToMs(val: string): number | null {
   return new Date(val).getTime();
 }
 
+/**
+ * Renders a modal for editing Forja tournament settings and saving changes.
+ *
+ * @param discordUserId - Discord user ID used when submitting saved settings.
+ * @param currentSettings - Initial settings used to populate the form; when `null` fields use sensible defaults.
+ * @param onClose - Callback invoked to close the modal.
+ * @returns A JSX element containing the tournament settings modal UI.
+ */
 export default function ForjaTournamentSettingsModal({ discordUserId, currentSettings, onClose }: Props) {
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState<string | null>(null);
@@ -41,6 +49,8 @@ export default function ForjaTournamentSettingsModal({ discordUserId, currentSet
   const [tierBSize,        setTierBSize]        = useState(String(currentSettings?.tier_b_size ?? 16));
   const [tierMode,         setTierMode]         = useState<ForjaTierMode>(currentSettings?.tier_mode ?? 'ABC');
   const [reservesOpen,     setReservesOpen]     = useState(currentSettings?.reserves_open ?? false);
+  const [currentPhase,     setCurrentPhase]     = useState<'pre_tournament' | 'group_stage' | 'playoffs' | 'finished'>(currentSettings?.current_phase ?? 'pre_tournament');
+  const [playoffFormat,    setPlayoffFormat]    = useState<'single_elim' | 'double_elim'>(currentSettings?.playoff_format ?? 'single_elim');
 
   useEffect(() => {
     if (!currentSettings) return;
@@ -54,6 +64,8 @@ export default function ForjaTournamentSettingsModal({ discordUserId, currentSet
     setTierBSize(String(b));
     setTierMode(currentSettings.tier_mode ?? 'ABC');
     setReservesOpen(currentSettings.reserves_open ?? false);
+    setCurrentPhase(currentSettings.current_phase ?? 'pre_tournament');
+    setPlayoffFormat(currentSettings.playoff_format ?? 'single_elim');
   }, [currentSettings]);
 
   // Preview em tempo real dos tamanhos de tier
@@ -92,7 +104,9 @@ export default function ForjaTournamentSettingsModal({ discordUserId, currentSet
         tier_mode:        tierMode,
         tier_a_size:      tierA,
         ...(tierMode === 'ABC' && { tier_b_size: tierB }),
-        reserves_open: reservesOpen,
+        reserves_open:    reservesOpen,
+        current_phase:    currentPhase,
+        playoff_format:   playoffFormat,
       }, discordUserId);
       setSuccess(true);
       setTimeout(() => { setSuccess(false); onClose(); }, 1200);
@@ -264,6 +278,37 @@ export default function ForjaTournamentSettingsModal({ discordUserId, currentSet
           {tierMode === 'AB' && (
             <span style={{ marginLeft: 'auto', color: '#60a5fa', fontSize: '0.68rem', fontWeight: 600 }}>🎯 Pool Livre</span>
           )}
+        </div>
+
+        {/* Fase do Torneio + Formato dos Playoffs */}
+        <p style={sectionTitle}>Estado do Torneio</p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+          <div>
+            <label htmlFor="forja-current-phase-select" style={labelStyle}>Fase Atual</label>
+            <select
+              id="forja-current-phase-select"
+              value={currentPhase}
+              onChange={e => setCurrentPhase(e.target.value as 'pre_tournament' | 'group_stage' | 'playoffs' | 'finished')}
+              style={{ ...inputStyle }}
+            >
+              <option value="pre_tournament">⏳ Pré-Torneio</option>
+              <option value="group_stage">🏟️ Fase de Grupos</option>
+              <option value="playoffs">🏆 Playoffs</option>
+              <option value="finished">✅ Encerrado</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="forja-playoff-format-select" style={labelStyle}>Formato dos Playoffs</label>
+            <select
+              id="forja-playoff-format-select"
+              value={playoffFormat}
+              onChange={e => setPlayoffFormat(e.target.value as 'single_elim' | 'double_elim')}
+              style={{ ...inputStyle }}
+            >
+              <option value="single_elim">Eliminação Simples</option>
+              <option value="double_elim" disabled>Eliminação Dupla (Em breve)</option>
+            </select>
+          </div>
         </div>
 
         {error && (

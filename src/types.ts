@@ -75,6 +75,10 @@ export type LobbyConfig = {
   hasMap3RandomRoll?: boolean;
   /** Se true, introduz 1 Ban de Deus por time (Host + Guest) antes dos god picks em CADA mapa */
   hasPerMapBans?: boolean;
+  /** Se true, a partida foi criada oficialmente pela tabela e será exibida no painel principal */
+  isOfficialForjaMatch?: boolean;
+  /** Se true, a partida é um draft customizado e não deve ser exibida no hub do Forja */
+  isCustomDraft?: boolean;
 };
 
 export type PickEntry = {

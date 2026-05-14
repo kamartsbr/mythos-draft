@@ -6,12 +6,25 @@ import React, { useState, useMemo } from 'react';
 import { ForjaViewProps, ForjaTeam, ForjaPlayer } from '../types';
 import { useForjaTeams }   from '../hooks/useForjaTeams';
 import { useForjaPlayers } from '../hooks/useForjaPlayers';
-import { updateTeamName }  from '../services/forjaService';
-import { getEffectiveElo } from '../forjaUtils';
+import { updateTeamName, updateTeamImageUrl }  from '../services/forjaService';
+
+const ForjaTimesManager = React.lazy(() => import('../components/ForjaTimesManager'));
 
 // ─── Team Card ────────────────────────────────────────────────────────────────
 const TEAM_COLORS = ['#f59e0b','#60a5fa','#a78bfa','#4ade80','#f87171','#fb923c'];
 
+/**
+ * Render a team card displaying the team's image, name, stats and members, with inline edit controls for admins or the team captain.
+ *
+ * Shows a blurred background and foreground image when `team.image_url` is present, otherwise a placeholder. Displays average TG ELO, pick order, and a list of members with avatar fallbacks, captain crown, tier label, and TG ELO. When `isAdmin` or `isCaptain` is true, provides UI to rename the team and to add/replace the team image URL.
+ *
+ * @param team - The team object to display (includes id, team_name, image_url, pick_order, captain_id, etc.)
+ * @param members - Array of player objects belonging to the team (used to compute average ELO and render member rows)
+ * @param colorIdx - Index used to pick the accent color for the card (cycled through TEAM_COLORS)
+ * @param isAdmin - Whether the current user has global admin privileges (enables management controls)
+ * @param isCaptain - Whether the current user is the team's captain (enables management controls)
+ * @returns The JSX element representing the rendered team card.
+ */
 function TeamCard({ team, members, colorIdx, isAdmin, isCaptain }: {
   team: ForjaTeam;
   members: ForjaPlayer[];
@@ -23,8 +36,34 @@ function TeamCard({ team, members, colorIdx, isAdmin, isCaptain }: {
   const [editing, setEditing] = useState(false);
   const [name, setName]       = useState(team.team_name);
   const [saving, setSaving]   = useState(false);
+  const [showImageEdit, setShowImageEdit] = useState(false);
+  const [imageUrl, setImageUrl] = useState(team.image_url || '');
+  const [savingImage, setSavingImage] = useState(false);
+
+  // Sync local state when Firestore updates the team data
+  React.useEffect(() => {
+    setImageUrl(team.image_url || '');
+  }, [team.image_url]);
 
   const canEdit = isAdmin || isCaptain;
+
+  const handleSaveImage = async () => {
+    // Early exit if image URL hasn't changed
+    if (imageUrl.trim() === (team.image_url || '')) {
+      setShowImageEdit(false);
+      return;
+    }
+
+    setSavingImage(true);
+    try {
+      await updateTeamImageUrl(team.id, imageUrl.trim() || null);
+      setShowImageEdit(false);
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setSavingImage(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!name.trim()) return;
@@ -35,15 +74,143 @@ function TeamCard({ team, members, colorIdx, isAdmin, isCaptain }: {
   };
 
   const avgElo = members.length > 0
-  ? Math.round(members.reduce((sum, m) => {
-      // Tenta usar o elo_efetivo do banco; se não houver, calcula a média na hora
-      const playerEffective = getEffectiveElo(m);
-      return sum + playerEffective;
-    }, 0) / members.length)
+  ? Math.round(members.reduce((sum, m) => sum + (m.elo_tg || 0), 0) / members.length)
   : 0;
 
   return (
     <div className="forja-team-card" style={{ '--team-color': color, borderTopColor: color } as any}>
+      {/* Team Image Block */}
+      <div style={{ position: 'relative', marginBottom: '1.25rem' }}>
+        {team.image_url ? (
+          <div style={{ 
+            width: '100%', 
+            aspectRatio: '16/9', 
+            borderRadius: '0.75rem', 
+            overflow: 'hidden', 
+            border: '1px solid rgba(255,255,255,0.05)',
+            background: '#020617',
+            boxShadow: '0 8px 25px rgba(0,0,0,0.5)',
+            position: 'relative'
+          }}>
+            {/* Background Borrado */}
+            <img 
+              src={team.image_url} 
+              alt=""
+              style={{ 
+                position: 'absolute',
+                inset: 0,
+                width: '100%', 
+                height: '100%', 
+                objectFit: 'cover',
+                filter: 'blur(12px) brightness(0.4)',
+                opacity: 0.6,
+                transform: 'scale(1.1)'
+              }}
+            />
+            {/* Imagem Real (Inteira) */}
+            <img 
+              src={team.image_url} 
+              alt={team.team_name} 
+              style={{ 
+                position: 'relative',
+                width: '100%', 
+                height: '100%', 
+                objectFit: 'contain',
+                zIndex: 1
+              }}
+            />
+          </div>
+        ) : (
+          <div style={{ 
+            width: '100%', 
+            aspectRatio: '16/9', 
+            borderRadius: '0.75rem', 
+            background: 'rgba(2,6,23,0.4)', 
+            border: '2px dashed rgba(51,65,85,0.3)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.5rem',
+            color: '#475569',
+            fontSize: '0.7rem'
+          }}>
+            <span style={{ fontSize: '1.5rem', opacity: 0.3 }}>🛡️</span>
+            Sem imagem do time
+          </div>
+        )}
+        
+        {canEdit && (
+          <button 
+            onClick={() => setShowImageEdit(!showImageEdit)}
+            style={{ 
+              position: 'absolute', 
+              top: '0.5rem', 
+              right: '0.5rem', 
+              background: 'rgba(15,23,42,0.85)', 
+              backdropFilter: 'blur(4px)',
+              border: '1px solid rgba(51,65,85,0.5)',
+              borderRadius: '0.5rem',
+              padding: '0.3rem 0.6rem',
+              fontSize: '0.65rem',
+              fontWeight: 700,
+              color: '#facc15',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.3rem',
+              transition: 'all 0.2s',
+              zIndex: 5
+            }}
+          >
+            📷 {team.image_url ? 'Alterar' : 'Adicionar'}
+          </button>
+        )}
+        
+        {showImageEdit && (
+          <div style={{ 
+            position: 'absolute', 
+            inset: 0, 
+            background: 'rgba(15,23,42,0.96)', 
+            backdropFilter: 'blur(8px)',
+            borderRadius: '0.75rem', 
+            display: 'flex', 
+            flexDirection: 'column', 
+            padding: '1.25rem',
+            justifyContent: 'center',
+            gap: '0.75rem',
+            zIndex: 10,
+            border: '1px solid rgba(250,204,21,0.2)'
+          }}>
+            <label style={{ fontSize: '0.75rem', color: '#facc15', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>URL da Imagem</label>
+            <input 
+              className="forja-reg-input"
+              style={{ fontSize: '0.8rem', padding: '0.5rem 0.75rem' }}
+              placeholder="Ex: https://i.imgur.com/..."
+              value={imageUrl}
+              onChange={e => setImageUrl(e.target.value)}
+            />
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button 
+                className="forja-btn forja-btn--primary" 
+                style={{ flex: 1, fontSize: '0.75rem', padding: '0.5rem' }}
+                onClick={handleSaveImage}
+                disabled={savingImage}
+              >
+                {savingImage ? 'Salvando...' : 'Confirmar'}
+              </button>
+              <button 
+                className="forja-btn forja-btn--ghost" 
+                style={{ flex: 1, fontSize: '0.75rem', padding: '0.5rem' }}
+                onClick={() => setShowImageEdit(false)}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Team Name */}
       <div className="forja-team-card__header">
         {editing ? (
@@ -119,10 +286,17 @@ function TeamCard({ team, members, colorIdx, isAdmin, isCaptain }: {
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+/**
+ * Render the Forja teams page, showing team cards, loading/empty/error states, and an optional admin visual manager.
+ *
+ * @param discordUser - The current Discord user (may be undefined).
+ * @param isAdmin - Whether the current user has administrative privileges.
+ * @returns The React element tree for the Forja teams view, including a toggleable admin visual manager when `isAdmin` is true.
+ */
 export default function ForjaTimes({ discordUser, isAdmin }: ForjaViewProps) {
-  const { teams, loading: teamsLoading, error: teamsError } = useForjaTeams();
-  const { rankedPlayers: players, loading: playersLoading } = useForjaPlayers();
+  const [showManager, setShowManager] = useState(false);
+  const { teams, loading: teamsLoading, error: teamsError } = useForjaTeams(true);
+  const { rankedPlayers: players, loading: playersLoading } = useForjaPlayers(true);
 
   const playerMap = useMemo(() => {
     const m: Record<string, ForjaPlayer> = {};
@@ -131,6 +305,24 @@ export default function ForjaTimes({ discordUser, isAdmin }: ForjaViewProps) {
   }, [players]);
 
   const loading = teamsLoading || playersLoading;
+
+  if (isAdmin && showManager) {
+    return (
+      <>
+        <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+          <button 
+            className="forja-btn forja-btn--ghost"
+            onClick={() => setShowManager(false)}
+          >
+            📋 Voltar para Visualização de Cards
+          </button>
+        </div>
+        <React.Suspense fallback={<div className="forja-tab-loader"><div className="forja-loader-spinner" /></div>}>
+          <ForjaTimesManager discordUser={discordUser} isAdmin={isAdmin} />
+        </React.Suspense>
+      </>
+    );
+  }
 
   return (
     <section className="forja-view forja-view--times">
@@ -143,6 +335,14 @@ export default function ForjaTimes({ discordUser, isAdmin }: ForjaViewProps) {
               : 'Os times serão formados após o Snake Draft'}
           </p>
         </div>
+        {isAdmin && teams.length > 0 && (
+          <button 
+            className="forja-btn forja-btn--secondary"
+            onClick={() => setShowManager(true)}
+          >
+            ⚙️ Gestão Visual (Drag & Drop)
+          </button>
+        )}
       </div>
 
       {teamsError && <div className="forja-modal-error" style={{ marginBottom: '1rem' }}>⚠️ {teamsError}</div>}

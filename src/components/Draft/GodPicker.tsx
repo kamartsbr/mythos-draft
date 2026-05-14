@@ -18,6 +18,18 @@ interface GodPickerProps {
   myTeam?: 'A' | 'B' | 'BOTH' | null;
 }
 
+/**
+ * Render the God selection UI for a lobby, handling both reveal and selection phases including MCL player assignment.
+ *
+ * Renders a map visualizer, the team's available god pool, selection controls, reveal animations, and status/notes.
+ * When the lobby preset is `MCL`, selecting a god first stores it locally and the component will call `handlePickerAction(godId, playerPosition)`
+ * after a player is chosen; otherwise selecting a god calls `handlePickerAction(godId)` immediately.
+ *
+ * @param handlePickerAction - Callback invoked to submit a god pick; called with `(godId)` for normal presets or `(godId, playerPosition)` for MCL after player selection.
+ * @param t - Localization object with keys used for UI text (e.g., `godPickerTitle`, `revealingGods`, `yourPool`, `godPickerNote`, etc.).
+ * @param myTeam - The current viewer's team ('A' or 'B'), used to derive available gods and votes.
+ * @returns The React element tree for the god picker UI.
+ */
 export function GodPicker({ lobby, isCaptain1, isCaptain2, handlePickerAction, timeLeft, t, optimisticAction, isMyTurn, myTeam }: GodPickerProps) {
   const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null);
   const [selectedGodId, setSelectedGodId] = useState<string | null>(null);
@@ -54,15 +66,11 @@ export function GodPicker({ lobby, isCaptain1, isCaptain2, handlePickerAction, t
   const usedGodsA = history.map(h => h.picksA ? h.picksA[0] : null).filter(Boolean);
   const usedGodsB = history.map(h => h.picksB ? h.picksB[0] : null).filter(Boolean);
 
-  const isCascaGroup = lobby.config.preset === 'CASCA' && lobby.config.tournamentStage === 'GROUP';
   const gameMap = MAPS.find(m => m.id === lobby.selectedMap);
   
   const allowedPantheons = Array.isArray(lobby.config.allowedPantheons) ? lobby.config.allowedPantheons : [];
-  const myGodPool = isCascaGroup 
-    ? MAJOR_GODS.filter(g => g.culture !== 'Aztec' && (allowedPantheons.length === 0 || allowedPantheons.includes(g.id))).map(g => g.id)
-    : (myTeam === 'A' ? teamAGods : teamBGods);
-    
-  const myUsedGods = isCascaGroup ? [] : (myTeam === 'A' ? usedGodsA : usedGodsB);
+  const myGodPool = (myTeam === 'A' ? teamAGods : teamBGods);
+  const myUsedGods = (myTeam === 'A' ? usedGodsA : usedGodsB);
 
   const opponentTeam = myTeam === 'A' ? 'B' : 'A';
   const opponentVote = opponentTeam === 'A' ? lobby.pickerVoteA : lobby.pickerVoteB;
@@ -336,12 +344,12 @@ export function GodPicker({ lobby, isCaptain1, isCaptain2, handlePickerAction, t
           )}
         </div>
 
-        {/* Footer Note */}
+          {/* Footer Note */}
         <div className="p-2 bg-slate-950 border-t border-slate-800/50 shrink-0">
           <div className="flex items-center justify-center gap-2 text-slate-600">
             <Info className="w-2.5 h-2.5" />
             <p className="text-[7px] font-bold uppercase tracking-widest">
-              {isCascaGroup ? t.godPickerNoteGroup : t.godPickerNote}
+              {t.godPickerNote}
             </p>
           </div>
         </div>

@@ -32,6 +32,15 @@ interface PickBanPanelProps {
   myTeam: 'A' | 'B' | 'BOTH' | null;
 }
 
+/**
+ * Render the pick/ban and map-draft panel for a lobby, managing local UI state, interactions, and export/confirmation flows.
+ *
+ * @param lobby - Lobby state and configuration that drives phase, turn order, picks/bans, maps, history, and scores
+ * @param handleAction - Callback invoked when the user performs a draft action (pick/ban/map selection); arguments depend on phase
+ * @param t - Translation strings and localized labels used by the component
+ * @param lang - Current language code (used for language-specific messages)
+ * @returns The rendered pick/ban panel UI as a React element
+ */
 export function PickBanPanel({ 
   lobby, isCaptain1, isCaptain2, handleAction, t, lang, reportScore, 
   viewGameIndex, setViewGameIndex, isAdmin, forceFinish, resetCurrentGame, requestReset, timeLeft,
@@ -225,14 +234,8 @@ export function PickBanPanel({
       maps = MAPS.filter(m => allowedMaps.includes(m.id));
     }
 
-    // Special Case: Casca Grossa Playoffs restricted selection for subsequent games
-    const mapPool = Array.isArray(lobby.mapPool) ? lobby.mapPool : [];
-    if (lobby.config.preset === 'CASCA' && lobby.config.tournamentStage === 'PLAYOFFS' && lobby.currentGame > 1 && mapPool.length > 0) {
-      maps = maps.filter(m => mapPool.includes(m.id));
-    }
-
     return maps;
-  }, [lobby.config.allowedMaps, lobby.config.preset, lobby.config.tournamentStage, lobby.currentGame, lobby.mapPool]);
+  }, [lobby.config.allowedMaps]);
 
   const picks = Array.isArray(lobby.picks) ? lobby.picks : [];
   const bans = Array.isArray(lobby.bans) ? lobby.bans : [];
@@ -339,7 +342,7 @@ export function PickBanPanel({
         whileTap={!isDisabled ? { scale: 0.95 } : {}}
         onClick={() => {
           if (isDisabled) return;
-          if (lobby.config.preset === 'MCL' && lobby.phase === 'god_pick') {
+          if ((lobby.config.preset === 'MCL' || lobby.config.preset === 'FORJA') && lobby.phase === 'god_pick') {
             setSelectedGodId(prev => prev === god.id ? null : god.id);
           } else {
             handleAction(god.id);
@@ -494,16 +497,14 @@ export function PickBanPanel({
 
           <div className="flex-1 p-8 flex flex-col items-center gap-8">
           <div className="w-full max-w-[550px]">
-              {lobby.config.preset !== 'CASCA' && (
-                <MapVisualizer 
-                  lobby={lobby} 
-                  isVisible={() => true} 
-                  isCaptain1={isCaptain1}
-                  isCaptain2={isCaptain2}
-                  selectedPositionId={selectedPositionId}
-                  t={t}
-                />
-              )}
+              <MapVisualizer 
+                lobby={lobby} 
+                isVisible={() => true} 
+                isCaptain1={isCaptain1}
+                isCaptain2={isCaptain2}
+                selectedPositionId={selectedPositionId}
+                t={t}
+              />
             </div>
 
             <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-6 text-center max-w-md">
@@ -712,7 +713,7 @@ export function PickBanPanel({
         )}
       </div>
 
-      {lobby.selectedMap && lobby.config.preset !== 'CASCA' && (
+      {lobby.selectedMap && (
         <div className="mb-4 flex flex-col items-center">
           <div className="w-full max-w-[550px]">
             <MapVisualizer 
@@ -799,8 +800,8 @@ export function PickBanPanel({
         </div>
       </div>
 
-      {/* MCL Player Selection */}
-      {lobby.config.preset === 'MCL' && currentTurn?.target === 'GOD' && currentTurn?.action === 'PICK' && isMyTurn && (
+      {/* MCL / FORJA Player Selection */}
+      {(lobby.config.preset === 'MCL' || lobby.config.preset === 'FORJA') && currentTurn?.target === 'GOD' && currentTurn?.action === 'PICK' && isMyTurn && (
         <div className="mt-2 p-3 bg-slate-900 border border-slate-800 rounded-2xl">
           <h4 className="text-xs font-bold text-slate-300 mb-2 text-center uppercase tracking-widest">
             {selectedGodId ? t.selectPlayerForGod || "Select a player for this God" : t.selectGodFirst || "Select a God first"}

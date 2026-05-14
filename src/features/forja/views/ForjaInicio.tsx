@@ -448,10 +448,17 @@ interface ForjaInicioProps extends ForjaViewProps {
   onRegisterClick: () => void;
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+/**
+ * Render the Forja de Hefesto "Início" view, including player listings, filters, registration controls, and admin/self modals.
+ *
+ * @param discordUser - The currently authenticated Discord user or `null` when not logged in
+ * @param isAdmin - Whether the current user has admin privileges (enables admin controls and modals)
+ * @param onRegisterClick - Called when the register/reserve CTA is activated
+ * @returns The root React element for the Forja Inicio view
+ */
 
 export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: ForjaInicioProps) {
-  const { rankedPlayers, loading, error, isLive } = useForjaPlayers();
+  const { rankedPlayers, loading, error, isLive } = useForjaPlayers(true);
   const { settings, maxParticipants, tierASize, isRegistrationOpen, deadlineMs } = useForjaSettings();
   const [filter, setFilter]    = useState<'all' | 'A' | 'B' | 'C' | 'reserve'>('all');
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');

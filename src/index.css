@@ -9,7 +9,12 @@
   --animate-glow-amber: glow-amber 2s infinite ease-in-out;
   --animate-glow-red: glow-red 2s infinite ease-in-out;
   --animate-glow-blue: glow-blue 2s infinite ease-in-out;
+  --animate-bounce-subtle: bounce-subtle 3s infinite ease-in-out;
 
+  @keyframes bounce-subtle {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+  }
   @keyframes glow-amber {
     0%, 100% { box-shadow: 0 0 5px rgba(245, 158, 11, 0.2), inset 0 0 5px rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.5); }
     50% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.4), inset 0 0 10px rgba(245, 158, 11, 0.2); border-color: rgba(245, 158, 11, 1); }
@@ -29,12 +34,7 @@
     @apply bg-slate-950 text-slate-100 antialiased min-h-screen relative;
   }
 
-  body::before {
-    content: '';
-    @apply fixed inset-0 -z-20 bg-cover bg-center bg-no-repeat opacity-50;
-    background-image: url('https://static.wikia.nocookie.net/ageofempires/images/2/2f/AoMR_IP_HS_triptych.jpeg/revision/latest');
-    filter: brightness(1.1) contrast(1.1) saturate(1.1);
-  }
+
 
   body::after {
     content: '';

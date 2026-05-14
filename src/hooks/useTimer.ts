@@ -3,6 +3,20 @@ import { Lobby } from '../types';
 import { MAPS, MAJOR_GODS } from '../constants';
 import { getServerTime } from '../lib/serverTime';
 
+/**
+ * Manage lobby countdown state and automatically trigger draft actions when the timer elapses.
+ *
+ * Tracks remaining seconds for the lobby draft timer, keeps the counter accurate across background tabs,
+ * and dispatches automatic random picks/bans/reveals (including god-picker support) when the lobby timer ends
+ * or when a delayed opponent window opens.
+ *
+ * @param lobby - The current lobby object or `null`. When `null` or when the lobby is not in an active drafting state, no timer runs.
+ * @param isCaptain1 - True when the caller represents captain A.
+ * @param isCaptain2 - True when the caller represents captain B.
+ * @param handleAction - Required callback to perform draft actions (e.g. picks, bans, reveals). Called with an action id and optional player info; the `options.isRandom` flag is set when the action was selected automatically.
+ * @param handlePickerAction - Optional callback used only during the `god_picker` phase to submit a god pick; receives the same arguments as `handleAction`.
+ * @returns An object containing `timeLeft` — the countdown in seconds remaining, or `null` when no active timer is available.
+ */
 export function useTimer(
   lobby: Lobby | null, 
   isCaptain1: boolean, 
@@ -147,16 +161,10 @@ export function useTimer(
         const usedGodsA = history.map(h => (h.picksA && h.picksA[0]) ? h.picksA[0] : null).filter(Boolean);
         const usedGodsB = history.map(h => (h.picksB && h.picksB[0]) ? h.picksB[0] : null).filter(Boolean);
 
-        const isCascaGroup = currentLobby.config.preset === 'CASCA' && currentLobby.config.tournamentStage === 'GROUP';
-        
-        // Decide which team god pool to use (if picking for self or helping opponent)
         const teamToPickFor = !myVote ? myTeam : (isCaptain1 ? 'B' : 'A');
         
-        const myGodPool = isCascaGroup 
-          ? MAJOR_GODS.filter(g => !currentLobby.config.allowedPantheons || currentLobby.config.allowedPantheons.length === 0 || currentLobby.config.allowedPantheons.includes(g.id)).map(g => g.id)
-          : (teamToPickFor === 'A' ? teamAGods : teamBGods);
-        
-        const myUsedGods = isCascaGroup ? [] : (teamToPickFor === 'A' ? usedGodsA : usedGodsB);
+        const myGodPool = (teamToPickFor === 'A' ? teamAGods : teamBGods);
+        const myUsedGods = (teamToPickFor === 'A' ? usedGodsA : usedGodsB);
         const availableGods: string[] = myGodPool.filter(id => !myUsedGods.includes(id));
 
         if (availableGods.length > 0) {
@@ -216,8 +224,7 @@ export function useTimer(
         const availableMaps = MAPS.filter(m => 
           allowedMaps.includes(m.id) && 
           !mapBans.includes(m.id) && 
-          !seriesMaps.includes(m.id) &&
-          (currentLobby.config.preset !== 'CASCA' || currentLobby.config.tournamentStage !== 'PLAYOFFS' || currentLobby.currentGame <= 1 || mapPool.includes(m.id))
+          !seriesMaps.includes(m.id)
         );
         if (availableMaps.length > 0) {
           const shuffled = shuffle(availableMaps);

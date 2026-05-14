@@ -89,6 +89,7 @@ export interface ForjaTeam {
   members: string[];
   pick_order: number;
   groupId?: string; // ID do Grupo (A, B, C, D)
+  image_url?: string; // URL da imagem do time (bloco)
 }
 
 // ─── Schedule ─────────────────────────────────────────────────────────────────
@@ -228,6 +229,16 @@ export interface ForjaSettings {
   tier_b_size?: number;
   /** Inscrições abertas especificamente para reservas */
   reserves_open?: boolean;
+  /**
+   * Formato dos playoffs.
+   * 'single_elim' = Eliminação simples (padrão).
+   * 'double_elim' = Eliminação dupla (implementação futura).
+   */
+  playoff_format?: 'single_elim' | 'double_elim';
+  /**
+   * Fase atual do torneio — usado na ForjaHome para exibir o contexto correto.
+   */
+  current_phase?: 'pre_tournament' | 'group_stage' | 'playoffs' | 'finished';
   updated_at: FirestoreTimestamp;
 }
 
@@ -273,6 +284,7 @@ export interface ForjaDiscordUser {
 // ─── Navegação ────────────────────────────────────────────────────────────────
 export type ForjaTabId =
   | 'inicio'
+  | 'inscritos'
   | 'regras'
   | 'mapas'
   | 'formato'

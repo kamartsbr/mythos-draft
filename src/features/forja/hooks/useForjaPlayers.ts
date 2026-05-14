@@ -9,8 +9,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ForjaPlayer } from '../types';
 import { RankedPlayer, computeRankedPlayers } from '../forjaUtils';
-// 🚨 MUDANÇA: Importando a busca "fria" no lugar da subscrição em tempo real
-import { getForjaPlayersOnce } from '../services/forjaService';
+import { getForjaPlayersOnce, subscribeToForjaPlayers } from '../services/forjaService';
 import { useForjaSettings } from './useForjaSettings';
 
 // ─── Mock Data (dev) ──────────────────────────────────────────────────────────
@@ -144,7 +143,19 @@ interface UseForjaPlayersResult {
   isLive: boolean;
 }
 
-export function useForjaPlayers(): UseForjaPlayersResult {
+/**
+ * Provide Forja players data and client-side rankings, using either a one-time fetch or a live subscription.
+ *
+ * @param wantsLive - When `true`, subscribe to live player updates; when `false`, perform a single fetch (or use development mock data if configured).
+ * @returns An object containing:
+ *  - `rankedPlayers` — players ranked according to current client settings,
+ *  - `bannedPlayers` — players whose `status` is `"banned"`,
+ *  - `rawPlayers` — the unmodified list of players from the source,
+ *  - `loading` — `true` while data is being fetched or subscription is initializing,
+ *  - `error` — an error message string when a fetch/subscription fails, or `null` otherwise,
+ *  - `isLive` — `true` when data is coming from an active live subscription, `false` for one-time fetch or mock data.
+ */
+export function useForjaPlayers(wantsLive = false): UseForjaPlayersResult {
   const [rawPlayers, setRawPlayers] = useState<ForjaPlayer[]>([]);
   const [loading, setLoading]       = useState(true);
   const [error,  setError]          = useState<string | null>(null);
@@ -160,6 +171,24 @@ export function useForjaPlayers(): UseForjaPlayersResult {
         setIsLive(false);
       }, 600);
       return () => clearTimeout(timer);
+    }
+    if (wantsLive) {
+      setLoading(true);
+      const unsub = subscribeToForjaPlayers(
+        data => {
+          setRawPlayers(data);
+          setIsLive(true);
+          setError(null);
+          setLoading(false);
+        },
+        err => {
+          console.error('[useForjaPlayers]', err);
+          setError('Erro na subscrição de players.');
+          setIsLive(false);
+          setLoading(false);
+        }
+      );
+      return () => unsub();
     }
 
     // Produção: Busca fria única no Firestore
@@ -190,7 +219,7 @@ export function useForjaPlayers(): UseForjaPlayersResult {
 
     // Cleanup caso o componente seja desmontado antes de carregar
     return () => { isMounted = false; };
-  }, []);
+  }, [wantsLive]);
 
   // Configurações em tempo real (tier_mode, cortes de tier, etc.)
   const { settings } = useForjaSettings();

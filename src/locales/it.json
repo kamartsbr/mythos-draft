@@ -369,5 +369,11 @@
     "blood_river_crossing": "Attraversamento del Fiume di Sangue",
     "valley_of_the_sun_serpent": "Valle del Serpente del Sole",
     "temple_of_the_jaguar_moon": "Tempio della Luna Giaguaro"
+  },
+  "donation": {
+    "title": "Offrimi un caffè",
+    "email": "goldpentakill@gmail.com",
+    "pixCopied": "Chiave PIX copiata!",
+    "pixCopyFailed": "Impossibile copiare la chiave PIX negli appunti"
   }
 }

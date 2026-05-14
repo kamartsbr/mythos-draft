@@ -16,6 +16,9 @@ import { ForjaViewProps } from '../types';
 import { lobbyService, generateId } from '../../../services/lobbyService';
 import { serverTimestamp } from 'firebase/firestore';
 import { Lobby, LobbyConfig } from '../../../types';
+import { getMCLPicks } from '../../../constants';
+import { FORJA_MAP_POOL } from '../../../data/maps';
+import { MAJOR_GODS } from '../../../data/gods';
 import { auth } from '../../../firebase';
 import { signInAnonymously } from 'firebase/auth';
 
@@ -31,9 +34,14 @@ interface CreateResult {
 // ─── Config Base FORJA ────────────────────────────────────────────────────────
 
 /**
- * Constrói a LobbyConfig base para um lobby FORJA (3v3, alternated picks,
- * sem map visualizer embutido — o motor usa as posições do MAPS[]).
- * Mutações aplicadas conforme a fase selecionada.
+ * Build a base LobbyConfig for a FORJA 3v3 BO3 custom draft with official rule defaults.
+ *
+ * The returned configuration sets series, team size, pick/ban behavior, allowed maps and pantheons,
+ * timer and privacy defaults, and phase-dependent flags (for example, per-map bans enabled in playoffs).
+ *
+ * @param lobbyName - Desired lobby name; an empty or whitespace name will be replaced with a standard default
+ * @param phase - Tournament phase that influences stage-specific rules (`'grupos'` or `'playoffs'`)
+ * @returns A fully populated LobbyConfig reflecting FORJA rules (3v3 BO3, alternated picks, FORJA map/pantheon constraints, and phase-adjusted settings)
  */
 function buildForjaConfig(
   lobbyName: string,
@@ -45,6 +53,7 @@ function buildForjaConfig(
     // ── Identidade ─────────────────────────────────────────────────────
     name: lobbyName.trim() || 'Forja — Partida Oficial',
     preset: 'FORJA',
+    isCustomDraft: true,
     tournamentStage: isPlayoffs ? 'PLAYOFFS' : 'GROUP',
 
     // ── Tamanho e Série ────────────────────────────────────────────────
@@ -66,8 +75,8 @@ function buildForjaConfig(
     mapBanCount: 0,
     mapTurnOrder: [],
     godTurnOrder: [],
-    allowedMaps: [],          // Usa a pool cacheada da Forja no roll do Mapa 3
-    allowedPantheons: ['Greek', 'Norse', 'Egyptian', 'Atlantean', 'Japanese', 'Chinese', 'Aztec'],
+    allowedMaps: [...FORJA_MAP_POOL],
+    allowedPantheons: MAJOR_GODS.map(g => g.id),
 
     // ── Regras de Série ────────────────────────────────────────────────
     firstMapRandom: false,
@@ -77,7 +86,7 @@ function buildForjaConfig(
 
     // ── Privacidade e Timer ────────────────────────────────────────────
     isPrivate: false,
-    timerDuration: 90,
+    timerDuration: 60,
 
     // ── Flags Exclusivas FORJA ─────────────────────────────────────────
     hasMap3RandomRoll: true,
@@ -86,9 +95,15 @@ function buildForjaConfig(
 }
 
 /**
- * Constrói o objeto Lobby inicial (status: waiting, sem capitães ainda).
- * A série tem 3 slots: Game 1 e 2 são "" (serão preenchidos pelos picks);
- * Game 3 é "" (será sorteado pelo ADMIN automaticamente após o Ready).
+ * Create the initial Lobby object in a 'waiting' state with default players, draft skeleton, timers, and metadata.
+ *
+ * The returned lobby is preconfigured for a 3v3 BO3 Forja custom draft: captains and player lists are empty,
+ * series slots are three empty map entries, picks are initialized with a 3v3 skeleton for the Draft UI,
+ * and timing/audit fields use server timestamps.
+ *
+ * @param id - The lobby identifier
+ * @param config - The LobbyConfig to embed in the created lobby
+ * @returns The newly constructed Lobby object ready to be persisted
  */
 function buildInitialLobby(id: string, config: LobbyConfig): Lobby {
   return {
@@ -116,9 +131,11 @@ function buildInitialLobby(id: string, config: LobbyConfig): Lobby {
     seriesMaps: ['', '', ''],   // Slots para G1, G2 e G3
     mapBans: [],
     turn: 0,
-    turnOrder: [],
+    turnOrder: [],  // gerado pelo lobbyService.setReady() quando ambos clicarem Ready
     bans: [],
-    picks: [],
+    // Skeleton de picks 3v3 (mesmo formato MCL): 6 slots corner/middle × 2 times.
+    // Necessário para a DraftUI renderizar os slots de jogadores antes do primeiro mapa.
+    picks: getMCLPicks(1, null, null),
     scoreA: 0,
     scoreB: 0,
     reportVoteA: null,

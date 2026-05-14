@@ -29,12 +29,19 @@ export const Footer: React.FC<FooterProps> = ({ t, lang }) => {
           <div className="space-y-4">
             <div className="flex items-center gap-3 text-amber-500">
               <div className="p-2 rounded-lg bg-amber-500/10">
-                <Heart className="w-5 h-5 fill-amber-500/20" />
+                <Coffee className="w-5 h-5 fill-amber-500/20 animate-bounce-subtle" />
               </div>
               <h3 className="text-xl font-bold tracking-tight uppercase">{t.supportProject}</h3>
             </div>
             <p className="text-slate-400 leading-relaxed text-sm md:text-base max-w-sm">
               {t.supportDesc}
+              <br />
+              <a 
+                href="mailto:goldpentakill@gmail.com" 
+                className="text-amber-500/60 hover:text-amber-500 transition-colors text-xs mt-2 block font-bold"
+              >
+                goldpentakill@gmail.com
+              </a>
             </p>
           </div>
 
@@ -82,7 +89,7 @@ export const Footer: React.FC<FooterProps> = ({ t, lang }) => {
               rel="noopener noreferrer"
               className="flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-br from-amber-500 to-amber-600 text-slate-950 font-black rounded-xl shadow-xl shadow-amber-500/10 hover:shadow-amber-500/20 transition-all uppercase tracking-wider text-xs whitespace-nowrap"
             >
-              <Coffee className="w-4 h-4" />
+              <Heart className="w-4 h-4" />
               {t.donateBtn}
               <ExternalLink className="w-3 h-3 opacity-50" />
             </motion.a>

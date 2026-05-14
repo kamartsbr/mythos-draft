@@ -5,6 +5,30 @@ import { Lobby, LobbyConfig, DraftTurn, TeamSize, PickEntry, SeriesType, Substit
 import { MAPS, MAJOR_GODS, PLAYER_COLORS, MCL_ROUND_MAPS } from '../constants';
 import { serverTimestamp } from 'firebase/firestore';
 
+/**
+ * Manage client-side draft state, permissions, optimistic updates, and actions for a lobby-based draft flow.
+ *
+ * Provides derived role flags, turn helpers, optimistic ready/action synchronization with lobby updates,
+ * a generator for standard map/god turn orders, and action helpers that call underlying services.
+ *
+ * @returns An object with:
+ *  - `error` / `setError`: current error message and setter.
+ *  - `loading`: unused loading flag.
+ *  - `handleAction`: perform a draft action (pick/ban/map pick/map ban) with optimistic state and in-flight protection.
+ *  - `handlePickerAction`: perform a picker-originated pick with optimistic state.
+ *  - `reportScore`: report match score and regenerate turn order when needed.
+ *  - `resetVotes`: reset vote state for the lobby.
+ *  - `handleReady`: set ready/unready for the caller's team with optimistic state.
+ *  - `isProcessing`: whether an action is currently being processed.
+ *  - `optimisticReady`: locally optimistic ready state (cleared when lobby confirms).
+ *  - `optimisticAction`: locally optimistic action pending confirmation.
+ *  - `generateStandardTurnOrder`: produce map and god draft turn orders from a lobby config, game number, and last winner.
+ *  - `updateRoster`: update team roster (picks and substitutions).
+ *  - `requestReset` / `respondReset`: request or respond to a lobby reset.
+ *  - `clearSubs`: clear last substitution records (admin/host action).
+ *  - `isMyTurn`: whether the current user (based on captain flags) has the current turn.
+ *  - `myTeam`: the caller's inferred team (`'A' | 'B' | null`).
+ */
 export function useDraft(
   lobby: Lobby | null, 
   isCaptain1: boolean, 
@@ -93,39 +117,7 @@ export function useDraft(
     const mapOrder: DraftTurn[] = [];
     const godOrder: DraftTurn[] = [];
     
-    // Special Case: Casca Grossa Group Stage (Always BO1, Random Map)
-    if (cfg.preset === 'CASCA' && cfg.tournamentStage === 'GROUP') {
-      if (gameNumber === 1) {
-        mapOrder.push({ player: 'ADMIN', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-      }
-      return { mapOrder, godOrder: [] };
-    }
-
-    // Special Case: Casca Grossa Playoffs
-    if (cfg.preset === 'CASCA' && cfg.tournamentStage === 'PLAYOFFS') {
-      if (gameNumber === 1) {
-        // 4 Map Bans (1-1-1-1)
-        for (let i = 0; i < 2; i++) {
-          mapOrder.push({ player: 'A', action: 'BAN', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-          mapOrder.push({ player: 'B', action: 'BAN', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-        }
-        
-        // Map Picks for Pool (Alternating)
-        const gameCount = cfg.seriesType === 'BO3' ? 3 : 
-                          cfg.seriesType === 'BO5' ? 5 : 
-                          cfg.seriesType === 'BO7' ? 7 : 
-                          (cfg.customGameCount || 1);
-        
-        const picksPerTeam = Math.floor(gameCount / 2) + 1;
-        for (let i = 0; i < picksPerTeam; i++) {
-          mapOrder.push({ player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-          mapOrder.push({ player: 'B', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-        }
-        
-        // System Picks G1
-        mapOrder.push({ player: 'ADMIN', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-      }
-    } else if (cfg.preset === 'MCL' || cfg.preset === 'FORJA') {
+    if (cfg.preset === 'MCL' || cfg.preset === 'FORJA') {
       if (gameNumber === 1) {
         mapOrder.push({ player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
       } else if (gameNumber === 2) {
@@ -206,23 +198,16 @@ export function useDraft(
       }
     }
 
-    // MCL Game 2 starts with Team B. Game 3 starts with loser of Game 2.
-    const startsWithB = (cfg.preset === 'MCL' && gameNumber === 2) || 
-                        (cfg.preset === 'MCL' && gameNumber > 2 && lastWinner === 'A');
+    // MCL / FORJA: Game 2 começa com B (Guest escolhe mapa e abre bans/picks).
+    // Game 3: o PERDEDOR do G2 escolhe primeiro — se A ganhou G2, B (o perdedor) abre.
+    const startsWithB =
+      ((cfg.preset === 'MCL' || cfg.preset === 'FORJA') && gameNumber === 2) ||
+      ((cfg.preset === 'MCL' || cfg.preset === 'FORJA') && gameNumber > 2 && lastWinner === 'A');
 
     if (cfg.hasBans) {
-      if (cfg.preset === 'CASCA') {
-        if (cfg.tournamentStage !== 'GROUP') {
-          for (let i = 0; i < cfg.banCount; i++) {
-            godOrder.push({ player: startsWithB ? 'B' : 'A', action: 'BAN', target: 'GOD', modifier: 'EXCLUSIVE', execution: 'NORMAL' });
-            godOrder.push({ player: startsWithB ? 'A' : 'B', action: 'BAN', target: 'GOD', modifier: 'EXCLUSIVE', execution: 'NORMAL' });
-          }
-        }
-      } else {
-        for (let i = 0; i < cfg.banCount; i++) {
-          godOrder.push({ player: startsWithB ? 'B' : 'A', action: 'BAN', target: 'GOD', modifier: cfg.isExclusive ? 'EXCLUSIVE' : 'GLOBAL', execution: 'NORMAL' });
-          godOrder.push({ player: startsWithB ? 'A' : 'B', action: 'BAN', target: 'GOD', modifier: cfg.isExclusive ? 'EXCLUSIVE' : 'GLOBAL', execution: 'NORMAL' });
-        }
+      for (let i = 0; i < cfg.banCount; i++) {
+        godOrder.push({ player: startsWithB ? 'B' : 'A', action: 'BAN', target: 'GOD', modifier: cfg.isExclusive ? 'EXCLUSIVE' : 'GLOBAL', execution: 'NORMAL' });
+        godOrder.push({ player: startsWithB ? 'A' : 'B', action: 'BAN', target: 'GOD', modifier: cfg.isExclusive ? 'EXCLUSIVE' : 'GLOBAL', execution: 'NORMAL' });
       }
     } else if (cfg.hasPerMapBans) {
       // FORJA Playoffs: 1 Ban de Deus por time antes dos picks em cada mapa
@@ -243,7 +228,7 @@ export function useDraft(
     }
 
     const finalPicksPerTeam = picksPerTeam - (cfg.acePick ? 1 : 0);
-    if (finalPicksPerTeam > 0 && !(cfg.preset === 'CASCA' && cfg.tournamentStage === 'GROUP')) {
+    if (finalPicksPerTeam > 0) {
       if (cfg.pickType === 'alternated') {
         let remainingA = finalPicksPerTeam;
         let remainingB = finalPicksPerTeam;
@@ -294,8 +279,27 @@ export function useDraft(
     return { mapOrder, godOrder };
   }, []);
 
-  const handleAction = useCallback(async (actionIdArg: any, playerId?: number, playerName?: string, options?: { isRandom?: boolean }) => {
-    if (!lobby || isProcessing) return;
+  /**
+   * Perform a draft action (pick/ban/map pick/map ban) with optimistic state and in-flight protection.
+   *
+   * @param actionIdArg - The ID of the action target (god ID, map ID, or 'REVEAL')
+   * @param playerId - Optional player ID for the pick
+   * @param playerName - Optional player name for the pick
+   * @param options - Optional configuration
+   * @param options.isRandom - Whether the action is a random selection
+   * @param options.force - Bypass the isProcessing guard to allow concurrent actions
+   *
+   * **SAFETY CONTRACT FOR `options.force`:**
+   * The `force` flag is intended for ADMIN auto-resolution only (e.g., ADMIN turns triggered by timeout).
+   * It bypasses the `isProcessing` guard and is safe because ADMIN use is single-threaded—driven by
+   * a setTimeout callback—and thus avoids concurrent races.
+   *
+   * **WARNING:** Do NOT use `force` in other contexts (e.g., manual user actions) as it can lead to
+   * race conditions where multiple actions fire simultaneously, corrupting draft state.
+   */
+  const handleAction = useCallback(async (actionIdArg: any, playerId?: number, playerName?: string, options?: { isRandom?: boolean; force?: boolean }) => {
+    if (!lobby) return;
+    if (isProcessing && !options?.force) return;
     
     if (typeof actionIdArg !== 'string') return;
     const actionId = actionIdArg;
@@ -482,7 +486,7 @@ export function useDraft(
                 );
                 if (available.length > 0) {
                   const randomId = available[Math.floor(Math.random() * available.length)];
-                  handleAction(randomId);
+                  handleAction(randomId, undefined, undefined, { force: true });
                 }
               }).catch(() => {
                 // Fallback: usa lista local de mapas
@@ -491,7 +495,7 @@ export function useDraft(
                   !seriesMaps.includes(m.id)
                 );
                 if (fallbackMaps.length > 0) {
-                  handleAction(fallbackMaps[Math.floor(Math.random() * fallbackMaps.length)].id);
+                  handleAction(fallbackMaps[Math.floor(Math.random() * fallbackMaps.length)].id, undefined, undefined, { force: true });
                 }
               });
             });
@@ -506,12 +510,11 @@ export function useDraft(
           const availableMaps = MAPS.filter(m => 
             allowedMaps.includes(m.id) && 
             !mapBans.includes(m.id) && 
-            !seriesMaps.includes(m.id) &&
-            !(lobby.config.preset === 'CASCA' && lobby.config.tournamentStage === 'PLAYOFFS' && mapPool.includes(m.id))
+            !seriesMaps.includes(m.id)
           );
           if (availableMaps.length > 0) {
             const randomMap = availableMaps[Math.floor(Math.random() * availableMaps.length)];
-            handleAction(randomMap.id);
+            handleAction(randomMap.id, undefined, undefined, { force: true });
           }
         }
       } else if (currentTurn.target === 'GOD') {
@@ -522,10 +525,10 @@ export function useDraft(
           );
           if (availableGods.length > 0) {
             const randomGod = availableGods[Math.floor(Math.random() * availableGods.length)];
-            handleAction(randomGod.id);
+            handleAction(randomGod.id, undefined, undefined, { force: true });
           }
         } else if (currentTurn.action === 'REVEAL') {
-          handleAction('REVEAL');
+          handleAction('REVEAL', undefined, undefined, { force: true });
         }
       }
     }, 2000);

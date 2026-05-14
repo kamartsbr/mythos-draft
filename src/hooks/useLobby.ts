@@ -4,6 +4,36 @@ import { Lobby, LobbyConfig, LobbySummary } from '../types';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
+/**
+ * Manages lobby state, presence, authentication-derived identity, admin status, and lobby actions for the UI.
+ *
+ * Exposes reactive state and action helpers for joining, creating, leaving, and administrating a lobby, plus automatic presence updates, Discord webhook triggers, and public-lobbies fetching.
+ *
+ * @param initialNickname - Initial display name to use for the current guest
+ * @returns An object with current lobby state, identity, status flags, control actions, and utility setters:
+ * - `lobby` — current lobby data or `null`
+ * - `lobbyId` — active lobby identifier or `null`
+ * - `setLobbyId` — setter for `lobbyId`
+ * - `guestId` — guest identifier (from localStorage or auth) or `null`
+ * - `nickname` — current display name
+ * - `setNickname` — setter for `nickname`
+ * - `isCaptain1`, `isCaptain2` — booleans indicating captain slots
+ * - `isSpectator` — boolean indicating spectator role
+ * - `setIsSpectator` — setter for `isSpectator`
+ * - `isAdmin` — boolean admin flag
+ * - `authenticateAdmin(token)` — grants admin when `token` matches the admin token
+ * - `logoutAdmin()` — revokes admin status
+ * - `publicLobbies` — list of fetched public lobby summaries
+ * - `error`, `setError` — current error message and setter
+ * - `loading` — boolean operation-in-progress flag
+ * - `join(id, role, preferredPosition, playerNames, newNickname?)` — join a lobby
+ * - `soloJoin(id, newNickname?)` — join a lobby as a solo player
+ * - `create(id, newLobby)` — create a lobby
+ * - `leave()` — leave the current lobby locally (clears URL param)
+ * - `leaveSlot()` — leave the occupied captain slot and locally leave
+ * - `forceReset()`, `resetCurrentGame()`, `forceFinish()`, `forceUnpause()`, `forceStartDraft()` — admin management actions
+ * - `isAuthReady` — whether initial auth state has been resolved
+ */
 export function useLobby(initialNickname: string) {
   const [guestId, setGuestId] = useState<string | null>(() => {
     try {
@@ -149,49 +179,57 @@ export function useLobby(initialNickname: string) {
     };
   }, [lobbyId, guestId, updatePresence]);
 
-// Subscriptions ---
-useEffect(() => {
-  if (!lobbyId) {
-    const unsub = lobbyService.subscribeToPublicLobbies((lobbies) => {
-      setPublicLobbies(Array.isArray(lobbies) ? lobbies.slice(0, PUBLIC_LOBBIES_PAGE_SIZE) : []);
-    });
+  // Subscriptions ---
+  // Public lobbies fetch (only when no lobbyId)
+  useEffect(() => {
+    if (lobbyId) return;
+
+    let isMounted = true;
+    lobbyService.getPublicLobbiesOnce()
+      .then((lobbies) => {
+        if (isMounted) {
+          setPublicLobbies(Array.isArray(lobbies) ? lobbies.slice(0, PUBLIC_LOBBIES_PAGE_SIZE) : []);
+        }
+      })
+      .catch(err => console.error("Erro ao buscar lobbies públicos:", err));
+
+    return () => { isMounted = false; };
+  }, [lobbyId]);
+
+  // Lobby subscription (only when lobbyId exists)
+  useEffect(() => {
+    if (!lobbyId || !guestId) return;
+
+    setPublicLobbies([]);
+
+    const unsub = lobbyService.subscribeToLobby(
+      lobbyId,
+      (data) => {
+        setLobby(prev => {
+          if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
+          return data;
+        });
+
+        const isC1 = data.captain1 === guestId;
+        const isC2 = data.captain2 === guestId;
+
+        setIsCaptain1(isC1);
+        setIsCaptain2(isC2);
+
+        const slotAvailable = !data.captain1 || !data.captain2;
+        const isFull = !!(data.captain1 && data.captain2);
+        const isFinished = data.status === 'finished';
+
+        const shouldBeSpectator = !isC1 && !isC2 && !slotAvailable && (isFull || isFinished);
+
+        setIsSpectator(shouldBeSpectator);
+      },
+      (err) => setError("Erro no Lobby: " + err.message)
+    );
+
     return unsub;
-  }
+  }, [lobbyId, guestId]);
 
-  setPublicLobbies([]); 
-
-  const unsub = lobbyService.subscribeToLobby(
-    lobbyId, 
-    (data) => {
-      // SÓ atualiza se algo importante mudou (evita o lag)
-      setLobby(prev => {
-        if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
-        return data;
-      });
-
-      const isC1 = data.captain1 === guestId;
-      const isC2 = data.captain2 === guestId;
-      
-      setIsCaptain1(isC1);
-      setIsCaptain2(isC2);
-
-      // Lógica de Espectador CORRIGIDA
-      // Só força espectador se as vagas de capitão estão PREENCHIDAS
-      const slotAvailable = !data.captain1 || !data.captain2;
-      const isFull = !!(data.captain1 && data.captain2);
-      const isFinished = data.status === 'finished';
-      
-      // Se não é capitão E não há slots disponíveis E o lobby está cheio ou finido
-      const shouldBeSpectator = !isC1 && !isC2 && !slotAvailable && (isFull || isFinished);
-      
-      setIsSpectator(shouldBeSpectator);
-    },
-    (err) => setError("Erro no Lobby: " + err.message)
-  );
-
-  return unsub;
-}, [lobbyId, guestId]);
-// --- Fim da substituição ---
   const join = useCallback(async (id: string, role: 'A' | 'B' | 'SPECTATOR', preferredPosition: number, playerNames: Record<number, string>, newNickname?: string) => {
     const finalNickname = newNickname || nickname;
     if (newNickname) {

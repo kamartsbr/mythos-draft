@@ -1,7 +1,22 @@
 import { useState, useEffect, useCallback } from 'react';
 import { LobbyConfig, SeriesType, TeamSize } from '../types';
-import { MAPS, MAJOR_GODS, RANKED_MAP_POOL, CASCA_GROSSA_POOL, CASCA_GROSSA_GROUP_POOL, CASCA_GROSSA_PLAYOFF_POOL, MCL_ROUND_MAPS, MCL_MAP_POOL, getMCLMapPool, FORJA_MAP_POOL } from '../constants';
+import { MAPS, MAJOR_GODS, RANKED_MAP_POOL, MCL_ROUND_MAPS, MCL_MAP_POOL, getMCLMapPool, FORJA_MAP_POOL } from '../constants';
 
+/**
+ * Manage lobby draft configuration state, saved presets, preset application, field-locking logic, and persistence to localStorage.
+ *
+ * The hook initializes state from localStorage (with normalization of maps and pantheons), persists the last config on change, and exposes helpers to apply presets, determine whether a given field is locked by the active preset, and save the current config as a preset.
+ *
+ * @returns An object exposing the draft configuration API:
+ * - `config` — the current `LobbyConfig`.
+ * - `setConfig` — state setter for `config`.
+ * - `lobbyName` — current lobby/preset name string.
+ * - `setLobbyName` — state setter for `lobbyName`.
+ * - `savedPresets` — array of persisted `LobbyConfig` presets loaded from localStorage.
+ * - `applyPreset` — function to apply a preset ID (updates `config` accordingly).
+ * - `isLocked` — function `(field: string) => boolean` that reports whether a config field is locked by the active preset.
+ * - `savePreset` — function that saves the current `config` (with `lobbyName`) into `savedPresets` and localStorage.
+ */
 export function useDraftConfig() {
   const [lobbyName, setLobbyName] = useState('');
   const [savedPresets, setSavedPresets] = useState<LobbyConfig[]>(() => {
@@ -164,7 +179,6 @@ export function useDraftConfig() {
     const manualFields = ['allowedMaps', 'allowedPantheons'];
     if (manualFields.includes(field)) {
       if (config.preset === 'MCL') return true;
-      if (config.preset === 'CASCA') return true;
       if (config.preset === 'FORJA') return true;
       return false;
     }
@@ -175,16 +189,6 @@ export function useDraftConfig() {
 
     if (config.preset === 'MCL' || config.preset === 'FORJA') {
       const lockedFields = ['seriesType', 'customGameCount', 'mapBanCount', 'banCount', 'isExclusive', 'pickType', 'teamSize', 'mapTurnOrder', 'firstMapRandom', 'loserPicksNextMap', 'acePick', 'tournamentStage'];
-      return lockedFields.includes(field);
-    }
-    if (config.preset === 'CASCA') {
-      const lockedFields = [
-        'teamSize', 'mapBanCount', 'banCount', 'isExclusive', 
-        'pickType', 'acePick', 'allowedMaps', 'allowedPantheons', 'loserPicksNextMap', 'firstMapRandom'
-      ];
-      if (config.tournamentStage === 'GROUP') {
-        lockedFields.push('seriesType');
-      }
       return lockedFields.includes(field);
     }
     if (config.preset === 'RANKED') {

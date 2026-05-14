@@ -16,6 +16,7 @@ import { lazyWithRetry } from '../../lib/lazyWithRetry';
 import './forja.css';
 
 // ── Sub-abas (Lazy) ───────────────────────────────────────────────────────────
+const ForjaHome        = lazyWithRetry(() => import('./views/ForjaHome'));
 const ForjaInicio      = lazyWithRetry(() => import('./views/ForjaInicio'));
 const ForjaRegras      = lazyWithRetry(() => import('./views/ForjaRegras'));
 const ForjaMapas       = lazyWithRetry(() => import('./views/ForjaMapas'));
@@ -33,19 +34,25 @@ const ForjaTimesManager = lazyWithRetry(() => import('./components/ForjaTimesMan
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 const PUBLIC_TABS: ForjaTab[] = [
-  { id: 'inicio' as ForjaTabId,   label: 'Início',   icon: '🏛️' },
-  { id: 'regras' as ForjaTabId,   label: 'Regras',   icon: '📜' },
-  { id: 'mapas' as ForjaTabId,    label: 'Mapas',    icon: '🗺️' },
-  { id: 'formato' as ForjaTabId,  label: 'Formato',  icon: '🐍' },
-  { id: 'schedule' as ForjaTabId, label: 'Schedule', icon: '📅' },
-  { id: 'times' as ForjaTabId,    label: 'Times',    icon: '🛡️' },
-  { id: 'tabela' as ForjaTabId,   label: 'Tabela',   icon: '📊' },
+  { id: 'inicio' as ForjaTabId,    label: 'Início',    icon: '🏛️' },
+  { id: 'inscritos' as ForjaTabId, label: 'Inscritos',  icon: '👥' },
+  { id: 'regras' as ForjaTabId,    label: 'Regras',    icon: '📜' },
+  { id: 'mapas' as ForjaTabId,     label: 'Mapas',     icon: '🗺️' },
+  { id: 'formato' as ForjaTabId,   label: 'Formato',   icon: '🐍' },
+  { id: 'schedule' as ForjaTabId,  label: 'Schedule',  icon: '📅' },
+  { id: 'times' as ForjaTabId,     label: 'Times',     icon: '🛡️' },
+  { id: 'tabela' as ForjaTabId,    label: 'Tabela',    icon: '📊' },
 ];
 
-const ADMIN_TABS: ForjaTab[] = [
+/** Visível para qualquer usuário Discord autenticado (participante ou admin). */
+const MEMBER_TABS: ForjaTab[] = [
   { id: 'custom-draft' as ForjaTabId, label: 'Draft Rápido', icon: '⚡' },
-  { id: 'admin-draft' as ForjaTabId,  label: 'Draft Admin',  icon: '🎯' },
-  { id: 'obs' as ForjaTabId,          label: 'OBS Mode',     icon: '📺' },
+];
+
+/** Visível apenas para admins. */
+const ADMIN_ONLY_TABS: ForjaTab[] = [
+  { id: 'admin-draft' as ForjaTabId, label: 'Draft Admin', icon: '🎯' },
+  { id: 'obs' as ForjaTabId,         label: 'OBS Mode',    icon: '📺' },
 ];
 
 // ── Countdown ─────────────────────────────────────────────────────────────────
@@ -70,7 +77,13 @@ function TabFallback() {
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
+/**
+ * Renders the Forja Hub interface for the 3v3 tournament, including header, tab navigation, tab content and registration modal.
+ *
+ * The component displays a dynamic set of tabs (public, member-only, admin-only and a draft-room when applicable), a deadline banner when registration is about to close, Discord authentication UI, admin quick actions (seed content), and a fullscreen OBS mode. Tab selection is synced to the `tab` query parameter and visibility of admin tabs depends on the current user's admin status.
+ *
+ * @returns The React element for the Forja Hub page.
+ */
 export default function ForjaHub() {
   const [activeTab, setActiveTab]       = useState<ForjaTabId>('inicio');
   const [showRegModal, setShowRegModal] = useState(false);
@@ -83,13 +96,31 @@ export default function ForjaHub() {
 
   const countdown = useCountdown(settings?.registration_deadline_ms ?? Date.now() + 999999999);
 
+  // Capitão logado (tem time no draft)
+  // Mostrar draft-room tab se o draft estiver ativo e o usuário for capitão ou admin
+  const isDraftActive = !!session && session.status === 'active';
+  const showDraftRoomTab = isDraftActive && (isAdmin || !!discordUser);
+
   // Ler aba da URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab') as ForjaTabId | null;
-    const allTabs = [...PUBLIC_TABS, ...ADMIN_TABS, { id: 'draft-room' as ForjaTabId }];
-    if (tab && allTabs.find(t => t.id === tab)) setActiveTab(tab);
-  }, []);
+
+    // Build allowed tabs respecting visibility rules
+    const allTabs = [
+      ...PUBLIC_TABS,
+      ...(showDraftRoomTab ? [{ id: 'draft-room' as ForjaTabId }] : []),
+      ...(discordUser ? MEMBER_TABS : []),
+      ...(isAdmin ? ADMIN_ONLY_TABS : [])
+    ];
+
+    if (tab && allTabs.find(t => t.id === tab)) {
+      setActiveTab(tab);
+    } else if (tab && !allTabs.find(t => t.id === tab)) {
+      // Tab not allowed for current user, redirect to default
+      setActiveTab(PUBLIC_TABS[0].id);
+    }
+  }, [isAdmin, discordUser, showDraftRoomTab]);
 
   const handleTabChange = useCallback((id: ForjaTabId) => {
     setActiveTab(id);
@@ -107,11 +138,6 @@ export default function ForjaHub() {
   };
 
   const sharedProps = { discordUser, isAdmin };
-
-  // Capitão logado (tem time no draft)
-  // Mostrar draft-room tab se o draft estiver ativo e o usuário for capitão ou admin
-  const isDraftActive = !!session && session.status === 'active';
-  const showDraftRoomTab = isDraftActive && (isAdmin || !!discordUser);
 
   // OBS mode: fullscreen sem chrome
   if (activeTab === 'obs') {
@@ -138,7 +164,10 @@ export default function ForjaHub() {
   const allVisibleTabs: ForjaTab[] = [
     ...PUBLIC_TABS,
     ...(showDraftRoomTab ? [{ id: 'draft-room' as ForjaTabId, label: 'Sala de Draft', icon: '🎯' }] : []),
-    ...(isAdmin ? ADMIN_TABS : []),
+    // 'Draft Rápido' — visível para qualquer usuário Discord logado
+    ...(discordUser ? MEMBER_TABS : []),
+    // Abas de controle — apenas admins
+    ...(isAdmin ? ADMIN_ONLY_TABS : []),
   ];
 
   // Mostrar banner de deadline apenas se < 24h e inscrições ainda abertas
@@ -253,7 +282,7 @@ export default function ForjaHub() {
               id={`forja-tab-${tab.id}`}
               role="tab"
               aria-selected={activeTab === tab.id}
-              className={`forja-tab-btn ${activeTab === tab.id ? 'forja-tab-btn--active' : ''} ${ADMIN_TABS.find(t => t.id === tab.id) ? 'forja-tab-btn--admin' : ''} ${tab.id === 'draft-room' ? 'forja-tab-btn--draft-room' : ''}`}
+              className={`forja-tab-btn ${activeTab === tab.id ? 'forja-tab-btn--active' : ''} ${[...MEMBER_TABS, ...ADMIN_ONLY_TABS].find(t => t.id === tab.id) ? 'forja-tab-btn--admin' : ''} ${tab.id === 'draft-room' ? 'forja-tab-btn--draft-room' : ''}`}
               onClick={() => handleTabChange(tab.id)}
             >
               <span className="forja-tab-icon">{tab.icon}</span>
@@ -267,18 +296,17 @@ export default function ForjaHub() {
       {/* ── Tab Content ───────────────────────── */}
       <main className="forja-tab-content">
         <Suspense fallback={<TabFallback />}>
-          {activeTab === 'inicio'      && <ForjaInicio {...sharedProps} onRegisterClick={() => setShowRegModal(true)} />}
+          {activeTab === 'inicio'      && <ForjaHome {...sharedProps} onRegisterClick={() => setShowRegModal(true)} onTabChange={handleTabChange} />}
+          {activeTab === 'inscritos'    && <ForjaInicio {...sharedProps} onRegisterClick={() => setShowRegModal(true)} />}
           {activeTab === 'regras'      && <ForjaRulesEditor {...sharedProps} />}
           {activeTab === 'mapas'       && <ForjaMapas {...sharedProps} />}
           {activeTab === 'formato'     && <ForjaFormato {...sharedProps} />}
           {activeTab === 'schedule'    && <ForjaSchedule {...sharedProps} />}
-          {activeTab === 'times'       && (isAdmin
-            ? <ForjaTimesManager {...sharedProps} />
-            : <ForjaTimes {...sharedProps} />)}
+          {activeTab === 'times'       && <ForjaTimes {...sharedProps} />}
           {activeTab === 'tabela'      && <ForjaTabela {...sharedProps} />}
-          {activeTab === 'draft-room'  && <ForjaDraftRoom {...sharedProps} />}
-          {activeTab === 'custom-draft' && <ForjaCustomDraft {...sharedProps} />}
-          {activeTab === 'admin-draft' && <ForjaAdminDraft {...sharedProps} />}
+          {activeTab === 'draft-room'  && showDraftRoomTab && <ForjaDraftRoom {...sharedProps} />}
+          {activeTab === 'custom-draft' && discordUser && <ForjaCustomDraft {...sharedProps} />}
+          {activeTab === 'admin-draft' && isAdmin && <ForjaAdminDraft {...sharedProps} />}
         </Suspense>
       </main>
 

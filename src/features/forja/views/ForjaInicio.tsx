@@ -448,7 +448,19 @@ interface ForjaInicioProps extends ForjaViewProps {
   onRegisterClick: () => void;
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+/**
+ * Render the Forja tournament landing page and player management UI.
+ *
+ * Displays registration hero or confirmation banner, player stats, filters, view toggles,
+ * and the players list (cards or table). Manages modals for admin and self-service actions,
+ * computes registration state (open/closed/reserve) from tournament settings and player counts,
+ * and forwards register/leave actions.
+ *
+ * @param discordUser - The current Discord user object (used to determine current user's identity and enable user-specific actions); may be null/undefined when not logged in.
+ * @param isAdmin - When true, enables admin controls such as adding players, opening settings, and viewing admin modals.
+ * @param onRegisterClick - Callback invoked when the register CTA is clicked.
+ * @returns The ForjaInicio section as a JSX element.
+ */
 
 export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: ForjaInicioProps) {
   const { rankedPlayers, loading, error, isLive } = useForjaPlayers(true);

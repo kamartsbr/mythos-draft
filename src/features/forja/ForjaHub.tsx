@@ -77,7 +77,13 @@ function TabFallback() {
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
+/**
+ * Root React component for the Forja hub that renders the tournament header, tabbed navigation, content views, and registration modal.
+ *
+ * Renders public, member and admin tabs (conditionally) and synchronizes the active tab with the URL. Displays a deadline banner when registration is open and less than 24 hours remain, provides Discord authentication UI, admin quick actions (seed content), and an OBS fullscreen mode for the admin OBS tab. Opening the registration modal and switching tabs update component state and the browser history accordingly.
+ *
+ * @returns The rendered Forja hub UI element including navigation, lazily loaded tab content, and the registration modal.
+ */
 export default function ForjaHub() {
   const [activeTab, setActiveTab]       = useState<ForjaTabId>('inicio');
   const [showRegModal, setShowRegModal] = useState(false);

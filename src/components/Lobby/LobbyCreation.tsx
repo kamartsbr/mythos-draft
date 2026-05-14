@@ -25,6 +25,26 @@ interface LobbyCreationProps {
   generateStandardTurnOrder: (cfg: LobbyConfig) => any;
 }
 
+/**
+ * Renders the lobby creation UI and manages local state for building and applying presets, maps, pantheons, and other lobby options.
+ *
+ * @param t - Localization strings and labels used throughout the UI
+ * @param lang - Current language code (e.g., 'en', 'pt') used for locale-sensitive formatting
+ * @param lobbyName - Current draft/lobby name
+ * @param setLobbyName - Setter for the draft/lobby name
+ * @param config - Current lobby configuration object (preset, allowedMaps, allowedPantheons, mclRound, seriesType, etc.)
+ * @param setConfig - Setter that updates the lobby configuration
+ * @param isLocked - Function that receives a config field name and returns whether that field is locked by the applied preset
+ * @param applyPreset - Callback to apply one of the top-level presets (e.g., 'CUSTOM', 'MCL', 'RANKED', 'FORJA')
+ * @param createLobby - Callback invoked to create the lobby with the current configuration
+ * @param generateStandardTurnOrder - (unused in this file) helper for generating standard turn order when needed
+ * @param isAdmin - Whether admin controls (persistence, Discord webhook) should be shown
+ * @param isPermanent - Admin toggle state for tournament persistence
+ * @param setIsPermanent - Setter for the tournament persistence toggle
+ * @param discordWebhookUrl - Admin-configured Discord webhook URL
+ * @param setDiscordWebhookUrl - Setter for the Discord webhook URL
+ * @returns The rendered JSX element for the lobby creation panel
+ */
 export function LobbyCreation({
   t,
   lang,
@@ -1033,6 +1053,12 @@ export function LobbyCreation({
 );
 }
 
+/**
+ * Renders a checkmark SVG icon.
+ *
+ * @param className - Optional CSS class applied to the outer SVG element for styling
+ * @returns The SVG element representing a checkmark
+ */
 function Check({ className }: { className?: string }) {
   return (
     <svg 

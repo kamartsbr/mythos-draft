@@ -5,6 +5,27 @@ import { Lobby, LobbyConfig, DraftTurn, TeamSize, PickEntry, SeriesType, Substit
 import { MAPS, MAJOR_GODS, PLAYER_COLORS, MCL_ROUND_MAPS } from '../constants';
 import { serverTimestamp } from 'firebase/firestore';
 
+/**
+ * Manage draft lifecycle state and actions for a lobby and expose state, derived flags, and action handlers to consumers.
+ *
+ * Provides optimistic UI handling, turn-order generation, admin auto-resolution (maps/gods/reveals), readiness and roster flows, score reporting, and helper booleans describing the caller's team and turn availability.
+ *
+ * @param lobby - The current lobby state or `null` when not connected
+ * @param isCaptain1 - True if the caller is captain of team A
+ * @param isCaptain2 - True if the caller is captain of team B
+ * @param guestId - Guest identifier used when performing ready actions
+ * @param lang - UI language code (currently unused)
+ * @returns An object with draft state, setters, and action handlers:
+ * - `error`, `setError` — current error message and setter
+ * - `loading` — reserved loading flag
+ * - `handleAction`, `handlePickerAction` — submit draft/map/god actions
+ * - `reportScore`, `resetVotes`, `handleReady` — reporting, vote reset, and ready toggles
+ * - `isProcessing` — whether an action is in flight
+ * - `optimisticReady`, `optimisticAction` — optimistic UI states for ready and pick/ban/map actions
+ * - `generateStandardTurnOrder` — generator for map and god turn orders from lobby config
+ * - `updateRoster`, `requestReset`, `respondReset`, `clearSubs` — roster and reset management helpers
+ * - `isMyTurn`, `myTeam` — booleans indicating if the caller may act for the current turn and which team the caller represents (`'A'`, `'B'`, or `null`)
+ */
 export function useDraft(
   lobby: Lobby | null, 
   isCaptain1: boolean, 

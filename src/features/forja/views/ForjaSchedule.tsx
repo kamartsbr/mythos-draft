@@ -121,7 +121,14 @@ function MatchCard({ entry, isAdmin, onEdit, onDelete }: {
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+/**
+ * Renders the schedule view with listing, admin controls, and an add/edit modal.
+ *
+ * Displays fetched schedule entries, loading and error states, an empty-state message, and a footer with a Discord link. When `isAdmin` is true, shows controls to add, edit, and remove entries; editing/adding opens a modal form and deleting prompts for confirmation.
+ *
+ * @param isAdmin - Whether the current user has administrative permissions (shows add/edit/delete controls when true)
+ * @returns The schedule section as a JSX element
+ */
 export default function ForjaSchedule({ isAdmin }: ForjaViewProps) {
   const { entries, loading, error } = useForjaSchedule();
   const [showForm, setShowForm]     = useState(false);

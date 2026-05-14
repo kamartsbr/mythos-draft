@@ -48,7 +48,14 @@ const PLAYOFF_FORMAT_LABEL: Record<string, string> = {
   double_elim: 'Eliminação Dupla',
 };
 
-// ─── TeamMemberPopover ────────────────────────────────────────────────────────
+/**
+ * Render a fixed-position popover that displays a team's members with avatars and a captain badge.
+ *
+ * @param team - Team data containing `members` (Discord IDs), `team_name`, and `captain_id` used to identify and label members
+ * @param players - Array of player objects used to look up member details by Discord ID
+ * @param anchor - Screen coordinates `{ x, y }` where the popover should be positioned (CSS `left` and `top`)
+ * @returns A positioned React element containing member avatars, names, and a "CAP" badge for the captain, or `null` if the team has no members
+ */
 
 function TeamMemberPopover({
   team,
@@ -108,7 +115,15 @@ function TeamMemberPopover({
   );
 }
 
-// ─── CompactStandings ─────────────────────────────────────────────────────────
+/**
+ * Render a compact standings card for a tournament group.
+ *
+ * @param group - Group label (e.g., "A", "B") displayed in the header
+ * @param standings - Array of team rows with computed stats to display and rank
+ * @param players - Player records used to populate the team member popover on hover
+ * @param onTabChange - Optional callback invoked to switch view tabs (passed through to child controls)
+ * @returns The JSX element for the compact group standings, including hover popover for team members
+ */
 
 function CompactStandings({
   group,
@@ -186,7 +201,14 @@ function CompactStandings({
   );
 }
 
-// ─── PrizeCard ────────────────────────────────────────────────────────────────
+/**
+ * Displays the total prize pool and the top three prize distribution entries formatted for the given currency.
+ *
+ * @param total - Total prize amount in the currency's units
+ * @param currency - ISO-like currency code; uses `R$` prefix when equal to `'BRL'`, otherwise `$`
+ * @param distribution - Array of distribution entries where each entry has `place`, `label`, and `percent` (percentage of `total` for that place)
+ * @returns A JSX element showing the formatted total and up to the first three distribution rows with computed amounts
+ */
 
 function PrizeCard({ total, currency, distribution }: {
   total: number;
@@ -232,6 +254,18 @@ interface ForjaHomeProps extends ForjaViewProps {
   onTabChange?: (tab: string) => void;
 }
 
+/**
+ * Render the Forja home dashboard showing phase, participants, prizes, upcoming matches, and compact group standings.
+ *
+ * Loads prize and lobby data, derives tournament phase/labels and compact group standings, and conditionally renders
+ * registration status, upcoming matches, prize card, group tables, empty/loading states, and an admin hint.
+ *
+ * @param discordUser - The current Discord user object (or `null`/`undefined` when not signed in)
+ * @param isAdmin - Whether the current user has administrative privileges for Forja
+ * @param onRegisterClick - Callback invoked when the user clicks the register button
+ * @param onTabChange - Optional callback invoked to request navigation to a different Forja tab (receives the tab id)
+ * @returns The rendered Forja home React element
+ */
 export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTabChange }: ForjaHomeProps) {
   const { settings }         = useForjaSettings();
   const { teams }             = useForjaTeams(true);

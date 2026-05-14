@@ -4,6 +4,20 @@ import { Lobby, LobbyConfig, LobbySummary } from '../types';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
+/**
+ * Manages lobby-related state and actions for the current user, including presence, subscriptions, role flags, admin helpers, and lobby CRUD/join operations.
+ *
+ * @param initialNickname - Initial nickname to seed the hook's `nickname` state (used when joining/creating lobbies and persisted when changed)
+ * @returns An object exposing current lobby state and controls:
+ *  - `lobby`, `lobbyId`, `setLobbyId` — current lobby data and id
+ *  - `guestId`, `nickname`, `setNickname` — identity and editable nickname
+ *  - `isCaptain1`, `isCaptain2`, `isSpectator`, `setIsSpectator` — role flags and setter for spectator status
+ *  - `isAdmin`, `authenticateAdmin`, `logoutAdmin` — admin state and authentication helpers
+ *  - `publicLobbies` — lightweight list of public lobbies
+ *  - `error`, `setError`, `loading` — status indicators
+ *  - `join`, `soloJoin`, `create`, `leave`, `leaveSlot`, `forceReset`, `resetCurrentGame`, `forceFinish`, `forceUnpause`, `forceStartDraft` — lobby actions and admin controls
+ *  - `isAuthReady` — whether Firebase auth initialization has completed
+ */
 export function useLobby(initialNickname: string) {
   const [guestId, setGuestId] = useState<string | null>(() => {
     try {

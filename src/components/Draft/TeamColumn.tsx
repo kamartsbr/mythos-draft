@@ -18,6 +18,22 @@ interface TeamColumnProps {
   optimisticAction?: { id: string, type: 'pick' | 'ban' | 'map_pick' | 'map_ban', playerId?: number, playerName?: string } | null;
 }
 
+/**
+ * Render a team's column for the lobby/draft UI, showing header, roster, bans, picks, substitutions, and footer info.
+ *
+ * Renders team-specific UI (team header, active roster during god draft, substitutions alert, map and god ban slots, player pick slots or compact tiles, and team stats). Applies an optimistic UI for in-progress pick/ban/map actions and shows a timed substitutions overlay when appropriate.
+ *
+ * @param team - Team identifier, either `'A'` or `'B'`
+ * @param lobby - Full lobby/game state (phase, status, currentGame, turn, config, picks, replayLog, captains, hovered IDs, etc.)
+ * @param isCurrentTurn - Whether this team is allowed to act in the current turn
+ * @param t - Translation/labels object used for UI text
+ * @param isCaptain1 - True if the current viewer is captain for team A
+ * @param isCaptain2 - True if the current viewer is captain for team B
+ * @param timeLeft - Optional remaining time for an active timer (seconds)
+ * @param timerDuration - Optional timer duration to display; falls back to lobby.config.timerDuration or 60
+ * @param optimisticAction - Optional optimistic action used to preview an in-progress pick/ban/map change
+ * @returns A React element representing the full team column UI
+ */
 export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptain2, timeLeft, timerDuration, optimisticAction }: TeamColumnProps) {
   const [showSubAlert, setShowSubAlert] = useState(false);
   const prevGameRef = useRef<number>(0);

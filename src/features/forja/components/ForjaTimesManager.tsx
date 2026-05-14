@@ -202,7 +202,16 @@ function DroppableZone({
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+/**
+ * Render the Forja Teams management interface with drag-and-drop team assembly.
+ *
+ * Renders pool, reserve and team columns, supports creating and deleting teams,
+ * moving players between zones, and assigning a team captain when `isAdmin` is true.
+ *
+ * @param discordUser - The current Discord user object (accepted but not used by this component).
+ * @param isAdmin - When true, enables administrative actions: creating/deleting teams, dragging players, and setting captains.
+ * @returns A React element representing the Forja teams management UI.
+ */
 
 export default function ForjaTimesManager({ discordUser, isAdmin }: ForjaViewProps) {
   const { rankedPlayers, loading: playersLoading } = useForjaPlayers(true);

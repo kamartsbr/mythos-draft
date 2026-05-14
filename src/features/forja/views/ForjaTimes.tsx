@@ -14,6 +14,16 @@ const ForjaTimesManager = React.lazy(() => import('../components/ForjaTimesManag
 // ─── Team Card ────────────────────────────────────────────────────────────────
 const TEAM_COLORS = ['#f59e0b','#60a5fa','#a78bfa','#4ade80','#f87171','#fb923c'];
 
+/**
+ * Render a styled team card showing the team's image, name, pick/order, average TG ELO, and member list; includes inline name and image editing controls when the current user is a captain or an admin.
+ *
+ * @param team - Team data (id, team_name, image_url, pick_order, captain_id, etc.)
+ * @param members - Resolved list of team members with player metadata (nick, avatar_url, tier, elo_tg, discord_id)
+ * @param colorIdx - Index into the TEAM_COLORS palette to style the card
+ * @param isAdmin - Whether the current user has global admin permissions
+ * @param isCaptain - Whether the current user is the team's captain
+ * @returns The JSX element representing the team card
+ */
 function TeamCard({ team, members, colorIdx, isAdmin, isCaptain }: {
   team: ForjaTeam;
   members: ForjaPlayer[];
@@ -269,7 +279,13 @@ function TeamCard({ team, members, colorIdx, isAdmin, isCaptain }: {
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+/**
+ * Render the Forja teams page showing team cards, loading/empty/error states and an optional admin visual manager.
+ *
+ * @param discordUser - The currently authenticated user (may be undefined); used to identify the user's captain status on a team.
+ * @param isAdmin - Whether the current user has administrative privileges; enables the visual manager and admin actions when true.
+ * @returns The rendered React element for the Forja teams view.
+ */
 export default function ForjaTimes({ discordUser, isAdmin }: ForjaViewProps) {
   const [showManager, setShowManager] = useState(false);
   const { teams, loading: teamsLoading, error: teamsError } = useForjaTeams(true);

@@ -27,6 +27,19 @@ function datetimeLocalToMs(val: string): number | null {
   return new Date(val).getTime();
 }
 
+/**
+ * Modal dialog for viewing and editing Forja tournament settings.
+ *
+ * Initializes form state from `currentSettings`, validates user input (participants and tier sizes),
+ * and persists updated settings when saved. The saved payload includes registration controls, optional
+ * timestamps (when set), participant/tier configuration, reserves flag, and the tournament's current
+ * phase and playoff format.
+ *
+ * @param discordUserId - Discord user id of the actor performing the save; passed to the save API.
+ * @param currentSettings - Existing tournament settings used to prefill the form; may be `null`.
+ * @param onClose - Callback invoked when the modal should be closed.
+ * @returns The rendered modal element containing the tournament settings form.
+ */
 export default function ForjaTournamentSettingsModal({ discordUserId, currentSettings, onClose }: Props) {
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState<string | null>(null);

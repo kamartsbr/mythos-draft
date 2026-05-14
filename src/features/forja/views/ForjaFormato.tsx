@@ -35,6 +35,14 @@ const SNAKE_EXAMPLE = [
 
 const TIER_COLOR: Record<string, string> = { A: '#facc15', B: '#60a5fa', C: '#94a3b8' };
 
+/**
+ * Renders a static visual explanation of the Snake Draft using a fixed 16-team example.
+ *
+ * Shows the Tier A captains (determined by ELO snapshot), the per-round pick order for Tier B and Tier C
+ * (driven by the local `SNAKE_EXAMPLE` data), and a static "final composition" summary for example seeds.
+ *
+ * @returns The JSX element that presents the Snake Draft visualization for 16 teams.
+ */
 function SnakeVisualizer() {
   return (
     <div className="forja-snake-visualizer">

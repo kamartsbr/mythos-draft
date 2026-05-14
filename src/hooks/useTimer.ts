@@ -3,6 +3,16 @@ import { Lobby } from '../types';
 import { MAPS, MAJOR_GODS } from '../constants';
 import { getServerTime } from '../lib/serverTime';
 
+/**
+ * Manages a lobby turn timer, updates remaining seconds, and automatically triggers draft/picker actions when time expires.
+ *
+ * @param lobby - Current lobby state used to compute timer, phase, turns, picks, bans, and configuration.
+ * @param isCaptain1 - True when the current client represents captain 1.
+ * @param isCaptain2 - True when the current client represents captain 2.
+ * @param handleAction - Callback invoked to perform a timed action (e.g., pick, ban, reveal). The hook may call this with an action id and optional player id/name; `options.isRandom` is set when the choice was selected automatically.
+ * @param handlePickerAction - Optional callback invoked for automatic god-picker selections during the `god_picker` phase; called similarly to `handleAction` and receives `options.isRandom` when the selection is automatic.
+ * @returns The remaining seconds for the active lobby timer, or `null` when no timer is applicable or valid.
+ */
 export function useTimer(
   lobby: Lobby | null, 
   isCaptain1: boolean, 

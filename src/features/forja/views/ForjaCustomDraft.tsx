@@ -34,9 +34,14 @@ interface CreateResult {
 // ─── Config Base FORJA ────────────────────────────────────────────────────────
 
 /**
- * Constrói a LobbyConfig base para um lobby FORJA (3v3, alternated picks,
- * sem map visualizer embutido — o motor usa as posições do MAPS[]).
- * Mutações aplicadas conforme a fase selecionada.
+ * Build a LobbyConfig for a Forja 3v3 draft using the Forja preset and ruleset.
+ *
+ * The `phase` selects the tournament stage and toggles phase-specific flags
+ * (for example, enabling per-map bans for playoffs).
+ *
+ * @param lobbyName - Lobby display name; whitespace is trimmed and an official default is used if empty
+ * @param phase - Draft phase, either `'grupos'` or `'playoffs'`, which determines stage-specific behavior
+ * @returns A fully populated `LobbyConfig` configured for a Forja draft (team size 3, BO3, alternated picks, Forja map and pantheon pools, timer set to 60s, and other Forja-specific flags)
  */
 function buildForjaConfig(
   lobbyName: string,
@@ -90,9 +95,14 @@ function buildForjaConfig(
 }
 
 /**
- * Constrói o objeto Lobby inicial (status: waiting, sem capitães ainda).
- * A série tem 3 slots: Game 1 e 2 são "" (serão preenchidos pelos picks);
- * Game 3 é "" (será sorteado pelo ADMIN automaticamente após o Ready).
+ * Create an initial Lobby object populated with default state for a newly created Forja draft.
+ *
+ * The returned lobby is initialized for the "waiting" phase with empty rosters/captains, three series map slots,
+ * a 3v3 pick skeleton for the Draft UI, default timers/timestamps, and other draft-related defaults.
+ *
+ * @param id - Unique lobby identifier
+ * @param config - Lobby configuration to attach to the new lobby
+ * @returns A fully initialized `Lobby` ready to be persisted (status `waiting`, initial timestamps, empty player lists, `seriesMaps` with three slots, `picks` prepopulated with a 3v3 skeleton, and `adminId` taken from the current auth user when available)
  */
 function buildInitialLobby(id: string, config: LobbyConfig): Lobby {
   return {

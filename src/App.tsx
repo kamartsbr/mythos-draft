@@ -42,6 +42,13 @@ export default function App() {
   );
 }
 
+/**
+ * Renders the main application content, routing between Forja, overlay/streamer HUD, the landing/home screen, and the lobby/draft UI.
+ *
+ * This component manages high-level application state (language, auth error, connection status), initializes authentication and connection checks, loads public lobbies, and coordinates lobby/draft hooks and UI modals. It selects the appropriate top-level view based on the current URL and lobby state and provides handlers used by child components (create/join/leave, nickname handling, sharing helpers, admin actions, etc.).
+ *
+ * @returns The rendered React element for the application's primary UI and routing branches (Forja hub, Streamer HUD/overlay, landing/home, or Draft UI).
+ */
 function AppContent() {
   const [lang, setLang] = useState<string>('en');
   const t = TRANSLATIONS[lang as keyof typeof TRANSLATIONS] || TRANSLATIONS.en;

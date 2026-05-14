@@ -18,6 +18,20 @@ interface GodPickerProps {
   myTeam?: 'A' | 'B' | 'BOTH' | null;
 }
 
+/**
+ * Renders the god selection UI for a lobby, allowing captains to pick or reveal gods and (for MCL preset) assign a chosen god to a player.
+ *
+ * @param lobby - Current lobby and game state used to derive available gods, picks, history, map, and phase.
+ * @param isCaptain1 - Whether the current client controls captain slot 1 (affects enabled interactions and reveal visuals).
+ * @param isCaptain2 - Whether the current client controls captain slot 2 (affects enabled interactions and reveal visuals).
+ * @param handlePickerAction - Callback invoked to submit a god pick; called with `(godId)` for normal presets and with `(godId, playerPosition)` when assigning a god to a player in the MCL flow.
+ * @param timeLeft - Remaining time value forwarded to visualizers for display.
+ * @param t - Translations/labels used throughout the component.
+ * @param optimisticAction - Optional optimistic UI action that may be used to show a pending pick before confirmation.
+ * @param isMyTurn - Whether it is the current player's turn (affects UI state).
+ * @param myTeam - The current player's team ('A' or 'B'), used to determine pools and votes.
+ * @returns The React element tree for the god picker interface.
+ */
 export function GodPicker({ lobby, isCaptain1, isCaptain2, handlePickerAction, timeLeft, t, optimisticAction, isMyTurn, myTeam }: GodPickerProps) {
   const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null);
   const [selectedGodId, setSelectedGodId] = useState<string | null>(null);

@@ -2,6 +2,19 @@ import { useState, useEffect, useCallback } from 'react';
 import { LobbyConfig, SeriesType, TeamSize } from '../types';
 import { MAPS, MAJOR_GODS, RANKED_MAP_POOL, MCL_ROUND_MAPS, MCL_MAP_POOL, getMCLMapPool, FORJA_MAP_POOL } from '../constants';
 
+/**
+ * Manage lobby/draft configuration state, persistence, preset application, field locking rules, and saving of user presets.
+ *
+ * @returns An object with the current configuration and helpers:
+ * - `config` — the active LobbyConfig
+ * - `setConfig` — setter for the active config
+ * - `lobbyName` — current lobby name
+ * - `setLobbyName` — setter for the lobby name
+ * - `savedPresets` — array of stored LobbyConfig presets
+ * - `applyPreset` — function to apply a preset identifier to the current config
+ * - `isLocked` — function that reports whether a given config field is locked under the current preset
+ * - `savePreset` — function that saves the current config as a new preset and persists presets to localStorage
+ */
 export function useDraftConfig() {
   const [lobbyName, setLobbyName] = useState('');
   const [savedPresets, setSavedPresets] = useState<LobbyConfig[]>(() => {

@@ -472,16 +472,35 @@ export async function updateTeamName(teamId: string, name?: string, captainId?: 
   invalidateTeamsCache();
 }
 
+/**
+ * Assigns or clears a team's group and refreshes the teams cache.
+ *
+ * Updates the `groupId` field of the team document identified by `teamId`. Pass `null` to remove the group assignment. This operation also invalidates the local teams cache so subsequent reads will fetch fresh data.
+ *
+ * @param teamId - ID of the team to update
+ * @param groupId - Group identifier to set on the team, or `null` to clear it
+ */
 export async function updateTeamGroup(teamId: string, groupId: string | null): Promise<void> {
   await updateDoc(doc(db, TEAMS_COL, teamId), { groupId });
   invalidateTeamsCache();
 }
 
+/**
+ * Updates a team's image URL and invalidates the teams cache.
+ *
+ * @param teamId - ID of the team to update
+ * @param imageUrl - New image URL for the team; set to `null` to remove the image
+ */
 export async function updateTeamImageUrl(teamId: string, imageUrl: string | null): Promise<void> {
   await updateDoc(doc(db, TEAMS_COL, teamId), { image_url: imageUrl });
   invalidateTeamsCache();
 }
 
+/**
+ * Permanently deletes a lobby document from the 'lobbies' collection.
+ *
+ * @param lobbyId - The ID of the lobby document to delete
+ */
 export async function deleteForjaLobby(lobbyId: string): Promise<void> {
   await deleteDoc(doc(db, 'lobbies', lobbyId));
 }

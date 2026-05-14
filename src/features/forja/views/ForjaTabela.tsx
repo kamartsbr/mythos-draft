@@ -10,6 +10,16 @@ import { FORJA_MAP_POOL, getMCLPicks } from '../../../constants';
 import { updateTeamGroup, deleteForjaLobby } from '../services/forjaService';
 import { lobbyService, generateId } from '../../../services/lobbyService';
 
+/**
+ * Render the Forja tournament standings, scheduled matches, and administrative controls.
+ *
+ * Displays group tables, group and playoff match lists, and live match statuses. When `isAdmin` is true,
+ * exposes UI to manage team group assignments, create official Forja lobbies with a generated match name and config,
+ * and remove existing Forja matches. The component subscribes to Forja lobbies in Firestore and updates the view in real time.
+ *
+ * @param isAdmin - Whether the current user has admin privileges; enables management UI when true
+ * @returns A React element containing standings, match lists, and optional admin interfaces
+ */
 export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
   const { teams } = useForjaTeams(true);
   const { rankedPlayers } = useForjaPlayers(true);

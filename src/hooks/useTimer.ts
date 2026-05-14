@@ -147,16 +147,10 @@ export function useTimer(
         const usedGodsA = history.map(h => (h.picksA && h.picksA[0]) ? h.picksA[0] : null).filter(Boolean);
         const usedGodsB = history.map(h => (h.picksB && h.picksB[0]) ? h.picksB[0] : null).filter(Boolean);
 
-        const isCascaGroup = currentLobby.config.preset === 'CASCA' && currentLobby.config.tournamentStage === 'GROUP';
-        
-        // Decide which team god pool to use (if picking for self or helping opponent)
         const teamToPickFor = !myVote ? myTeam : (isCaptain1 ? 'B' : 'A');
         
-        const myGodPool = isCascaGroup 
-          ? MAJOR_GODS.filter(g => !currentLobby.config.allowedPantheons || currentLobby.config.allowedPantheons.length === 0 || currentLobby.config.allowedPantheons.includes(g.id)).map(g => g.id)
-          : (teamToPickFor === 'A' ? teamAGods : teamBGods);
-        
-        const myUsedGods = isCascaGroup ? [] : (teamToPickFor === 'A' ? usedGodsA : usedGodsB);
+        const myGodPool = (teamToPickFor === 'A' ? teamAGods : teamBGods);
+        const myUsedGods = (teamToPickFor === 'A' ? usedGodsA : usedGodsB);
         const availableGods: string[] = myGodPool.filter(id => !myUsedGods.includes(id));
 
         if (availableGods.length > 0) {
@@ -216,8 +210,7 @@ export function useTimer(
         const availableMaps = MAPS.filter(m => 
           allowedMaps.includes(m.id) && 
           !mapBans.includes(m.id) && 
-          !seriesMaps.includes(m.id) &&
-          (currentLobby.config.preset !== 'CASCA' || currentLobby.config.tournamentStage !== 'PLAYOFFS' || currentLobby.currentGame <= 1 || mapPool.includes(m.id))
+          !seriesMaps.includes(m.id)
         );
         if (availableMaps.length > 0) {
           const shuffled = shuffle(availableMaps);

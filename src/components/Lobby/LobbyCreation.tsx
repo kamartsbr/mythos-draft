@@ -216,89 +216,42 @@ export function LobbyCreation({
               {
                 id: 'FORJA',
                 label: "Forja de Hefesto",
-                icon: "https://media.discordapp.net/attachments/1012117565860712499/1344686940029358172/f8d8393e-2b1b-4cf3-a72f-51ef1cceb3ca.webp"
+                icon: "/logo-forja.png"
               }
             ].map(preset => (
               <button
                 key={preset.id}
                 onClick={() => applyPreset(preset.id)}
                 className={cn(
-                  "py-2 px-1 rounded-lg border text-xs font-bold transition-all uppercase tracking-tighter text-center flex items-center justify-center gap-2",
+                  "py-3 px-4 rounded-xl border text-xs font-black transition-all uppercase tracking-tight flex items-center justify-start gap-4",
                   config.preset === preset.id 
-                    ? "bg-amber-500/10 border-amber-500 text-amber-500" 
+                    ? "bg-amber-500/10 border-amber-500 text-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.15)]" 
                     : "border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-slate-300"
                 )}
               >
-                    {preset.icon ? (
-                      <img 
-                        src={preset.icon} 
-                        alt="" 
-                        className="w-4 h-4 object-contain"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : null}
-                {preset.label}
+                    <div className="w-14 flex items-center justify-center flex-shrink-0">
+                      {preset.icon ? (
+                        <div className={cn(
+                          "flex items-center justify-center",
+                          preset.id === 'FORJA' ? "w-20 h-20 -ml-2" : "w-10 h-10"
+                        )}>
+                          <img 
+                            src={preset.icon} 
+                            alt="" 
+                            className="w-full h-full object-contain filter drop-shadow-md"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-10 h-10 rounded bg-slate-800/50" />
+                      )}
+                    </div>
+                <span className="flex-1 text-left">{preset.label}</span>
               </button>
             ))}
           </div>
           
-          <AnimatePresence mode="popLayout">
-            {config.preset === 'CASCA' && (
-              <motion.div
-                initial={{ height: 0, opacity: 0, marginBottom: 0 }}
-                animate={{ height: 'auto', opacity: 1, marginBottom: 16 }}
-                exit={{ height: 0, opacity: 0, marginBottom: 0 }}
-                className="overflow-hidden"
-              >
-                <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">
-                    {t.selectStage}
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { id: 'GROUP', label: t.cascaGrossaGroup },
-                      { id: 'PLAYOFFS', label: t.cascaGrossaPlayoffs }
-                    ].map(stage => (
-                      <button
-                        key={stage.id}
-                        onClick={() => {
-                          setConfig((prev: any) => {
-                            const newConfig = { ...prev, tournamentStage: stage.id as 'GROUP' | 'PLAYOFFS' };
-                            // Re-apply preset logic for the new stage
-                            newConfig.acePick = false;
-                            if (stage.id === 'GROUP') {
-                              newConfig.seriesType = 'BO1';
-                              newConfig.allowedMaps = CASCA_GROSSA_GROUP_POOL;
-                              newConfig.firstMapRandom = true;
-                              newConfig.mapBanCount = 0;
-                              newConfig.banCount = 0;
-                              newConfig.hasBans = false;
-                            } else {
-                              newConfig.seriesType = 'BO3';
-                              newConfig.allowedMaps = CASCA_GROSSA_PLAYOFF_POOL;
-                              newConfig.firstMapRandom = true;
-                              newConfig.mapBanCount = 2;
-                              newConfig.banCount = 2;
-                              newConfig.hasBans = true;
-                            }
-                            return newConfig;
-                          });
-                        }}
-                        className={cn(
-                          "py-2 rounded-lg border text-sm font-bold transition-all",
-                          config.tournamentStage === stage.id 
-                            ? "bg-amber-500 border-amber-500 text-slate-950" 
-                            : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700"
-                        )}
-                      >
-                        {stage.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+
 
           <AnimatePresence mode="popLayout">
             {config.preset === 'MCL' && (

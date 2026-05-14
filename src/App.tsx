@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { motion } from 'motion/react';
-import { Sword, Loader2, AlertTriangle, Github, MessageSquare, Scroll, User, X, Key, Shield, Heart } from 'lucide-react';
+import { Sword, Loader2, AlertTriangle, Github, MessageSquare, Scroll, User, X, Key, Shield, Heart, Coffee } from 'lucide-react';
 import { useLobby } from './hooks/useLobby';
 import { useDraft } from './hooks/useDraft';
 import { useDraftConfig } from './hooks/useDraftConfig';
@@ -433,36 +433,54 @@ function AppContent() {
         <StreamerHUD lobbyId={lobbyIdFromPath} />
       ) : (
         <>
-          {/* Top Left Donation Widget */}
+          {/* ── Top Left Donation Widget (Leveled Up) ── */}
           <div className="fixed top-4 left-4 z-[100] hidden lg:flex items-center gap-2">
-            <div className="bg-slate-900/80 backdrop-blur-md border border-slate-800 p-1.5 rounded-xl flex items-center gap-3 group hover:border-amber-500/30 transition-all duration-300">
-              <div className="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                <Heart className="w-3.5 h-3.5 text-amber-500 fill-amber-500/20" />
-              </div>
-              <div className="flex flex-col pr-1">
-                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none mb-0.5">Support</span>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText("41345391889");
-                      alert("PIX Key copied!");
-                    }}
-                    className="text-[10px] font-black text-white hover:text-amber-500 transition-colors uppercase tracking-tight"
+            <motion.div 
+              initial={{ x: -20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              className="bg-slate-900/60 backdrop-blur-xl border border-white/5 p-1 rounded-2xl flex items-center gap-1 group hover:border-amber-500/30 transition-all duration-500 shadow-2xl shadow-black/50"
+            >
+              {/* Coffee Icon / Label */}
+              <div className="flex items-center gap-3 pl-3 pr-2 py-2">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-amber-500 blur-md opacity-20 group-hover:opacity-40 transition-opacity" />
+                  <Coffee className="w-4 h-4 text-amber-500 relative animate-bounce-subtle" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest leading-none mb-1">Buy me a coffee</span>
+                  <a 
+                    href="mailto:goldpentakill@gmail.com" 
+                    className="text-[9px] text-slate-500 hover:text-amber-400 transition-colors flex items-center gap-1"
                   >
-                    PIX
-                  </button>
-                  <div className="w-1 h-1 rounded-full bg-slate-700" />
-                  <a
-                    href="https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=joaocarfan@hotmail.com&currency_code=USD"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[10px] font-black text-white hover:text-amber-500 transition-colors uppercase tracking-tight"
-                  >
-                    PayPal
+                    goldpentakill@gmail.com
                   </a>
                 </div>
               </div>
-            </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-1 p-1 bg-white/5 rounded-xl border border-white/5">
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText("41345391889");
+                    alert("PIX Key copied!");
+                  }}
+                  className="px-3 py-1.5 text-[10px] font-black text-white hover:text-amber-500 hover:bg-amber-500/10 rounded-lg transition-all uppercase tracking-tight flex items-center gap-1.5"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.5)]" />
+                  PIX
+                </button>
+                <div className="w-px h-4 bg-white/10" />
+                <a
+                  href="https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=joaocarfan@hotmail.com&currency_code=USD"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 text-[10px] font-black text-white hover:text-amber-500 hover:bg-amber-500/10 rounded-lg transition-all uppercase tracking-tight flex items-center gap-1.5"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
+                  PayPal
+                </a>
+              </div>
+            </motion.div>
           </div>
 
           {/* Global Language Toggle - Show when not in a lobby or when auth is required */}

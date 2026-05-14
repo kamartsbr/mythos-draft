@@ -54,15 +54,11 @@ export function GodPicker({ lobby, isCaptain1, isCaptain2, handlePickerAction, t
   const usedGodsA = history.map(h => h.picksA ? h.picksA[0] : null).filter(Boolean);
   const usedGodsB = history.map(h => h.picksB ? h.picksB[0] : null).filter(Boolean);
 
-  const isCascaGroup = lobby.config.preset === 'CASCA' && lobby.config.tournamentStage === 'GROUP';
   const gameMap = MAPS.find(m => m.id === lobby.selectedMap);
   
   const allowedPantheons = Array.isArray(lobby.config.allowedPantheons) ? lobby.config.allowedPantheons : [];
-  const myGodPool = isCascaGroup 
-    ? MAJOR_GODS.filter(g => g.culture !== 'Aztec' && (allowedPantheons.length === 0 || allowedPantheons.includes(g.id))).map(g => g.id)
-    : (myTeam === 'A' ? teamAGods : teamBGods);
-    
-  const myUsedGods = isCascaGroup ? [] : (myTeam === 'A' ? usedGodsA : usedGodsB);
+  const myGodPool = (myTeam === 'A' ? teamAGods : teamBGods);
+  const myUsedGods = (myTeam === 'A' ? usedGodsA : usedGodsB);
 
   const opponentTeam = myTeam === 'A' ? 'B' : 'A';
   const opponentVote = opponentTeam === 'A' ? lobby.pickerVoteA : lobby.pickerVoteB;
@@ -336,12 +332,12 @@ export function GodPicker({ lobby, isCaptain1, isCaptain2, handlePickerAction, t
           )}
         </div>
 
-        {/* Footer Note */}
+          {/* Footer Note */}
         <div className="p-2 bg-slate-950 border-t border-slate-800/50 shrink-0">
           <div className="flex items-center justify-center gap-2 text-slate-600">
             <Info className="w-2.5 h-2.5" />
             <p className="text-[7px] font-bold uppercase tracking-widest">
-              {isCascaGroup ? t.godPickerNoteGroup : t.godPickerNote}
+              {t.godPickerNote}
             </p>
           </div>
         </div>

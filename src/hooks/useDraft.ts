@@ -93,39 +93,7 @@ export function useDraft(
     const mapOrder: DraftTurn[] = [];
     const godOrder: DraftTurn[] = [];
     
-    // Special Case: Casca Grossa Group Stage (Always BO1, Random Map)
-    if (cfg.preset === 'CASCA' && cfg.tournamentStage === 'GROUP') {
-      if (gameNumber === 1) {
-        mapOrder.push({ player: 'ADMIN', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-      }
-      return { mapOrder, godOrder: [] };
-    }
-
-    // Special Case: Casca Grossa Playoffs
-    if (cfg.preset === 'CASCA' && cfg.tournamentStage === 'PLAYOFFS') {
-      if (gameNumber === 1) {
-        // 4 Map Bans (1-1-1-1)
-        for (let i = 0; i < 2; i++) {
-          mapOrder.push({ player: 'A', action: 'BAN', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-          mapOrder.push({ player: 'B', action: 'BAN', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-        }
-        
-        // Map Picks for Pool (Alternating)
-        const gameCount = cfg.seriesType === 'BO3' ? 3 : 
-                          cfg.seriesType === 'BO5' ? 5 : 
-                          cfg.seriesType === 'BO7' ? 7 : 
-                          (cfg.customGameCount || 1);
-        
-        const picksPerTeam = Math.floor(gameCount / 2) + 1;
-        for (let i = 0; i < picksPerTeam; i++) {
-          mapOrder.push({ player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-          mapOrder.push({ player: 'B', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-        }
-        
-        // System Picks G1
-        mapOrder.push({ player: 'ADMIN', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-      }
-    } else if (cfg.preset === 'MCL' || cfg.preset === 'FORJA') {
+    if (cfg.preset === 'MCL' || cfg.preset === 'FORJA') {
       if (gameNumber === 1) {
         mapOrder.push({ player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
       } else if (gameNumber === 2) {
@@ -213,18 +181,9 @@ export function useDraft(
       ((cfg.preset === 'MCL' || cfg.preset === 'FORJA') && gameNumber > 2 && lastWinner === 'A');
 
     if (cfg.hasBans) {
-      if (cfg.preset === 'CASCA') {
-        if (cfg.tournamentStage !== 'GROUP') {
-          for (let i = 0; i < cfg.banCount; i++) {
-            godOrder.push({ player: startsWithB ? 'B' : 'A', action: 'BAN', target: 'GOD', modifier: 'EXCLUSIVE', execution: 'NORMAL' });
-            godOrder.push({ player: startsWithB ? 'A' : 'B', action: 'BAN', target: 'GOD', modifier: 'EXCLUSIVE', execution: 'NORMAL' });
-          }
-        }
-      } else {
-        for (let i = 0; i < cfg.banCount; i++) {
-          godOrder.push({ player: startsWithB ? 'B' : 'A', action: 'BAN', target: 'GOD', modifier: cfg.isExclusive ? 'EXCLUSIVE' : 'GLOBAL', execution: 'NORMAL' });
-          godOrder.push({ player: startsWithB ? 'A' : 'B', action: 'BAN', target: 'GOD', modifier: cfg.isExclusive ? 'EXCLUSIVE' : 'GLOBAL', execution: 'NORMAL' });
-        }
+      for (let i = 0; i < cfg.banCount; i++) {
+        godOrder.push({ player: startsWithB ? 'B' : 'A', action: 'BAN', target: 'GOD', modifier: cfg.isExclusive ? 'EXCLUSIVE' : 'GLOBAL', execution: 'NORMAL' });
+        godOrder.push({ player: startsWithB ? 'A' : 'B', action: 'BAN', target: 'GOD', modifier: cfg.isExclusive ? 'EXCLUSIVE' : 'GLOBAL', execution: 'NORMAL' });
       }
     } else if (cfg.hasPerMapBans) {
       // FORJA Playoffs: 1 Ban de Deus por time antes dos picks em cada mapa
@@ -245,7 +204,7 @@ export function useDraft(
     }
 
     const finalPicksPerTeam = picksPerTeam - (cfg.acePick ? 1 : 0);
-    if (finalPicksPerTeam > 0 && !(cfg.preset === 'CASCA' && cfg.tournamentStage === 'GROUP')) {
+    if (finalPicksPerTeam > 0) {
       if (cfg.pickType === 'alternated') {
         let remainingA = finalPicksPerTeam;
         let remainingB = finalPicksPerTeam;
@@ -508,8 +467,7 @@ export function useDraft(
           const availableMaps = MAPS.filter(m => 
             allowedMaps.includes(m.id) && 
             !mapBans.includes(m.id) && 
-            !seriesMaps.includes(m.id) &&
-            !(lobby.config.preset === 'CASCA' && lobby.config.tournamentStage === 'PLAYOFFS' && mapPool.includes(m.id))
+            !seriesMaps.includes(m.id)
           );
           if (availableMaps.length > 0) {
             const randomMap = availableMaps[Math.floor(Math.random() * availableMaps.length)];

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { LobbyConfig, SeriesType, TeamSize } from '../types';
-import { MAPS, MAJOR_GODS, RANKED_MAP_POOL, CASCA_GROSSA_POOL, CASCA_GROSSA_GROUP_POOL, CASCA_GROSSA_PLAYOFF_POOL, MCL_ROUND_MAPS, MCL_MAP_POOL, getMCLMapPool, FORJA_MAP_POOL } from '../constants';
+import { MAPS, MAJOR_GODS, RANKED_MAP_POOL, MCL_ROUND_MAPS, MCL_MAP_POOL, getMCLMapPool, FORJA_MAP_POOL } from '../constants';
 
 export function useDraftConfig() {
   const [lobbyName, setLobbyName] = useState('');
@@ -164,7 +164,6 @@ export function useDraftConfig() {
     const manualFields = ['allowedMaps', 'allowedPantheons'];
     if (manualFields.includes(field)) {
       if (config.preset === 'MCL') return true;
-      if (config.preset === 'CASCA') return true;
       if (config.preset === 'FORJA') return true;
       return false;
     }
@@ -175,16 +174,6 @@ export function useDraftConfig() {
 
     if (config.preset === 'MCL' || config.preset === 'FORJA') {
       const lockedFields = ['seriesType', 'customGameCount', 'mapBanCount', 'banCount', 'isExclusive', 'pickType', 'teamSize', 'mapTurnOrder', 'firstMapRandom', 'loserPicksNextMap', 'acePick', 'tournamentStage'];
-      return lockedFields.includes(field);
-    }
-    if (config.preset === 'CASCA') {
-      const lockedFields = [
-        'teamSize', 'mapBanCount', 'banCount', 'isExclusive', 
-        'pickType', 'acePick', 'allowedMaps', 'allowedPantheons', 'loserPicksNextMap', 'firstMapRandom'
-      ];
-      if (config.tournamentStage === 'GROUP') {
-        lockedFields.push('seriesType');
-      }
       return lockedFields.includes(field);
     }
     if (config.preset === 'RANKED') {

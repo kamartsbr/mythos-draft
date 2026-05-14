@@ -201,32 +201,28 @@ export const draftService = {
           if (turn.player === 'ADMIN') {
             updates.seriesMaps![0] = id;
           } else {
-            if (freshLobby.config.preset === 'CASCA' && freshLobby.config.tournamentStage === 'PLAYOFFS') {
-              if (!updates.mapPool) updates.mapPool = [];
-              updates.mapPool.push(id);
+            const emptySlotIndex = updates.seriesMaps!.indexOf("");
+            if (emptySlotIndex !== -1) {
+              if ((freshLobby.config.preset === 'MCL' || freshLobby.config.preset === 'FORJA') && emptySlotIndex !== (freshLobby.currentGame - 1)) {
+                return false;
+              }
+              updates.seriesMaps![emptySlotIndex] = id;
             } else {
-              const emptySlotIndex = updates.seriesMaps!.indexOf("");
-              if (emptySlotIndex !== -1) {
-                if ((freshLobby.config.preset === 'MCL' || freshLobby.config.preset === 'FORJA') && emptySlotIndex !== (freshLobby.currentGame - 1)) {
-                  return false;
-                }
-                updates.seriesMaps![emptySlotIndex] = id;
-              } else {
-                const gameCount = freshLobby.config.seriesType === 'BO1' ? 1 :
-                  freshLobby.config.seriesType === 'BO3' ? 3 :
-                    freshLobby.config.seriesType === 'BO5' ? 5 :
-                      freshLobby.config.seriesType === 'BO7' ? 7 :
-                        freshLobby.config.seriesType === 'BO9' ? 9 :
-                          (freshLobby.config.customGameCount || 1);
+              const gameCount = freshLobby.config.seriesType === 'BO1' ? 1 :
+                freshLobby.config.seriesType === 'BO3' ? 3 :
+                  freshLobby.config.seriesType === 'BO5' ? 5 :
+                    freshLobby.config.seriesType === 'BO7' ? 7 :
+                      freshLobby.config.seriesType === 'BO9' ? 9 :
+                        (freshLobby.config.customGameCount || 1);
 
-                if (updates.seriesMaps!.length < gameCount) {
-                  updates.seriesMaps!.push(id);
-                } else {
-                  return false;
-                }
+              if (updates.seriesMaps!.length < gameCount) {
+                updates.seriesMaps!.push(id);
+              } else {
+                return false;
               }
             }
           }
+
           updates.selectedMap = id;
 
           if (freshLobby.config.preset === 'MCL' || freshLobby.config.preset === 'FORJA') {

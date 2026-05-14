@@ -369,10 +369,10 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
                             >
                               <td style={{ padding: '0.75rem', fontWeight: 600 }}>
                                  <span style={{ marginRight: '0.5rem', opacity: 0.5 }}>{idx + 1}.</span>
-                                 {row.team_name}
-                                 <span style={{ marginLeft: '0.5rem', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 400 }}>
-                                   (Cap: {captainNick})
+                                 <span style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: 400, marginRight: '0.5rem' }}>
+                                   [{captainNick}]
                                  </span>
+                                 {row.team_name}
                               </td>
                               <td style={{ padding: '0.75rem', textAlign: 'center' }}>{row.matchesPlayed}</td>
                               <td style={{ padding: '0.75rem', textAlign: 'center', color: '#4ade80' }}>{row.gamesWon}</td>

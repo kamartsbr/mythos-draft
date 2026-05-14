@@ -80,25 +80,7 @@ export const RANKED_MAP_POOL = [
   'marsh', 'savannah', 'tundra', 'valley_of_kings', 'nile_shallows'
 ];
 
-export const CASCA_GROSSA_POOL = [
-  'alfheim', 'anatolia', 'arena', 'watering_hole', 'gold_rush', 'steppe', 'giza', 
-  'ghost_lake', 'qinghai_lake', 'blue_lagoon', 'mediterranean', 'midgard', 
-  'mirage', 'oasis', 'marsh', 'yellow_river', 'savannah', 'tundra', 
-  'nile_shallows', 'erebus'
-];
 
-export const CASCA_GROSSA_GROUP_POOL = [
-  'alfheim', 'anatolia', 'watering_hole', 'elysium', 'steppe', 'giza', 'ghost_lake', 
-  'blue_lagoon', 'megalopolis', 'oasis', 'marsh', 'savannah', 'tundra', 
-  'nile_shallows'
-];
-
-export const CASCA_GROSSA_PLAYOFF_POOL = [
-  'alfheim', 'anatolia', 'arena', 'watering_hole', 'gold_rush', 'steppe', 'giza', 
-  'ghost_lake', 'qinghai_lake', 'blue_lagoon', 'mediterranean', 'midgard', 
-  'mirage', 'oasis', 'marsh', 'yellow_river', 'savannah', 'tundra', 
-  'nile_shallows', 'erebus'
-];
 
 export const MCL_MAP_POOL = [
   ...RANKED_MAP_POOL,

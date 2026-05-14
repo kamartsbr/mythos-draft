@@ -225,14 +225,8 @@ export function PickBanPanel({
       maps = MAPS.filter(m => allowedMaps.includes(m.id));
     }
 
-    // Special Case: Casca Grossa Playoffs restricted selection for subsequent games
-    const mapPool = Array.isArray(lobby.mapPool) ? lobby.mapPool : [];
-    if (lobby.config.preset === 'CASCA' && lobby.config.tournamentStage === 'PLAYOFFS' && lobby.currentGame > 1 && mapPool.length > 0) {
-      maps = maps.filter(m => mapPool.includes(m.id));
-    }
-
     return maps;
-  }, [lobby.config.allowedMaps, lobby.config.preset, lobby.config.tournamentStage, lobby.currentGame, lobby.mapPool]);
+  }, [lobby.config.allowedMaps]);
 
   const picks = Array.isArray(lobby.picks) ? lobby.picks : [];
   const bans = Array.isArray(lobby.bans) ? lobby.bans : [];
@@ -494,16 +488,14 @@ export function PickBanPanel({
 
           <div className="flex-1 p-8 flex flex-col items-center gap-8">
           <div className="w-full max-w-[550px]">
-              {lobby.config.preset !== 'CASCA' && (
-                <MapVisualizer 
-                  lobby={lobby} 
-                  isVisible={() => true} 
-                  isCaptain1={isCaptain1}
-                  isCaptain2={isCaptain2}
-                  selectedPositionId={selectedPositionId}
-                  t={t}
-                />
-              )}
+              <MapVisualizer 
+                lobby={lobby} 
+                isVisible={() => true} 
+                isCaptain1={isCaptain1}
+                isCaptain2={isCaptain2}
+                selectedPositionId={selectedPositionId}
+                t={t}
+              />
             </div>
 
             <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-6 text-center max-w-md">
@@ -712,7 +704,7 @@ export function PickBanPanel({
         )}
       </div>
 
-      {lobby.selectedMap && lobby.config.preset !== 'CASCA' && (
+      {lobby.selectedMap && (
         <div className="mb-4 flex flex-col items-center">
           <div className="w-full max-w-[550px]">
             <MapVisualizer 

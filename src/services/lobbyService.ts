@@ -955,10 +955,10 @@ export const lobbyService = {
     
     try {
       const indexSnap = await getDoc(doc(db, 'metadata', 'lobby_index'));
-      
+
       if (indexSnap.exists()) {
         const data = indexSnap.data() as any;
-        if (Array.isArray(data.activeLobbies) && data.activeLobbies.length > 0) {
+        if (data.initialized === true && Array.isArray(data.activeLobbies)) {
           return data.activeLobbies;
         }
       }
@@ -1526,6 +1526,7 @@ export const lobbyService = {
         })
         .catch(err => {
           handleFirestoreError(err, OperationType.LIST, 'presets');
+          presetsPromise = null; // Clear failed promise to allow retry
           return [];
         });
     }

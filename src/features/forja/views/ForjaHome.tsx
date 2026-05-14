@@ -334,7 +334,7 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
   // Standings por grupo
   const calculateStandings = (groupId: string): StandingRow[] => {
     const groupTeams   = teams.filter(t => t.groupId === groupId);
-    const groupLobbies = lobbies.filter(l => l.stage === 'GROUP' && l.config?.forjaGroupId === groupId && l.status === 'completed');
+    const groupLobbies = lobbies.filter(l => l.stage === 'GROUP' && l.config?.forjaGroupId === groupId && (l.status === 'completed' || l.status === 'finished'));
 
     return groupTeams.map(team => {
       let gamesWon = 0, gamesLost = 0, matchesPlayed = 0;

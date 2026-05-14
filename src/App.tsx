@@ -471,10 +471,15 @@ function AppContent() {
               <div className="flex items-center gap-1 p-1 bg-white/5 rounded-xl border border-white/5">
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText("41345391889").then(() => {
-                      setCopySuccess(true);
-                      setTimeout(() => setCopySuccess(false), 3000);
-                    });
+                    navigator.clipboard.writeText("41345391889")
+                      .then(() => {
+                        setCopySuccess(true);
+                        setTimeout(() => setCopySuccess(false), 3000);
+                      })
+                      .catch(() => {
+                        setError('Failed to copy PIX key to clipboard');
+                        setTimeout(() => setError(null), 3000);
+                      });
                   }}
                   className="px-3 py-1.5 text-[10px] font-black text-white hover:text-amber-500 hover:bg-amber-500/10 rounded-lg transition-all uppercase tracking-tight flex items-center gap-1.5"
                 >
@@ -493,6 +498,17 @@ function AppContent() {
                 </a>
               </div>
             </motion.div>
+
+            {/* PIX Copy Success Toast */}
+            {copySuccess && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="absolute top-full left-0 mt-2 p-2 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] font-black whitespace-nowrap"
+              >
+                PIX Key copied!
+              </motion.div>
+            )}
           </div>
 
           {/* Global Language Toggle - Show when not in a lobby or when auth is required */}
@@ -816,15 +832,6 @@ function AppContent() {
                   </motion.div>
                 )}
 
-                {copySuccess && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="mt-8 p-4 rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 text-sm text-center"
-                  >
-                    PIX Key copied!
-                  </motion.div>
-                )}
 
                 {/* Footer */}
                 <footer className="mt-24 pt-12 border-t border-slate-800/50 flex flex-col md:flex-row items-center justify-between gap-8 opacity-60 hover:opacity-100 transition-opacity">

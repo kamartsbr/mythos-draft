@@ -96,23 +96,31 @@ export default function ForjaHub() {
 
   const countdown = useCountdown(settings?.registration_deadline_ms ?? Date.now() + 999999999);
 
+  // Capitão logado (tem time no draft)
+  // Mostrar draft-room tab se o draft estiver ativo e o usuário for capitão ou admin
+  const isDraftActive = !!session && session.status === 'active';
+  const showDraftRoomTab = isDraftActive && (isAdmin || !!discordUser);
+
   // Ler aba da URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab') as ForjaTabId | null;
+
+    // Build allowed tabs respecting visibility rules
     const allTabs = [
       ...PUBLIC_TABS,
-      ...MEMBER_TABS,
-      ...(isAdmin ? ADMIN_ONLY_TABS : []),
-      { id: 'draft-room' as ForjaTabId }
+      ...(showDraftRoomTab ? [{ id: 'draft-room' as ForjaTabId }] : []),
+      ...(discordUser ? MEMBER_TABS : []),
+      ...(isAdmin ? ADMIN_ONLY_TABS : [])
     ];
+
     if (tab && allTabs.find(t => t.id === tab)) {
       setActiveTab(tab);
-    } else if (tab && !allTabs.find(t => t.id === tab) && ADMIN_ONLY_TABS.find(t => t.id === tab)) {
-      // Non-admin trying to access admin tab, redirect to default
+    } else if (tab && !allTabs.find(t => t.id === tab)) {
+      // Tab not allowed for current user, redirect to default
       setActiveTab(PUBLIC_TABS[0].id);
     }
-  }, [isAdmin]);
+  }, [isAdmin, discordUser, showDraftRoomTab]);
 
   const handleTabChange = useCallback((id: ForjaTabId) => {
     setActiveTab(id);
@@ -130,11 +138,6 @@ export default function ForjaHub() {
   };
 
   const sharedProps = { discordUser, isAdmin };
-
-  // Capitão logado (tem time no draft)
-  // Mostrar draft-room tab se o draft estiver ativo e o usuário for capitão ou admin
-  const isDraftActive = !!session && session.status === 'active';
-  const showDraftRoomTab = isDraftActive && (isAdmin || !!discordUser);
 
   // OBS mode: fullscreen sem chrome
   if (activeTab === 'obs') {
@@ -301,8 +304,8 @@ export default function ForjaHub() {
           {activeTab === 'schedule'    && <ForjaSchedule {...sharedProps} />}
           {activeTab === 'times'       && <ForjaTimes {...sharedProps} />}
           {activeTab === 'tabela'      && <ForjaTabela {...sharedProps} />}
-          {activeTab === 'draft-room'  && <ForjaDraftRoom {...sharedProps} />}
-          {activeTab === 'custom-draft' && <ForjaCustomDraft {...sharedProps} />}
+          {activeTab === 'draft-room'  && showDraftRoomTab && <ForjaDraftRoom {...sharedProps} />}
+          {activeTab === 'custom-draft' && discordUser && <ForjaCustomDraft {...sharedProps} />}
           {activeTab === 'admin-draft' && isAdmin && <ForjaAdminDraft {...sharedProps} />}
         </Suspense>
       </main>

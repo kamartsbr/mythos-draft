@@ -200,9 +200,13 @@ export const draftService = {
 
           if (turn.player === 'ADMIN') {
             const targetIndex = freshLobby.currentGame ? freshLobby.currentGame - 1 : 0;
-            if (!updates.seriesMaps || targetIndex < 0 || targetIndex >= updates.seriesMaps.length) {
+            if (!updates.seriesMaps || targetIndex < 0) {
               console.error('Invalid seriesMaps index:', targetIndex);
               return false;
+            }
+            // Expand seriesMaps if needed
+            while (updates.seriesMaps.length <= targetIndex) {
+              updates.seriesMaps.push("");
             }
             updates.seriesMaps![targetIndex] = id;
           } else {
@@ -218,7 +222,8 @@ export const draftService = {
                   freshLobby.config.seriesType === 'BO5' ? 5 :
                     freshLobby.config.seriesType === 'BO7' ? 7 :
                       freshLobby.config.seriesType === 'BO9' ? 9 :
-                        (freshLobby.config.customGameCount || 1);
+                        freshLobby.config.seriesType === '3G' ? 3 :
+                          (freshLobby.config.customGameCount || 1);
 
               if (updates.seriesMaps!.length < gameCount) {
                 updates.seriesMaps!.push(id);

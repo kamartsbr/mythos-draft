@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ForjaViewProps, ForjaTeam, ForjaPlayer } from '../types';
 import { useForjaTeams } from '../hooks/useForjaTeams';
 import { useForjaPlayers } from '../hooks/useForjaPlayers';
@@ -63,7 +63,7 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
 
   const calculateStandings = useMemo(() => (groupId: string) => {
     const groupTeams = teams.filter(t => t.groupId === groupId);
-    const groupLobbies = lobbies.filter(l => l.config.tournamentStage === 'GROUP' && l.config.forjaGroupId === groupId && l.status === 'completed');
+    const groupLobbies = lobbies.filter(l => l.config.tournamentStage === 'GROUP' && l.config.forjaGroupId === groupId && (l.status === 'completed' || l.status === 'finished'));
 
     const standings = groupTeams.map(team => {
       let gamesWon = 0;
@@ -481,7 +481,7 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
                           </p>
                         </div>
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          {lobby.status === 'completed' ? (
+                          {(lobby.status === 'completed' || lobby.status === 'finished') ? (
                             <div style={{ fontSize: '1.1rem', fontWeight: 900 }}>
                               <span style={{ color: lobby.teamAScore > lobby.teamBScore ? '#4ade80' : '#f87171' }}>{lobby.teamAScore}</span>
                               <span style={{ color: '#475569', margin: '0 0.4rem' }}>x</span>
@@ -531,7 +531,7 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
                         </p>
                       </div>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        {lobby.status === 'completed' ? (
+                        {(lobby.status === 'completed' || lobby.status === 'finished') ? (
                           <div style={{ fontSize: '1.2rem', fontWeight: 900 }}>
                             <span style={{ color: lobby.teamAScore > lobby.teamBScore ? '#4ade80' : '#f87171' }}>{lobby.teamAScore}</span>
                             <span style={{ color: '#475569', margin: '0 0.5rem' }}>x</span>

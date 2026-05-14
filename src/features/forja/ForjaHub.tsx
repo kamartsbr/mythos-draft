@@ -94,9 +94,19 @@ export default function ForjaHub() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab') as ForjaTabId | null;
-    const allTabs = [...PUBLIC_TABS, ...MEMBER_TABS, ...ADMIN_ONLY_TABS, { id: 'draft-room' as ForjaTabId }];
-    if (tab && allTabs.find(t => t.id === tab)) setActiveTab(tab);
-  }, []);
+    const allTabs = [
+      ...PUBLIC_TABS,
+      ...MEMBER_TABS,
+      ...(isAdmin ? ADMIN_ONLY_TABS : []),
+      { id: 'draft-room' as ForjaTabId }
+    ];
+    if (tab && allTabs.find(t => t.id === tab)) {
+      setActiveTab(tab);
+    } else if (tab && !allTabs.find(t => t.id === tab) && ADMIN_ONLY_TABS.find(t => t.id === tab)) {
+      // Non-admin trying to access admin tab, redirect to default
+      setActiveTab(PUBLIC_TABS[0].id);
+    }
+  }, [isAdmin]);
 
   const handleTabChange = useCallback((id: ForjaTabId) => {
     setActiveTab(id);
@@ -287,7 +297,7 @@ export default function ForjaHub() {
           {activeTab === 'tabela'      && <ForjaTabela {...sharedProps} />}
           {activeTab === 'draft-room'  && <ForjaDraftRoom {...sharedProps} />}
           {activeTab === 'custom-draft' && <ForjaCustomDraft {...sharedProps} />}
-          {activeTab === 'admin-draft' && <ForjaAdminDraft {...sharedProps} />}
+          {activeTab === 'admin-draft' && isAdmin && <ForjaAdminDraft {...sharedProps} />}
         </Suspense>
       </main>
 

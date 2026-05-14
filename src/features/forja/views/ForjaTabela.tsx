@@ -15,6 +15,7 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
   const { rankedPlayers } = useForjaPlayers(true);
   const [lobbies, setLobbies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const prevStandingsRef = useRef<Record<string, any>>({});
 
   // Formulário Admin
   const [selectedTeamA, setSelectedTeamA] = useState('');
@@ -50,7 +51,7 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
     return () => unsub();
   }, []);
 
-  const calculateStandings = (groupId: string) => {
+  const calculateStandings = useMemo(() => (groupId: string) => {
     const groupTeams = teams.filter(t => t.groupId === groupId);
     const groupLobbies = lobbies.filter(l => l.config.tournamentStage === 'GROUP' && l.config.forjaGroupId === groupId && l.status === 'completed');
 
@@ -81,11 +82,19 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
     });
 
     return standings.sort((a, b) => b.points - a.points || (b.gamesWon - b.gamesLost) - (a.gamesWon - a.gamesLost));
-  };
+  }, [teams, lobbies]);
 
   // ==========================================
   // LÓGICA DE UX: FILTROS E AUTO-SWAP (JUIZ)
   // ==========================================
+
+  const standingsSnapshot = useMemo(() => {
+    const snapshot: Record<string, any> = {};
+    ['A', 'B', 'C', 'D'].forEach(g => {
+      snapshot[g] = calculateStandings(g);
+    });
+    return snapshot;
+  }, [calculateStandings]);
 
   useEffect(() => {
     setSelectedTeamA('');
@@ -105,13 +114,21 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
 
   useEffect(() => {
     if (selectedTeamA && selectedTeamB && matchStage === 'GROUP') {
-      const standings = calculateStandings(matchGroup);
-      const teamAData = standings.find(t => t.id === selectedTeamA);
-      const teamBData = standings.find(t => t.id === selectedTeamB);
+      const currentStandings = standingsSnapshot[matchGroup];
+      const prevStandings = prevStandingsRef.current[matchGroup];
+
+      // Only swap if standings actually changed
+      const standingsChanged = JSON.stringify(currentStandings) !== JSON.stringify(prevStandings);
+      if (!standingsChanged) return;
+
+      prevStandingsRef.current[matchGroup] = currentStandings;
+
+      const teamAData = currentStandings.find((t: any) => t.id === selectedTeamA);
+      const teamBData = currentStandings.find((t: any) => t.id === selectedTeamB);
 
       if (teamAData && teamBData) {
-        const teamBIsBetter = 
-          teamBData.points > teamAData.points || 
+        const teamBIsBetter =
+          teamBData.points > teamAData.points ||
           (teamBData.points === teamAData.points && (teamBData.gamesWon - teamBData.gamesLost) > (teamAData.gamesWon - teamAData.gamesLost));
 
         if (teamBIsBetter) {
@@ -120,7 +137,7 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
         }
       }
     }
-  }, [selectedTeamA, selectedTeamB, matchGroup, matchStage, lobbies, teams]);
+  }, [selectedTeamA, selectedTeamB, matchGroup, matchStage, standingsSnapshot]);
 
   // ==========================================
   // CRIAÇÃO DO LOBBY COM NOME DINÂMICO

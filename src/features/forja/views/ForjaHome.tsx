@@ -32,6 +32,12 @@ interface UpcomingMatch {
   scoreA?: number;
   scoreB?: number;
   stage: string;
+  config?: {
+    forjaTeamA?: string;
+    forjaTeamB?: string;
+    forjaGroupId?: string;
+    tournamentStage?: string;
+  };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -49,6 +55,27 @@ const PLAYOFF_FORMAT_LABEL: Record<string, string> = {
 };
 
 // ─── TeamMemberPopover ────────────────────────────────────────────────────────
+
+function MemberRow({ member, isCaptain }: { member: ForjaPlayer; isCaptain: boolean }) {
+  const [imgErr, setImgErr] = useState(false);
+  const fallback = `https://cdn.discordapp.com/embed/avatars/${(parseInt(member.discord_id.slice(-1)) || 0) % 6}.png`;
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+      <img
+        src={imgErr ? fallback : member.avatar_url}
+        onError={() => setImgErr(true)}
+        alt={member.nick}
+        referrerPolicy="no-referrer"
+        style={{ width: '1.75rem', height: '1.75rem', borderRadius: '0.3rem', objectFit: 'cover' }}
+      />
+      <span style={{ color: '#f8fafc', fontSize: '0.82rem', fontWeight: 600 }}>{member.nick}</span>
+      {isCaptain && (
+        <span style={{ fontSize: '0.6rem', color: '#facc15', fontWeight: 700, background: 'rgba(250,204,21,0.1)', padding: '0.1rem 0.3rem', borderRadius: '0.2rem' }}>CAP</span>
+      )}
+    </div>
+  );
+}
 
 function TeamMemberPopover({
   team,
@@ -85,27 +112,6 @@ function TeamMemberPopover({
       <div style={{ fontSize: '0.7rem', color: '#f59e0b', fontWeight: 800, letterSpacing: '0.1em', marginBottom: '0.5rem', textTransform: 'uppercase' }}>
         {team.team_name}
       </div>
-function MemberRow({ member, isCaptain }: { member: ForjaPlayer; isCaptain: boolean }) {
-  const [imgErr, setImgErr] = useState(false);
-  const fallback = `https://cdn.discordapp.com/embed/avatars/${(parseInt(member.discord_id.slice(-1)) || 0) % 6}.png`;
-  
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
-      <img
-        src={imgErr ? fallback : member.avatar_url}
-        onError={() => setImgErr(true)}
-        alt={member.nick}
-        referrerPolicy="no-referrer"
-        style={{ width: '1.75rem', height: '1.75rem', borderRadius: '0.3rem', objectFit: 'cover' }}
-      />
-      <span style={{ color: '#f8fafc', fontSize: '0.82rem', fontWeight: 600 }}>{member.nick}</span>
-      {isCaptain && (
-        <span style={{ fontSize: '0.6rem', color: '#facc15', fontWeight: 700, background: 'rgba(250,204,21,0.1)', padding: '0.1rem 0.3rem', borderRadius: '0.2rem' }}>CAP</span>
-      )}
-    </div>
-  );
-}
-
       {members.map(p => (
         <MemberRow key={p.discord_id} member={p} isCaptain={p.discord_id === team.captain_id} />
       ))}
@@ -262,7 +268,7 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
       setPrizeData(prizes);
       // Upcoming: lobbies não concluídos primeiro, depois os mais recentes
       const officialLobbies = (lobbiesRaw as any[]).filter(l => l.config?.isOfficialForjaMatch || l.config?.forjaTeamA);
-      
+
       const mapped: UpcomingMatch[] = officialLobbies.map(l => ({
         id:     l.id,
         name:   l.config?.name ?? 'Partida',
@@ -270,7 +276,14 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
         scoreA: l.scoreA ?? l.teamAScore ?? 0,
         scoreB: l.scoreB ?? l.teamBScore ?? 0,
         stage:  l.config?.tournamentStage ?? 'GROUP',
+        config: {
+          forjaTeamA: l.config?.forjaTeamA,
+          forjaTeamB: l.config?.forjaTeamB,
+          forjaGroupId: l.config?.forjaGroupId,
+          tournamentStage: l.config?.tournamentStage
+        }
       }));
+      (window as any).__forjaLobbiesRaw__ = lobbiesRaw;
       setLobbies(mapped);
       setDataLoaded(true);
     });
@@ -280,22 +293,18 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
   // Standings por grupo
   const calculateStandings = (groupId: string): StandingRow[] => {
     const groupTeams   = teams.filter(t => t.groupId === groupId);
-    const groupLobbies = lobbies.filter(l => l.stage === 'GROUP' && (l as any).config?.forjaGroupId === groupId && l.status === 'completed');
-
-    // Para os dados crus do Firestore ainda em 'lobbies'
-    const raw = (window as any).__forjaLobbiesRaw__ as any[] | undefined;
+    const groupLobbies = lobbies.filter(l => l.stage === 'GROUP' && l.config?.forjaGroupId === groupId && l.status === 'completed');
 
     return groupTeams.map(team => {
       let gamesWon = 0, gamesLost = 0, matchesPlayed = 0;
-      lobbies.forEach(l => {
-        const lb = l as any;
-        if (lb.config?.forjaTeamA === team.id) {
-          gamesWon  += (lb.scoreA ?? lb.teamAScore ?? 0);
-          gamesLost += (lb.scoreB ?? lb.teamBScore ?? 0);
+      groupLobbies.forEach(l => {
+        if (l.config?.forjaTeamA === team.id) {
+          gamesWon  += (l.scoreA ?? 0);
+          gamesLost += (l.scoreB ?? 0);
           if (l.status === 'completed' || l.status === 'finished') matchesPlayed++;
-        } else if (lb.config?.forjaTeamB === team.id) {
-          gamesWon  += (lb.scoreB ?? lb.teamBScore ?? 0);
-          gamesLost += (lb.scoreA ?? lb.teamAScore ?? 0);
+        } else if (l.config?.forjaTeamB === team.id) {
+          gamesWon  += (l.scoreB ?? 0);
+          gamesLost += (l.scoreA ?? 0);
           if (l.status === 'completed' || l.status === 'finished') matchesPlayed++;
         }
       });

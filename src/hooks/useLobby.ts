@@ -150,28 +150,31 @@ export function useLobby(initialNickname: string) {
   }, [lobbyId, guestId, updatePresence]);
 
   // Subscriptions ---
+  // Public lobbies fetch (only when no lobbyId)
   useEffect(() => {
-    if (!lobbyId) {
-      let isMounted = true;
-      
-      // 🚨 MUDANÇA: Busca Fria de lobbies públicos executada apenas 1 vez!
-      lobbyService.getPublicLobbiesOnce()
-        .then((lobbies) => {
-          if (isMounted) {
-            setPublicLobbies(Array.isArray(lobbies) ? lobbies.slice(0, PUBLIC_LOBBIES_PAGE_SIZE) : []);
-          }
-        })
-        .catch(err => console.error("Erro ao buscar lobbies públicos:", err));
-        
-      return () => { isMounted = false; };
-    }
+    if (lobbyId) return;
 
-    setPublicLobbies([]); 
+    let isMounted = true;
+    lobbyService.getPublicLobbiesOnce()
+      .then((lobbies) => {
+        if (isMounted) {
+          setPublicLobbies(Array.isArray(lobbies) ? lobbies.slice(0, PUBLIC_LOBBIES_PAGE_SIZE) : []);
+        }
+      })
+      .catch(err => console.error("Erro ao buscar lobbies públicos:", err));
+
+    return () => { isMounted = false; };
+  }, [lobbyId]);
+
+  // Lobby subscription (only when lobbyId exists)
+  useEffect(() => {
+    if (!lobbyId || !guestId) return;
+
+    setPublicLobbies([]);
 
     const unsub = lobbyService.subscribeToLobby(
-      lobbyId, 
+      lobbyId,
       (data) => {
-        // SÓ atualiza se algo importante mudou (evita o lag)
         setLobby(prev => {
           if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
           return data;
@@ -179,19 +182,16 @@ export function useLobby(initialNickname: string) {
 
         const isC1 = data.captain1 === guestId;
         const isC2 = data.captain2 === guestId;
-        
+
         setIsCaptain1(isC1);
         setIsCaptain2(isC2);
 
-        // Lógica de Espectador CORRIGIDA
-        // Só força espectador se as vagas de capitão estão PREENCHIDAS
         const slotAvailable = !data.captain1 || !data.captain2;
         const isFull = !!(data.captain1 && data.captain2);
         const isFinished = data.status === 'finished';
-        
-        // Se não é capitão E não há slots disponíveis E o lobby está cheio ou finido
+
         const shouldBeSpectator = !isC1 && !isC2 && !slotAvailable && (isFull || isFinished);
-        
+
         setIsSpectator(shouldBeSpectator);
       },
       (err) => setError("Erro no Lobby: " + err.message)
@@ -199,7 +199,6 @@ export function useLobby(initialNickname: string) {
 
     return unsub;
   }, [lobbyId, guestId]);
-  // --- Fim da substituição ---
 
   const join = useCallback(async (id: string, role: 'A' | 'B' | 'SPECTATOR', preferredPosition: number, playerNames: Record<number, string>, newNickname?: string) => {
     const finalNickname = newNickname || nickname;

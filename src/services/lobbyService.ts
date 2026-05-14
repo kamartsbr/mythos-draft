@@ -1174,7 +1174,7 @@ export const lobbyService = {
             updates.timerStart = Date.now() as any;
             
             let finalTurnOrder = data.turnOrder;
-            if ((!finalTurnOrder || finalTurnOrder.length === 0) && generateTurnOrder) {
+            if ((!finalTurnOrder || finalTurnOrder.length === 0) && generateTurnOrder && typeof generateTurnOrder === 'function') {
               const generated = generateTurnOrder(data.config, 1, null);
               finalTurnOrder = [...generated.mapOrder, ...generated.godOrder];
               updates.turnOrder = finalTurnOrder;

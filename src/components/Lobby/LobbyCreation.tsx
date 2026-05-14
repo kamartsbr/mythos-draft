@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sword, Plus, ChevronRight, RefreshCw, Map as MapIcon, Trophy, Lock, Eye, Globe, Trash2, ChevronDown, ChevronUp, Shield } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -46,34 +46,35 @@ export function LobbyCreation({
   const [showManualPantheons, setShowManualPantheons] = useState(false);
   const [showPresetBuilder, setShowPresetBuilder] = useState(false);
   const [communityPresets, setCommunityPresets] = useState<any[]>([]);
-  
-  // 🚨 MUDANÇA APLICADA: Substituição do subscribeToPresets pela Busca Fria
-  useEffect(() => {
-    let isMounted = true;
-    
+  const requestIdRef = useRef(0);
+
+  // Shared loader function to prevent race conditions
+  const loadPresets = useCallback(() => {
+    const requestId = ++requestIdRef.current;
+
     lobbyService.getPresetsOnce()
       .then((presets) => {
-        if (isMounted) {
+        // Only update if this is still the latest request
+        if (requestId === requestIdRef.current) {
           setCommunityPresets(presets);
         }
       })
       .catch(err => console.error("Erro ao buscar presets:", err));
-      
-    return () => { isMounted = false; };
   }, []);
+
+  // Load presets on mount
+  useEffect(() => {
+    loadPresets();
+  }, [loadPresets]);
 
   const handleSaveCustomPreset = async (name: string, customConfig: LobbyConfig) => {
     try {
       const id = await lobbyService.savePreset(name, customConfig);
       setConfig({ ...customConfig, preset: `custom_${id}` });
       setShowPresetBuilder(false);
-      
-      // Atualiza a lista localmente para o usuário ver o novo preset na hora
-      lobbyService.getPresetsOnce()
-        .then(setCommunityPresets)
-        .catch(refreshErr => {
-          console.error('Failed to refresh presets:', refreshErr);
-        });
+
+      // Use shared loader to refresh presets
+      loadPresets();
     } catch (err) {
       console.error('Failed to save preset:', err);
     }

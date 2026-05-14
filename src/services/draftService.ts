@@ -200,6 +200,10 @@ export const draftService = {
 
           if (turn.player === 'ADMIN') {
             const targetIndex = freshLobby.currentGame ? freshLobby.currentGame - 1 : 0;
+            if (!updates.seriesMaps || targetIndex < 0 || targetIndex >= updates.seriesMaps.length) {
+              console.error('Invalid seriesMaps index:', targetIndex);
+              return false;
+            }
             updates.seriesMaps![targetIndex] = id;
           } else {
             const emptySlotIndex = updates.seriesMaps!.indexOf("");

@@ -41,8 +41,8 @@ export default function ForjaTournamentSettingsModal({ discordUserId, currentSet
   const [tierBSize,        setTierBSize]        = useState(String(currentSettings?.tier_b_size ?? 16));
   const [tierMode,         setTierMode]         = useState<ForjaTierMode>(currentSettings?.tier_mode ?? 'ABC');
   const [reservesOpen,     setReservesOpen]     = useState(currentSettings?.reserves_open ?? false);
-  const [currentPhase,     setCurrentPhase]     = useState<string>(currentSettings?.current_phase ?? 'pre_tournament');
-  const [playoffFormat,    setPlayoffFormat]    = useState<string>(currentSettings?.playoff_format ?? 'single_elim');
+  const [currentPhase,     setCurrentPhase]     = useState<'pre_tournament' | 'group_stage' | 'playoffs' | 'finished'>(currentSettings?.current_phase ?? 'pre_tournament');
+  const [playoffFormat,    setPlayoffFormat]    = useState<'single_elim' | 'double_elim'>(currentSettings?.playoff_format ?? 'single_elim');
 
   useEffect(() => {
     if (!currentSettings) return;
@@ -97,8 +97,8 @@ export default function ForjaTournamentSettingsModal({ discordUserId, currentSet
         tier_a_size:      tierA,
         ...(tierMode === 'ABC' && { tier_b_size: tierB }),
         reserves_open:    reservesOpen,
-        current_phase:    currentPhase as any,
-        playoff_format:   playoffFormat as any,
+        current_phase:    currentPhase,
+        playoff_format:   playoffFormat,
       }, discordUserId);
       setSuccess(true);
       setTimeout(() => { setSuccess(false); onClose(); }, 1200);
@@ -280,7 +280,7 @@ export default function ForjaTournamentSettingsModal({ discordUserId, currentSet
             <select
               id="forja-current-phase-select"
               value={currentPhase}
-              onChange={e => setCurrentPhase(e.target.value)}
+              onChange={e => setCurrentPhase(e.target.value as 'pre_tournament' | 'group_stage' | 'playoffs' | 'finished')}
               style={{ ...inputStyle }}
             >
               <option value="pre_tournament">⏳ Pré-Torneio</option>
@@ -294,7 +294,7 @@ export default function ForjaTournamentSettingsModal({ discordUserId, currentSet
             <select
               id="forja-playoff-format-select"
               value={playoffFormat}
-              onChange={e => setPlayoffFormat(e.target.value)}
+              onChange={e => setPlayoffFormat(e.target.value as 'single_elim' | 'double_elim')}
               style={{ ...inputStyle }}
             >
               <option value="single_elim">Eliminação Simples</option>

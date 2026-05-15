@@ -206,7 +206,7 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
     const populateTeam = (team: any, slots: number[]) => {
       if (!team || !team.members) return [];
       return team.members.slice(0, 3).map((discordId: string, idx: number) => {
-        const p = players.find((pl: any) => pl.discord_id === discordId);
+        const p = rankedPlayers.find((pl: any) => pl.discord_id === discordId);
         return { name: p?.nick || `Player ${slots[idx]}`, position: slots[idx] };
       });
     };

@@ -203,6 +203,14 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
       hasPerMapBans: isPlayoffs,
     };
 
+    const populateTeam = (team: any, slots: number[]) => {
+      if (!team || !team.members) return [];
+      return team.members.slice(0, 3).map((discordId: string, idx: number) => {
+        const p = players.find((pl: any) => pl.discord_id === discordId);
+        return { name: p?.nick || `Player ${slots[idx]}`, position: slots[idx] };
+      });
+    };
+
     const id = generateId();
     const lobby: Lobby = {
       id,
@@ -212,8 +220,8 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
       captain2: null,
       captain1Name: '',
       captain2Name: null,
-      teamAPlayers: [],
-      teamBPlayers: [],
+      teamAPlayers: populateTeam(teamA, [1, 4, 5]),
+      teamBPlayers: populateTeam(teamB, [2, 3, 6]),
       readyA: false,
       readyB: false,
       readyA_report: false,

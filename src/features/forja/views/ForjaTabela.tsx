@@ -193,7 +193,12 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
       hasPerMapBans: isPlayoffs,
       captainA_discordId: teamA?.captain_id,
       captainB_discordId: teamB?.captain_id,
-      scheduledDate: scheduledDate ? new Date(scheduledDate) : null,
+      scheduledDate: (() => {
+        if (!scheduledDate) return null;
+        const [year, month, day] = scheduledDate.split('-').map(Number);
+        const [hours, minutes] = (scheduledTime || '00:00').split(':').map(Number);
+        return new Date(year, month - 1, day, hours, minutes);
+      })(),
       scheduledTime: scheduledTime || null,
       streamerUrl: streamerUrl || null,
     };

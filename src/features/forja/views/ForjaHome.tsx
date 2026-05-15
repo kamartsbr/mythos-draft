@@ -436,8 +436,12 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
       const scheduledTime = (form.elements.namedItem('time') as HTMLInputElement).value;
       const streamerUrl = (form.elements.namedItem('streamer') as HTMLInputElement).value;
 
+      const [year, month, day] = scheduledDate.split('-').map(Number);
+      const [hours, minutes] = (scheduledTime || '00:00').split(':').map(Number);
+      const finalDate = new Date(year, month - 1, day, hours, minutes);
+
       await updateDoc(lobbyRef, {
-        'config.scheduledDate': scheduledDate,
+        'config.scheduledDate': finalDate,
         'config.scheduledTime': scheduledTime,
         'config.streamerUrl': streamerUrl
       });

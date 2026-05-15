@@ -60,6 +60,7 @@ export type LobbyConfig = {
   name: string;
   loserPicksNextMap: boolean;
   timerDuration?: number;
+  streamerHudSize?: number;
   preset?: string;
   mclRound?: number;
   tournamentStage?: 'GROUP' | 'PLAYOFFS' | 'PLAYOFFS_BO3' | 'PLAYOFFS_BO5';
@@ -79,6 +80,15 @@ export type LobbyConfig = {
   isOfficialForjaMatch?: boolean;
   /** Se true, a partida é um draft customizado e não deve ser exibida no hub do Forja */
   isCustomDraft?: boolean;
+  /** IDs do Discord dos capitães oficiais (para bloqueio de vaga no preset FORJA) */
+  captainA_discordId?: string;
+  captainB_discordId?: string;
+  /** Agendamento */
+  scheduledDate?: any; // Firestore Timestamp
+  scheduledTime?: string;
+  streamerUrl?: string;
+  /** Link para draft externo (caso não tenha sido feito no Mythos) */
+  externalDraftLink?: string;
 };
 
 export type PickEntry = {
@@ -119,7 +129,6 @@ export type ReplayStep = {
 
 export type TeamPlayer = {
   name: string;
-  position: number; // 1-6
 };
 
 export type Substitution = {
@@ -221,6 +230,7 @@ export type Lobby = {
   isHidden?: boolean;
   hoveredGodIdA?: string | null;
   hoveredGodIdB?: string | null;
+  turnEndsAt?: any;
 };
 
 export type ChatMessage = {

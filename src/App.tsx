@@ -10,6 +10,7 @@ import { LobbyList } from './components/Lobby/LobbyList';
 import { DraftUI } from './components/Draft/DraftUI';
 import { StreamerHUD } from './components/Draft/StreamerHUD';
 import { ConfirmModal } from './components/UI/ConfirmModal';
+import { HeroCountdown } from './features/forja/components/HeroCountdown';
 import { BugReportModal } from './components/UI/BugReportModal';
 import { PatchNotesModal } from './components/UI/PatchNotesModal';
 import { TRANSLATIONS, PLAYER_COLORS, MCL_ROUND_MAPS, getMCLPicks } from './constants';
@@ -60,8 +61,9 @@ function AppContent() {
   const isOverlay = window.location.pathname.startsWith('/overlay/');
   const isStreamerHud = window.location.pathname.startsWith('/streamer/');
   const isStreamerDock = window.location.pathname.startsWith('/streamer-dock/');
+  const isLobbyPath = window.location.pathname.startsWith('/lobby/');
   const isForjaRoute = window.location.pathname.startsWith('/forja');
-  const lobbyIdFromPath = (isOverlay || isStreamerHud || isStreamerDock) ? window.location.pathname.split('/')[2] : null;
+  const lobbyIdFromPath = (isOverlay || isStreamerHud || isStreamerDock || isLobbyPath) ? window.location.pathname.split('/')[2] : null;
 
   useEffect(() => {
     const signIn = async () => {
@@ -123,7 +125,8 @@ function AppContent() {
     forceFinish,
     forceUnpause,
     forceStartDraft,
-    isAuthReady
+    isAuthReady,
+    lobbyInitialLoading
   } = useLobby(localStorage.getItem('mythos_nickname') || '');
 
   const {
@@ -244,6 +247,18 @@ function AppContent() {
       }
     }
   }, [isAuthReady, lobbyId, lobby, isSpectator, isCaptain1, isCaptain2, guestId, nickname, join]);
+
+  const handleDeleteLobby = async (id: string) => {
+    try {
+      await lobbyService.deleteLobby(id);
+      setPaginatedLobbies(prev => prev.filter(l => l.id !== id));
+      if (!isLocked) {
+        await lobbyService.refreshLobbyIndex();
+      }
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
 
   const handleCreateLobby = async () => {
     if (!isAuthReady || !guestId) return;
@@ -606,7 +621,7 @@ function AppContent() {
             </div>
           )}
 
-          {lobbyLoading || (!isAuthReady && !authError) ? (
+          {lobbyLoading || lobbyInitialLoading || (!isAuthReady && !authError) ? (
             <div className="flex-1 flex flex-col items-center justify-center p-4">
               <Loader2 className="w-12 h-12 animate-spin text-amber-500 mb-4" />
               <p className="text-xl font-medium">{t.loading}</p>
@@ -634,7 +649,7 @@ function AppContent() {
                 </ol>
               </div>
             </div>
-          ) : !lobbyId ? (
+          ) : (!lobbyId && !lobbyInitialLoading) ? (
             <div className="flex-1 relative overflow-hidden">
               {/* Background Decorative Elements */}
               <div className="mythic-glow top-[-10%] left-[-10%] w-[50%] h-[50%]" />
@@ -763,6 +778,8 @@ function AppContent() {
                   </div>
                 </motion.div>
 
+                <HeroCountdown />
+
                 <div className="grid lg:grid-cols-12 gap-12">
                   <div className="lg:col-span-7 space-y-8">
                     <LobbyCreation
@@ -799,6 +816,7 @@ function AppContent() {
                         }
                       }}
                       onClearAll={() => setShowClearConfirm(true)}
+                      onDelete={handleDeleteLobby}
                       onLoadMore={loadMore}
                       hasMore={hasMore}
                     />
@@ -870,6 +888,23 @@ function AppContent() {
                   </div>
                 </footer>
               </div>
+            </div>
+          ) : (lobbyId && !lobby && !lobbyInitialLoading) ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-4">
+              <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mb-4 border border-red-500/20">
+                <AlertTriangle className="w-8 h-8 text-red-500" />
+              </div>
+              <p className="text-xl font-bold text-white uppercase tracking-tight mb-2">Lobby Not Found</p>
+              <p className="text-slate-400 text-sm mb-6">The draft session you are looking for does not exist or has been deleted.</p>
+              <button 
+                onClick={() => {
+                  setLobbyId(null);
+                  window.history.replaceState({}, '', '/');
+                }}
+                className="px-6 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 font-bold uppercase tracking-widest hover:bg-slate-800 transition-all"
+              >
+                Return to Menu
+              </button>
             </div>
           ) : (lobbyId && !lobby) ? (
             <div className="flex-1 flex flex-col items-center justify-center p-4">

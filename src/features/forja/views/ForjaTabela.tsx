@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { cn } from '../../../lib/utils';
 import { ForjaViewProps, ForjaTeam, ForjaPlayer } from '../types';
 import { useForjaTeams } from '../hooks/useForjaTeams';
 import { useForjaPlayers } from '../hooks/useForjaPlayers';
 import { db } from '../../../firebase';
-import { collection, query, where, onSnapshot, orderBy, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
 import { LobbyConfig, Lobby } from '../../../types';
 import { MAJOR_GODS } from '../../../data/gods';
 import { FORJA_MAP_POOL, getMCLPicks } from '../../../constants';
@@ -37,6 +38,12 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
   const [groupRound, setGroupRound] = useState<string>('1');
   const [playoffRound, setPlayoffRound] = useState<string>('Quartas');
 
+  // 🚨 NOVOS ESTADOS PARA AGENDAMENTO E GESTÃO
+  const [scheduledDate, setScheduledDate] = useState<string>('');
+  const [scheduledTime, setScheduledTime] = useState<string>('');
+  const [streamerUrl, setStreamerUrl] = useState<string>('');
+  const [editingLobby, setEditingLobby] = useState<any>(null); // Para fechamento manual
+
   // Gestão de Grupos
   const [isManagingGroups, setIsManagingGroups] = useState(false);
 
@@ -65,20 +72,28 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
     const groupTeams = teams.filter(t => t.groupId === groupId);
     const groupLobbies = lobbies.filter(l => l.config.tournamentStage === 'GROUP' && l.config.forjaGroupId === groupId && (l.status === 'completed' || l.status === 'finished'));
 
+    // 🏆 CONFIGURAÇÃO DE PONTOS (Ajuste conforme a regra do torneio)
+    const POINTS_PER_WIN = 3; 
+
     const standings = groupTeams.map(team => {
       let gamesWon = 0;
       let gamesLost = 0;
       let matchesPlayed = 0;
+      let points = 0;
 
       groupLobbies.forEach(lobby => {
-        if (lobby.config.forjaTeamA === team.id) {
-          gamesWon += (lobby.teamAScore || 0);
-          gamesLost += (lobby.teamBScore || 0);
+        const isTeamA = lobby.config.forjaTeamA === team.id;
+        const isTeamB = lobby.config.forjaTeamB === team.id;
+
+        if (isTeamA || isTeamB) {
+          const myScore = isTeamA ? (lobby.scoreA || 0) : (lobby.scoreB || 0);
+          const opScore = isTeamA ? (lobby.scoreB || 0) : (lobby.scoreA || 0);
+          
+          gamesWon += myScore;
+          gamesLost += opScore;
           matchesPlayed++;
-        } else if (lobby.config.forjaTeamB === team.id) {
-          gamesWon += (lobby.teamBScore || 0);
-          gamesLost += (lobby.teamAScore || 0);
-          matchesPlayed++;
+          // A pontuação é por mapa (G+)
+          points += myScore;
         }
       });
 
@@ -87,7 +102,7 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
         gamesWon,
         gamesLost,
         matchesPlayed,
-        points: gamesWon
+        points
       };
     });
 
@@ -122,32 +137,7 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
     return availableTeamsForA.filter(t => t.id !== selectedTeamA);
   }, [availableTeamsForA, selectedTeamA]);
 
-  useEffect(() => {
-    if (selectedTeamA && selectedTeamB && matchStage === 'GROUP') {
-      const currentStandings = standingsSnapshot[matchGroup];
-      const prevStandings = prevStandingsRef.current[matchGroup];
-
-      // Only swap if standings actually changed
-      const standingsChanged = JSON.stringify(currentStandings) !== JSON.stringify(prevStandings);
-      if (!standingsChanged) return;
-
-      prevStandingsRef.current[matchGroup] = currentStandings;
-
-      const teamAData = currentStandings.find((t: any) => t.id === selectedTeamA);
-      const teamBData = currentStandings.find((t: any) => t.id === selectedTeamB);
-
-      if (teamAData && teamBData) {
-        const teamBIsBetter =
-          teamBData.points > teamAData.points ||
-          (teamBData.points === teamAData.points && (teamBData.gamesWon - teamBData.gamesLost) > (teamAData.gamesWon - teamAData.gamesLost));
-
-        if (teamBIsBetter) {
-          setSelectedTeamA(selectedTeamB);
-          setSelectedTeamB(selectedTeamA);
-        }
-      }
-    }
-  }, [selectedTeamA, selectedTeamB, matchGroup, matchStage, standingsSnapshot]);
+  // [REMOVIDO] useEffect de auto-swap removido para respeitar estritamente a ordem selecionada pelo Admin
 
   // ==========================================
   // CRIAÇÃO DO LOBBY COM NOME DINÂMICO
@@ -201,13 +191,18 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
       timerDuration: 60,
       hasMap3RandomRoll: true,
       hasPerMapBans: isPlayoffs,
+      captainA_discordId: teamA?.captain_id,
+      captainB_discordId: teamB?.captain_id,
+      scheduledDate: scheduledDate ? new Date(scheduledDate) : null,
+      scheduledTime: scheduledTime || null,
+      streamerUrl: streamerUrl || null,
     };
 
-    const populateTeam = (team: any, slots: number[]) => {
+    const populateTeam = (team: any) => {
       if (!team || !team.members) return [];
       return team.members.slice(0, 3).map((discordId: string, idx: number) => {
         const p = rankedPlayers.find((pl: any) => pl.discord_id === discordId);
-        return { name: p?.nick || `Player ${slots[idx]}`, position: slots[idx] };
+        return { name: p?.nick || `Player ${idx + 1}` };
       });
     };
 
@@ -220,8 +215,8 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
       captain2: null,
       captain1Name: '',
       captain2Name: null,
-      teamAPlayers: populateTeam(teamA, [1, 4, 5]),
-      teamBPlayers: populateTeam(teamB, [2, 3, 6]),
+      teamAPlayers: populateTeam(teamA),
+      teamBPlayers: populateTeam(teamB),
       readyA: false,
       readyB: false,
       readyA_report: false,
@@ -268,8 +263,29 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
       alert(`Partida criada com sucesso!`);
       setSelectedTeamA('');
       setSelectedTeamB('');
+      setScheduledDate('');
+      setScheduledTime('');
+      setStreamerUrl('');
     } catch (err: any) {
       alert(`Erro: ${err.message}`);
+    }
+  };
+
+  const handleManualClose = async (lobbyId: string, teamAScore: number, teamBScore: number, externalLink?: string) => {
+    if (!confirm('Deseja encerrar esta partida manualmente?')) return;
+    try {
+      const lobbyRef = doc(db, 'lobbies', lobbyId);
+      await updateDoc(lobbyRef, {
+        status: 'completed',
+        phase: 'finished',
+        scoreA: teamAScore,
+        scoreB: teamBScore,
+        'config.externalDraftLink': externalLink || null,
+        finishedAt: serverTimestamp(),
+      });
+      setEditingLobby(null);
+    } catch (err: any) {
+      alert(`Erro ao encerrar: ${err.message}`);
     }
   };
 
@@ -403,6 +419,21 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
             <div></div> {/* Espaçador */}
           </div>
 
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.8fr 1.8fr', gap: '1rem', marginBottom: '1rem' }}>
+            <div>
+              <label className="forja-reg-label">Data Agendada</label>
+              <input type="date" className="forja-reg-input" value={scheduledDate} onChange={e => setScheduledDate(e.target.value)} />
+            </div>
+            <div>
+              <label className="forja-reg-label">Hora</label>
+              <input type="text" className="forja-reg-input" placeholder="ex: 20:00" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} />
+            </div>
+            <div>
+              <label className="forja-reg-label">URL da Stream</label>
+              <input type="text" className="forja-reg-input" placeholder="twitch.tv/seu_canal" value={streamerUrl} onChange={e => setStreamerUrl(e.target.value)} />
+            </div>
+          </div>
+
           <button className="forja-btn forja-btn--primary" onClick={handleCreateMatch}>
             ⚔️ Gerar Lobby
           </button>
@@ -427,17 +458,17 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
                     Classificação - Grupo {group}
                   </h3>
                   <div style={{ background: '#0f172a', borderRadius: '0.75rem', overflow: 'hidden', border: '1px solid #1e293b' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                      <thead style={{ background: '#1e293b', color: '#94a3b8' }}>
+                    <table className="w-full border-collapse text-[0.85rem]">
+                      <thead className="bg-slate-800/80 text-slate-300">
                         <tr>
-                          <th style={{ padding: '0.75rem', textAlign: 'left' }}>Time</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'center' }}>J</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'center' }}>G+</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'center' }}>G-</th>
-                          <th style={{ padding: '0.75rem', textAlign: 'center', color: '#facc15' }}>Pts</th>
+                          <th className="p-3 text-left font-bold uppercase tracking-wider">Time</th>
+                          <th className="p-3 text-center w-12 font-black text-slate-400">J</th>
+                          <th className="p-3 text-center w-12 font-black text-slate-400">G+</th>
+                          <th className="p-3 text-center w-12 font-black text-slate-400">G-</th>
+                          <th className="p-3 text-center w-16 font-black text-amber-400/80">Pts</th>
                         </tr>
                       </thead>
-                      <tbody style={{ color: '#cbd5e1' }}>
+                      <tbody className="text-slate-200">
                         {standings.map((row, idx) => {
                           const isTop2 = idx < 2;
                           const captain = rankedPlayers.find(p => p.discord_id === row.captain_id);
@@ -446,28 +477,27 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
                           return (
                             <tr 
                               key={row.id} 
-                              style={{ 
-                                borderBottom: '1px solid #1e293b',
-                                background: isTop2 ? 'rgba(74, 222, 128, 0.05)' : undefined,
-                                borderLeft: isTop2 ? '4px solid #4ade80' : '4px solid transparent'
-                              }}
+                              className={cn(
+                                "border-b border-slate-800/50 transition-colors hover:bg-slate-800/30",
+                                isTop2 && "bg-emerald-500/5 border-l-4 border-l-emerald-500"
+                              )}
                             >
-                              <td style={{ padding: '0.75rem', fontWeight: 600 }}>
-                                 <span style={{ marginRight: '0.5rem', opacity: 0.5 }}>{idx + 1}.</span>
+                              <td className="p-3 font-semibold">
+                                 <span className="mr-2 opacity-50 tabular-nums">{idx + 1}.</span>
                                  {row.team_name}
-                                 <span style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: 400, marginLeft: '0.5rem' }}>
+                                 <span className="text-slate-500 text-[0.75rem] font-normal ml-2">
                                    [{captainNick}]
                                  </span>
                               </td>
-                              <td style={{ padding: '0.75rem', textAlign: 'center' }}>{row.matchesPlayed}</td>
-                              <td style={{ padding: '0.75rem', textAlign: 'center', color: '#4ade80' }}>{row.gamesWon}</td>
-                              <td style={{ padding: '0.75rem', textAlign: 'center', color: '#f87171' }}>{row.gamesLost}</td>
-                              <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 800, color: '#facc15' }}>{row.points}</td>
+                              <td className="p-3 text-center w-12 font-medium tabular-nums">{row.matchesPlayed}</td>
+                              <td className="p-3 text-center w-12 font-bold tabular-nums text-emerald-400">{row.gamesWon}</td>
+                              <td className="p-3 text-center w-12 font-medium tabular-nums text-rose-400/80">{row.gamesLost}</td>
+                              <td className="p-3 text-center w-16 font-black tabular-nums text-amber-400">{row.points}</td>
                             </tr>
                           );
                         })}
                         {standings.length === 0 && (
-                          <tr><td colSpan={5} style={{ padding: '2rem', textAlign: 'center', opacity: 0.5 }}>Nenhum time atribuído a este grupo.</td></tr>
+                          <tr><td colSpan={5} className="p-8 text-center text-slate-500 italic">Nenhum time atribuído a este grupo.</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -501,14 +531,24 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
                             </a>
                           )}
                           {isAdmin && (
-                            <button 
-                              onClick={() => handleDeleteMatch(lobby.id)}
-                              className="forja-btn forja-btn--ghost"
-                              style={{ padding: '0.4rem 0.6rem', fontSize: '0.75rem', color: '#f87171' }}
-                              title="Remover Partida"
-                            >
-                              🗑️
-                            </button>
+                            <div className="flex gap-1">
+                              <button 
+                                onClick={() => setEditingLobby(lobby)}
+                                className="forja-btn forja-btn--ghost"
+                                style={{ padding: '0.4rem 0.6rem', fontSize: '0.75rem', color: '#facc15' }}
+                                title="Encerrar Manualmente"
+                              >
+                                📝
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteMatch(lobby.id)}
+                                className="forja-btn forja-btn--ghost"
+                                style={{ padding: '0.4rem 0.6rem', fontSize: '0.75rem', color: '#f87171' }}
+                                title="Remover Partida"
+                              >
+                                🗑️
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -551,14 +591,24 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
                           </a>
                         )}
                           {isAdmin && (
-                            <button 
-                              onClick={() => handleDeleteMatch(lobby.id)}
-                              className="forja-btn forja-btn--ghost"
-                              style={{ padding: '0.5rem 0.75rem', color: '#f87171' }}
-                              title="Remover Partida"
-                            >
-                              🗑️
-                            </button>
+                            <div className="flex gap-1">
+                              <button 
+                                onClick={() => setEditingLobby(lobby)}
+                                className="forja-btn forja-btn--ghost"
+                                style={{ padding: '0.4rem 0.6rem', fontSize: '0.75rem', color: '#facc15' }}
+                                title="Encerrar Manualmente"
+                              >
+                                📝
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteMatch(lobby.id)}
+                                className="forja-btn forja-btn--ghost"
+                                style={{ padding: '0.4rem 0.6rem', fontSize: '0.75rem', color: '#f87171' }}
+                                title="Remover Partida"
+                              >
+                                🗑️
+                              </button>
+                            </div>
                           )}
                       </div>
                     </div>
@@ -574,6 +624,61 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
               <p>Nenhuma partida agendada ainda.</p>
             </div>
           )}
+        </div>
+      )}
+      {/* MODAL DE FECHAMENTO MANUAL */}
+      {editingLobby && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 w-full max-w-md shadow-2xl">
+            <h3 className="text-xl font-black text-white uppercase tracking-tight mb-4">Encerrar Partida Manual</h3>
+            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-6">{editingLobby.config.name}</p>
+            
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div>
+                <label className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2 block">Placar Host</label>
+                <input 
+                  type="number" 
+                  id="scoreA"
+                  defaultValue={editingLobby.scoreA || 0}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-2 block">Placar Guest</label>
+                <input 
+                  type="number" 
+                  id="scoreB"
+                  defaultValue={editingLobby.scoreB || 0}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-red-500"
+                />
+              </div>
+            </div>
+
+            <div className="mb-8">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Link do Draft Externo (Opcional)</label>
+              <input 
+                type="text" 
+                id="externalLink"
+                placeholder="ex: mythosdraft.com/lobby/abc123xyz"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white text-xs focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={() => setEditingLobby(null)} className="flex-1 py-3 rounded-xl bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest hover:bg-slate-700 transition-all">Cancelar</button>
+              <button 
+                onClick={() => {
+                  const sA = parseInt((document.getElementById('scoreA') as HTMLInputElement).value) || 0;
+                  const sB = parseInt((document.getElementById('scoreB') as HTMLInputElement).value) || 0;
+                  const ext = (document.getElementById('externalLink') as HTMLInputElement).value;
+                  handleManualClose(editingLobby.id, sA, sB, ext);
+                }}
+                className="flex-1 py-3 rounded-xl bg-amber-500 text-slate-950 text-[10px] font-black uppercase tracking-widest hover:bg-amber-400 transition-all shadow-[0_0_20px_rgba(245,158,11,0.2)]"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </section>

@@ -22,29 +22,30 @@ export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, ho
   const isHovered = !pick.godId && god && isCurrentTurn;
 
   const getPlayerLabel = () => {
-    if (preset === 'MCL') {
-      // Team A: 1 (Red) -> Player 1, 4 (Orange) -> Player 2, 5 (Yellow) -> Player 3
-      if (pick.playerId === 1) return (t.player || 'Player') + ' 1';
-      if (pick.playerId === 4) return (t.player || 'Player') + ' 2';
-      if (pick.playerId === 5) return (t.player || 'Player') + ' 3';
-      
-      // Team B: 2 (Pink) -> Player 1, 3 (Blue) -> Player 2, 6 (Cyan) -> Player 3
-      if (pick.playerId === 2) return (t.player || 'Player') + ' 1';
-      if (pick.playerId === 3) return (t.player || 'Player') + ' 2';
-      if (pick.playerId === 6) return (t.player || 'Player') + ' 3';
+    if (preset === 'MCL' || preset === 'FORJA') {
+      return `${t.player || 'Player'} ${(index ?? 0) + 1}`;
     }
     return pick.position === 'corner' ? t.corner : t.middle;
   };
 
-  const showColor = !isHidden && (god || preset !== 'MCL');
+  // FIXED: Visual HUD layout requirements handled by CSS order (Visual Swap)
+  // Lado HOST (A): Turno 1 <-> Turno 4
+  // Lado GUEST (B): Turno 2 <-> Turno 3
+  const visualOrder = {
+    4: 1, 5: 2, 1: 3,
+    2: 1, 6: 2, 3: 3
+  }[pick.playerId!] || 1;
+
+  const showColor = !isHidden && (god || (preset !== 'MCL' && preset !== 'FORJA'));
   const displayName = isHidden 
     ? (pick.team === 'A' ? t.teamA : t.teamB) 
-    : (isHovered ? (t.selecting || 'Selecting...') : (pick.playerName || (preset === 'MCL' ? `${t.selecting || 'Selecting'}...` : `Player ${pick.playerId}`)));
+    : (isHovered ? (t.selecting || 'Selecting...') : (pick.playerName || ((preset === 'MCL' || preset === 'FORJA') ? (t.selecting || 'Selecionando...') : `Player ${pick.playerId}`)));
 
   return (
     <motion.div 
       initial={{ opacity: 0, x: pick.team === 'A' ? -20 : 20 }}
       animate={{ opacity: 1, x: 0 }}
+      style={{ order: visualOrder }}
       className={cn(
         "relative group h-24 rounded-2xl overflow-hidden border transition-all duration-500",
         isCurrentTurn 

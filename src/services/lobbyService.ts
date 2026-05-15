@@ -23,6 +23,8 @@ import {
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { Lobby, LobbyConfig, PickEntry, ChatMessage, LobbySummary, LobbyIndex } from '../types';
 import { PLAYER_COLORS, MCL_ROUND_MAPS } from '../constants';
+import { getMCLPicks, getMCLTeamOrder } from '../data/draft';
+
 
 // --- SHIELDING: MOCK LAYER CONFIG ---
 export const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
@@ -697,7 +699,7 @@ export const lobbyService = {
       const lobby = getLocalLobby(id);
       if (lobby && lobby.resetRequest) {
         if (accept) {
-           setLocalLobby(id, { ...lobby, status: 'drafting', phase: 'ready', turn: 0, resetRequest: null, lastActivityAt: Date.now() as any } as any);
+            setLocalLobby(id, { ...lobby, status: 'waiting', phase: 'ready', turn: 0, readyA: false, readyB: false, readyA_nextGame: false, readyB_nextGame: false, resetRequest: null, lastActivityAt: Date.now() as any } as any);
         } else {
            setLocalLobby(id, { ...lobby, resetRequest: null, isPaused: false, lastActivityAt: Date.now() as any } as any);
         }
@@ -729,7 +731,7 @@ export const lobbyService = {
           }
 
           transaction.update(docRef, {
-            status: 'drafting',
+            status: 'waiting',
             phase: 'ready',
             turn: 0,
             picks: (Array.isArray(data.picks) ? data.picks : []).map(p => ({ ...(p as any), godId: null, isRandom: false })),
@@ -737,8 +739,12 @@ export const lobbyService = {
             mapBans: data.currentGame === 1 ? [] : data.mapBans,
             readyA: false,
             readyB: false,
+            ready1: false,
+            ready2: false,
             readyA_nextGame: false,
             readyB_nextGame: false,
+            readyA_report: false,
+            readyB_report: false,
             replayLog: filteredReplayLog,
             seriesMaps: newSeriesMaps,
             selectedMap: restoredMap || null,
@@ -796,16 +802,20 @@ export const lobbyService = {
 
         setLocalLobby(id, {
           ...lobby,
-          status: 'drafting',
+          status: 'waiting',
           phase: 'ready',
           turn: 0,
           picks: newPicks,
           bans: [],
           mapBans: lobby.currentGame === 1 ? [] : lobby.mapBans,
+          readyA: false,
+          readyB: false,
+          readyA_nextGame: false,
+          readyB_nextGame: false,
           seriesMaps: newSeriesMaps,
           selectedMap: preservedMap3,
           isPaused: false,
-          timerStart: Date.now() as any,
+          timerStart: null,
           timerPausedAt: null,
           resetRequest: null,
           lastActivityAt: Date.now() as any,
@@ -844,7 +854,7 @@ export const lobbyService = {
         }
 
         transaction.update(docRef, {
-          status: 'drafting',
+          status: 'waiting',
           phase: 'ready',
           turn: 0,
           picks: (Array.isArray(data.picks) ? data.picks : []).map(p => ({ ...(p as any), godId: null, isRandom: false })),
@@ -852,13 +862,19 @@ export const lobbyService = {
           mapBans: data.currentGame === 1 ? [] : data.mapBans,
           readyA: false,
           readyB: false,
+          ready1: false,
+          ready2: false,
           readyA_nextGame: false,
           readyB_nextGame: false,
+          readyA_report: false,
+          readyB_report: false,
           replayLog: filteredReplayLog,
           seriesMaps: newSeriesMaps,
           selectedMap: restoredMap || null,
-          timerStart: now(),
+          timerStart: null,
           isPaused: false,
+          timerPausedAt: null,
+          resetRequest: null,
           lastActivityAt: now(),
         });
       });
@@ -1036,10 +1052,9 @@ export const lobbyService = {
           });
         }
         
-        const teamSlots = isMCL ? [1, 4, 5] : [1, 5, 4];
-        updates.teamAPlayers = Object.entries(playerNames)
-          .filter(([id]) => teamSlots.includes(Number(id)))
-          .map(([id, name]) => ({ name: name as string, position: Number(id) }));
+        updates.teamAPlayers = Array.from({ length: data.config.teamSize }, (_, idx) => ({
+          name: playerNames[idx] || ''
+        }));
 
       } else if (role === 'B') {
         if (data.captain2 && data.captain2 !== guestId) {
@@ -1066,10 +1081,9 @@ export const lobbyService = {
           });
         }
 
-        const teamSlots = isMCL ? [2, 3, 6] : [2, 6, 3];
-        updates.teamBPlayers = Object.entries(playerNames)
-          .filter(([id]) => teamSlots.includes(Number(id)))
-          .map(([id, name]) => ({ name: name as string, position: Number(id) }));
+        updates.teamBPlayers = Array.from({ length: data.config.teamSize }, (_, idx) => ({
+          name: playerNames[idx] || ''
+        }));
       } else {
         const spectators = Array.isArray(data.spectators) ? data.spectators : Object.values(data.spectators || {});
         if (!spectators.some((s: any) => s.id === guestId)) {
@@ -1086,6 +1100,49 @@ export const lobbyService = {
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };
+    }
+  },
+
+  async updateLobbyConfig(id: string, updates: Partial<LobbyConfig>): Promise<void> {
+    if (IS_DEV) {
+      const lobby = getLocalLobby(id);
+      if (lobby) {
+        setLocalLobby(id, { ...lobby, config: { ...lobby.config, ...updates } } as Lobby);
+      }
+      return;
+    }
+    try {
+      const firestoreUpdates: any = {};
+      Object.entries(updates).forEach(([key, val]) => {
+        firestoreUpdates[`config.${key}`] = val;
+      });
+      await updateDoc(doc(db, 'lobbies', id), cleanData(firestoreUpdates));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
+    }
+  },
+
+  async updateLobbyBasicInfo(id: string, updates: { name?: string, captain1Name?: string, captain2Name?: string }): Promise<void> {
+    if (IS_DEV) {
+      const lobby = getLocalLobby(id);
+      if (lobby) {
+        const newLobby = { ...lobby };
+        if (updates.name) newLobby.config.name = updates.name;
+        if (updates.captain1Name) newLobby.captain1Name = updates.captain1Name;
+        if (updates.captain2Name) newLobby.captain2Name = updates.captain2Name;
+        setLocalLobby(id, newLobby as Lobby);
+      }
+      return;
+    }
+    try {
+      const firestoreUpdates: any = {};
+      if (updates.name) firestoreUpdates['config.name'] = updates.name;
+      if (updates.captain1Name) firestoreUpdates.captain1Name = updates.captain1Name;
+      if (updates.captain2Name) firestoreUpdates.captain2Name = updates.captain2Name;
+      
+      await updateDoc(doc(db, 'lobbies', id), cleanData(firestoreUpdates));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
     }
   },
 
@@ -1136,34 +1193,34 @@ export const lobbyService = {
         if (!data.teamAPlayers || data.teamAPlayers.length === 0) {
           if (data.config.preset === 'MCL' || data.config.teamSize === 3) {
             updates.teamAPlayers = [
-              { name: (data.captain1Name || 'Host') + ' (P1)', position: 1 },
-              { name: (data.captain1Name || 'Host') + ' (P2)', position: 4 },
-              { name: (data.captain1Name || 'Host') + ' (P3)', position: 5 }
+              { name: (data.captain1Name || 'Host') + ' (P1)' },
+              { name: (data.captain1Name || 'Host') + ' (P2)' },
+              { name: (data.captain1Name || 'Host') + ' (P3)' }
             ];
           } else if (data.config.teamSize === 2) {
             updates.teamAPlayers = [
-              { name: (data.captain1Name || 'Host') + ' (C)', position: 1 },
-              { name: (data.captain1Name || 'Host') + ' (M)', position: 4 }
+              { name: (data.captain1Name || 'Host') + ' (C)' },
+              { name: (data.captain1Name || 'Host') + ' (M)' }
             ];
           } else {
-            updates.teamAPlayers = [{ name: (data.captain1Name || 'Host'), position: 5 }];
+            updates.teamAPlayers = [{ name: (data.captain1Name || 'Host') }];
           }
         }
 
         if (!data.teamBPlayers || data.teamBPlayers.length === 0) {
           if (data.config.preset === 'MCL' || data.config.teamSize === 3) {
             updates.teamBPlayers = [
-              { name: 'Bot B (P1)', position: 3 },
-              { name: 'Bot B (P2)', position: 2 },
-              { name: 'Bot B (P3)', position: 6 }
+              { name: 'Bot B (P1)' },
+              { name: 'Bot B (P2)' },
+              { name: 'Bot B (P3)' }
             ];
           } else if (data.config.teamSize === 2) {
             updates.teamBPlayers = [
-              { name: 'Bot B (C)', position: 3 },
-              { name: 'Bot B (M)', position: 2 }
+              { name: 'Bot B (C)' },
+              { name: 'Bot B (M)' }
             ];
           } else {
-            updates.teamBPlayers = [{ name: 'Bot B', position: 6 }];
+            updates.teamBPlayers = [{ name: 'Bot B' }];
           }
         }
         
@@ -1238,8 +1295,8 @@ export const lobbyService = {
         if (team === 'B' && data.captain2 !== guestId) throw new Error("Not authorized for Team B");
 
         const updates: any = {};
-        const isGame1Ready = data.currentGame === 1 && (data.status === 'waiting' || data.phase === 'ready' || data.phase === 'waiting');
-        const isReadyWaitPhase = isGame1Ready || data.phase === 'ready_picker';
+        const isWaitingStatus = data.status === 'waiting' || (data.status === 'drafting' && (data.phase === 'ready' || data.phase === 'waiting'));
+        const isReadyWaitPhase = isWaitingStatus || data.phase === 'ready_picker';
         
         if (isReadyWaitPhase) {
           if (team === 'A') {
@@ -1259,6 +1316,14 @@ export const lobbyService = {
               updates.turn = 0;
               updates.timerStart = now();
               
+              // 🔥 Timer Absoluto
+              const duration = data.config.timerDuration || 60;
+              if (IS_DEV) {
+                updates.turnEndsAt = (Date.now() + (duration * 1000)) as any;
+              } else {
+                updates.turnEndsAt = Timestamp.fromMillis(Date.now() + (duration * 1000));
+              }
+              
               let finalTurnOrder = data.turnOrder;
               if ((!finalTurnOrder || finalTurnOrder.length === 0) && generateTurnOrder) {
                 const generated = generateTurnOrder(data.config, 1, null);
@@ -1271,6 +1336,11 @@ export const lobbyService = {
                 updates.phase = currentTurn.target === 'MAP' 
                   ? (currentTurn.action === 'BAN' ? 'map_ban' : 'map_pick') 
                   : (currentTurn.action === 'BAN' ? 'god_ban' : 'god_pick');
+              }
+
+              // INITIALIZE PICKS
+              if (data.config.preset === 'MCL' || data.config.preset === 'FORJA') {
+                updates.picks = getMCLPicks(data.currentGame || 1, data.selectedMap || null, data.lastWinner || null);
               }
             } else if (data.phase === 'ready_picker') {
               updates.phase = 'god_picker';
@@ -1331,31 +1401,27 @@ export const lobbyService = {
 
         const mockPlayersA = lobby.teamAPlayers || (
           (lobby.config.preset === 'MCL' || lobby.config.teamSize === 3) ? [
-            { name: (lobby.captain1Name || 'Host') + ' (P1)', position: 1 },
-            { name: (lobby.captain1Name || 'Host') + ' (P2)', position: 4 },
-            { name: (lobby.captain1Name || 'Host') + ' (P3)', position: 5 }
+            { name: (lobby.captain1Name || 'Host') + ' (P1)' },
+            { name: (lobby.captain1Name || 'Host') + ' (P2)' },
+            { name: (lobby.captain1Name || 'Host') + ' (P3)' }
           ] : (lobby.config.teamSize === 2 ? [
-            { name: (lobby.captain1Name || 'Host') + ' (C)', position: 1 },
-            { name: (lobby.captain1Name || 'Host') + ' (M)', position: 4 }
-          ] : [{ name: (lobby.captain1Name || 'Host'), position: 5 }])
+            { name: (lobby.captain1Name || 'Host') + ' (C)' },
+            { name: (lobby.captain1Name || 'Host') + ' (M)' }
+          ] : [{ name: (lobby.captain1Name || 'Host') }])
         );
 
         const mockPlayersB = lobby.teamBPlayers || (
           (lobby.config.preset === 'MCL' || lobby.config.teamSize === 3) ? [
-            { name: 'Bot B (P1)', position: 3 },
-            { name: 'Bot B (P2)', position: 2 },
-            { name: 'Bot B (P3)', position: 6 }
+            { name: 'Bot B (P1)' },
+            { name: 'Bot B (P2)' },
+            { name: 'Bot B (P3)' }
           ] : (lobby.config.teamSize === 2 ? [
-            { name: 'Bot B (C)', position: 3 },
-            { name: 'Bot B (M)', position: 2 }
-          ] : [{ name: 'Bot B', position: 6 }])
+            { name: 'Bot B (C)' },
+            { name: 'Bot B (M)' }
+          ] : [{ name: 'Bot B' }])
         );
 
-        const updatedPicks = (lobby.picks || []).map(p => {
-          const teamPlayers = p.team === 'A' ? mockPlayersA : mockPlayersB;
-          const playerAtPos = teamPlayers.find(tp => tp.position === p.playerId);
-          return { ...p, playerName: playerAtPos?.name || '' };
-        });
+        const updatedPicks = getMCLPicks(lobby.currentGame || 1, lobby.selectedMap || null, lobby.lastWinner || null);
 
         setLocalLobby(id, { 
             ...lobby, 
@@ -1386,6 +1452,8 @@ export const lobbyService = {
           status: 'drafting',
           turn: 0,
           timerStart: now(),
+          // 🔥 Timer Absoluto
+          turnEndsAt: Timestamp.fromMillis(Date.now() + ((data.config.timerDuration || 60) * 1000)),
           readyA: true,
           readyB: true,
           readyA_nextGame: false,
@@ -1398,6 +1466,21 @@ export const lobbyService = {
           updates.phase = currentTurn.target === 'MAP' 
             ? (currentTurn.action === 'BAN' ? 'map_ban' : 'map_pick') 
             : (currentTurn.action === 'BAN' ? 'god_ban' : 'god_pick');
+        }
+
+        // 🔥 INITIALIZE PICKS WITH PLAYER NAMES (Anti-Generic Name Bug)
+        if (data.config.preset === 'MCL' || data.config.preset === 'FORJA') {
+          const initialPicks = getMCLPicks(data.currentGame || 1, data.selectedMap || null, data.lastWinner || null);
+          const teamAOrder = getMCLTeamOrder('A');
+          const teamBOrder = getMCLTeamOrder('B');
+
+          updates.picks = initialPicks.map(p => {
+            const teamPlayers = p.team === 'A' ? (updates.teamAPlayers || data.teamAPlayers) : (updates.teamBPlayers || data.teamBPlayers);
+            const teamOrder = p.team === 'A' ? teamAOrder : teamBOrder;
+            const rosterIdx = teamOrder.indexOf(p.playerId);
+            const player = teamPlayers?.[rosterIdx];
+            return { ...p, playerName: player?.name || '' };
+          });
         }
 
         transaction.update(docRef, cleanData(updates));
@@ -1443,30 +1526,26 @@ export const lobbyService = {
 
         const mockPlayersA = lobby.teamAPlayers || (
           (lobby.config.preset === 'MCL' || lobby.config.teamSize === 3) ? [
-            { name: `${nickname} (A1)`, position: 1 },
-            { name: `${nickname} (A2)`, position: 4 },
-            { name: `${nickname} (A3)`, position: 5 }
+            { name: `${nickname} (A1)` },
+            { name: `${nickname} (A2)` },
+            { name: `${nickname} (A3)` }
           ] : (lobby.config.teamSize === 2 ? [
-            { name: `${nickname} (AC)`, position: 1 },
-            { name: `${nickname} (AM)`, position: 4 }
-          ] : [{ name: nickname, position: 5 }])
+            { name: `${nickname} (AC)` },
+            { name: `${nickname} (AM)` }
+          ] : [{ name: nickname }])
         );
         const mockPlayersB = lobby.teamBPlayers || (
           (lobby.config.preset === 'MCL' || lobby.config.teamSize === 3) ? [
-            { name: `${nickname} (B1)`, position: 3 },
-            { name: `${nickname} (B2)`, position: 2 },
-            { name: `${nickname} (B3)`, position: 6 }
+            { name: `${nickname} (B1)` },
+            { name: `${nickname} (B2)` },
+            { name: `${nickname} (B3)` }
           ] : (lobby.config.teamSize === 2 ? [
-            { name: `${nickname} (BC)`, position: 3 },
-            { name: `${nickname} (BM)`, position: 2 }
-          ] : [{ name: `${nickname} (B)`, position: 6 }])
+            { name: `${nickname} (BC)` },
+            { name: `${nickname} (BM)` }
+          ] : [{ name: `${nickname} (B)` }])
         );
 
-        const updatedPicks = (lobby.picks || []).map(p => {
-          const teamPlayers = p.team === 'A' ? mockPlayersA : mockPlayersB;
-          const playerAtPos = teamPlayers.find(tp => tp.position === p.playerId);
-          return { ...p, playerName: playerAtPos?.name || '' };
-        });
+        const updatedPicks = getMCLPicks(lobby.currentGame || 1, lobby.selectedMap || null, lobby.lastWinner || null);
 
         setLocalLobby(lobbyId, { 
           ...lobby, 

@@ -1,10 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Shield, Sword, Users, Check, X, User, MapPin, Copy, Link as LinkIcon, Languages } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Lobby } from '../../types';
 import { PLAYER_COLORS } from '../../constants';
 import { LanguageToggle } from '../UI/LanguageToggle';
+import { useForjaDiscordAuth } from '../../features/forja/hooks/useForjaDiscordAuth';
+import { useForjaTeams } from '../../features/forja/hooks/useForjaTeams';
+import { useForjaPlayers } from '../../features/forja/hooks/useForjaPlayers';
+import { Lock, ChevronDown, User as UserIcon } from 'lucide-react';
 
 interface JoinLobbyModalProps {
   lobby: Lobby;
@@ -31,69 +35,148 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
   const [localNickname, setLocalNickname] = useState(nickname);
   const [copied, setCopied] = useState(false);
 
+  // Forja Auto-fill data
+  const { teams } = useForjaTeams(true);
+  const { rankedPlayers } = useForjaPlayers(true);
+  const lastRole = useRef<string | null>(null);
+
+  const isForjaPreset = lobby.config.preset === 'FORJA';
+  const forjaTeamId = role === 'A' ? lobby.config.forjaTeamA : lobby.config.forjaTeamB;
+  const forjaTeam = isForjaPreset ? teams.find(t => t.id === forjaTeamId) : null;
+
+  const { discordUser, isAdmin: isForjaAdmin } = useForjaDiscordAuth();
+
+  const teamRoster = useMemo(() => {
+    if (!forjaTeam || !rankedPlayers.length) return [];
+    
+    // 🔥 SOLUÇÃO TOTAL: Buscar em RANKED PLAYERS para garantir que reservas DINÂMICOS (overflow) apareçam
+    const allPlayersInTeam = rankedPlayers.filter(p => 
+      (p.team_id && p.team_id === forjaTeam.id) || 
+      (forjaTeam.members && forjaTeam.members.includes(p.discord_id))
+    );
+
+    // Garantir unicidade por discord_id
+    const unique = Array.from(new Map(allPlayersInTeam.map(p => [p.discord_id, p])).values());
+    
+    // Ordenar: Titulares primeiro (is_reserve: false)
+    return unique.sort((a, b) => {
+      if (a.is_reserve !== b.is_reserve) {
+        return a.is_reserve ? 1 : -1;
+      }
+      return a.nick.localeCompare(b.nick);
+    });
+  }, [forjaTeam, rankedPlayers]);
+
+  const userAuthIdentity = useMemo(() => {
+    if (!discordUser) return null;
+    const p = teamRoster.find(x => x.discord_id === discordUser.discord_id);
+    return p?.nick || discordUser.username;
+  }, [discordUser, teamRoster]);
+
+  // 🔥 SOLUÇÃO: Forçar Idioma PT-BR por Padrão na Forja
+  useEffect(() => {
+    if (isForjaPreset && lang === 'en') {
+      setLang('pt');
+    }
+  }, [isForjaPreset, lang, setLang]);
+
   const handleCopy = () => {
     copyUrl();
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const canJoinA = !lobby.captain1 || lobby.captain1 === guestId;
-  const canJoinB = !lobby.captain2 || lobby.captain2 === guestId;
+  const isHostAuthorized = !isForjaPreset || isForjaAdmin || (discordUser && discordUser.discord_id === lobby.config.captainA_discordId);
+  const isGuestAuthorized = !isForjaPreset || isForjaAdmin || (discordUser && discordUser.discord_id === lobby.config.captainB_discordId);
+
+  const canJoinA = (!lobby.captain1 || lobby.captain1 === guestId) && isHostAuthorized;
+  const canJoinB = (!lobby.captain2 || lobby.captain2 === guestId) && isGuestAuthorized;
 
   const teamSize = lobby.config.teamSize;
   const isMCL = lobby.config.preset?.includes('MCL');
-  const teamSlots = role === 'A' ? [1, 4, 5] : [3, 2, 6];
-  const activeSlots = teamSize === 1 ? (role === 'A' ? [5] : [6]) : teamSize === 2 ? (role === 'A' ? [1, 4] : [3, 2]) : teamSlots;
+  
+  // FIXED: activeSlots are now simple roster indices (0, 1, 2)
+  const activeSlots = Array.from({ length: teamSize }, (_, i) => i);
 
   // Initialize roster when role changes
   useEffect(() => {
-    if (role && role !== 'SPECTATOR') {
-      const currentTeamSlots = role === 'A' ? [1, 4, 5] : [3, 2, 6];
-      const currentActiveSlots = teamSize === 1 ? (role === 'A' ? [5] : [6]) : teamSize === 2 ? (role === 'A' ? [1, 4] : [3, 2]) : currentTeamSlots;
+    if (!role || role === 'SPECTATOR') {
+      lastRole.current = role;
+      return;
+    }
 
-      // Clear existing local names if switching roles to avoid "copying" between tabs on same machine
-      setPlayerNames(prev => {
-        const next: Record<number, string> = {};
-        const existingPlayers = role === 'A' ? lobby.teamAPlayers : lobby.teamBPlayers;
-        
-        if (existingPlayers && existingPlayers.length > 0) {
-          existingPlayers.forEach(p => {
-            next[p.position] = p.name;
-          });
-        }
-        
-        // Ensure captain has a name
-        currentActiveSlots.forEach(id => {
-          if (next[id] === undefined) {
-            next[id] = id === captainPosition ? localNickname : '';
-          }
+    const roleChanged = lastRole.current !== role;
+    lastRole.current = role;
+
+    // 🔥 SOLUÇÃO: Reset de Estado ao Trocar de Lado (Anti-Leak)
+    setPlayerNames(prev => {
+      // Se não houve mudança de papel e já temos dados, mantemos (respeita edição manual)
+      if (!roleChanged && Object.keys(prev).length > 0) return prev;
+
+      const next: Record<number, string> = {};
+      const existingPlayers = role === 'A' ? lobby.teamAPlayers : lobby.teamBPlayers;
+      
+      // FIXED: Map existing clean array to indices
+      if (existingPlayers && Array.isArray(existingPlayers)) {
+        existingPlayers.forEach((p, idx) => {
+          next[idx] = p.name;
         });
-        
-        // Default captain position if current one is invalid for this role
-        if (!currentActiveSlots.includes(captainPosition || -1)) {
-          const defaultPos = currentActiveSlots[0];
-          setCaptainPosition(defaultPos);
-          next[defaultPos] = localNickname;
+      }
+      
+      // 🔥 SOLUÇÃO: Blindagem de Identidade do Capitão
+      const captainNameForRoster = isForjaPreset 
+        ? (userAuthIdentity || forjaTeam?.team_name || '---')
+        : localNickname;
+
+      // Ensure captain has a name
+      activeSlots.forEach(idx => {
+        if (next[idx] === undefined) {
+          next[idx] = idx === captainPosition ? captainNameForRoster : '';
         }
-        return next;
       });
       
-      // Default team name - ensure we don't leak from A to B
-      if (teamSize === 1) {
-        // For 1v1, use existing name if known, otherwise nickname
-        const existingTeamName = role === 'A' ? lobby.captain1Name : lobby.captain2Name;
-        setTeamName(existingTeamName || localNickname);
-      } else {
-        const existingTeamName = role === 'A' ? lobby.captain1Name : lobby.captain2Name;
-        if (existingTeamName) {
-          setTeamName(existingTeamName);
-        } else {
-          // If no existing name, set to default based on role
-          setTeamName(role === 'A' ? t.teamA : t.teamB);
-        }
+      // Auto-fill for FORJA (Starters)
+      if (isForjaPreset && forjaTeam && teamRoster.length > 0) {
+        activeSlots.forEach((idx) => {
+          if (!next[idx] || next[idx] === '---') {
+            const player = teamRoster[idx] || teamRoster[0];
+            next[idx] = player.nick || '---';
+          }
+        });
       }
+
+      return next;
+    });
+    
+    // Default team name
+    if (isForjaPreset && forjaTeam) {
+      setTeamName(forjaTeam.team_name);
+      
+      // 🔥 SOLUÇÃO: Correção da "Crise de Identidade" do Capitão
+      // No modo FORJA, Host/Guest NUNCA deve ser "Spectator"
+      if (userAuthIdentity) {
+        setLocalNickname(userAuthIdentity);
+      } else {
+        setLocalNickname(forjaTeam.team_name);
+      }
+    } else if (teamSize === 1) {
+      const existingTeamName = role === 'A' ? lobby.captain1Name : lobby.captain2Name;
+      setTeamName(existingTeamName || localNickname);
+    } else {
+      const existingTeamName = role === 'A' ? lobby.captain1Name : lobby.captain2Name;
+      setTeamName(existingTeamName || (role === 'A' ? t.teamA : t.teamB));
     }
-  }, [role, teamSize, t.teamA, t.teamB]);
+  }, [role, teamSize, isForjaPreset, forjaTeam?.id, teamRoster, userAuthIdentity, t.teamA, t.teamB, activeSlots, captainPosition]);
+
+  // 🔥 SOLUÇÃO: Sincronização Segura da Posição do Capitão (Anti-Loop)
+  useEffect(() => {
+    if (!role || role === 'SPECTATOR') return;
+    
+    if (!activeSlots.includes(captainPosition || -1)) {
+      setCaptainPosition(activeSlots[0]);
+    }
+  }, [role, activeSlots, captainPosition]);
+
 
   // Handle position change (Movement Bug Fix)
   const handlePositionChange = (newPos: number) => {
@@ -150,17 +233,35 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
     const defaultTeamName = teamSize === 1 ? localNickname : (role === 'A' ? t.teamA : t.teamB);
     const finalTeamName = (teamName.trim() || (teamSize === 1 ? localNickname : defaultTeamName));
 
-    onJoin(role, captainPosition!, { ...playerNames, [role === 'A' ? 100 : 200]: finalTeamName }, localNickname);
+    // 🔥 SOLUÇÃO: Validação Anti-Clone (Não permitir jogadores duplicados)
+    if (isForjaPreset) {
+      const selectedNicks = Object.values(playerNames).filter(n => n && n !== '---');
+      if (new Set(selectedNicks).size !== selectedNicks.length) {
+        alert(lang === 'pt' ? "Jogadores duplicados detectados! Cada vaga deve ter um jogador único." : "Duplicate players detected! Each slot must have a unique player.");
+        return;
+      }
+      if (selectedNicks.length < activeSlots.length) {
+        alert(lang === 'pt' ? "Por favor, preencha todos os jogadores da lineup." : "Please fill all players in the lineup.");
+        return;
+      }
+    }
+
+    // FIXED: Convert playerNames Record to clean array
+    const rosterArray = activeSlots.map(idx => playerNames[idx]);
+    
+    // We send names as a Record for backward compatibility or refactor onJoin later
+    // But importantly, the IDs used here are now relative indices 0, 1, 2.
+    const namesRecord: Record<number, string> = { ...playerNames };
+    namesRecord[role === 'A' ? 100 : 200] = finalTeamName;
+
+    onJoin(role, captainPosition!, namesRecord, localNickname);
   };
 
-  const getPositionLabel = (id: number) => {
+  const getPositionLabel = (idx: number) => {
     if (isMCL || lobby.config.teamSize === 3) {
-      if (id === 1 || id === 3) return lang === 'en' ? 'Player 1' : 'Jogador 1';
-      if (id === 4 || id === 2) return lang === 'en' ? 'Player 2' : 'Jogador 2';
-      if (id === 5 || id === 6) return lang === 'en' ? 'Player 3' : 'Jogador 3';
+      return lang === 'en' ? `Player ${idx + 1}` : `Jogador ${idx + 1}`;
     }
-    if (id === 5 || id === 6) return t.middle;
-    return t.corner;
+    return idx === 1 ? t.middle : t.corner;
   };
 
   return (
@@ -191,35 +292,53 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
                 <Shield className="w-3 h-3" />
                 {t.teamName}
               </label>
+              {isForjaPreset && forjaTeam ? (
+                <div className="flex items-center gap-4 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3">
+                  {forjaTeam.image_url ? (
+                    <img src={forjaTeam.image_url} alt={forjaTeam.team_name} className="w-10 h-10 rounded-lg object-cover border border-slate-800 shadow-lg" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-lg bg-slate-900 flex items-center justify-center border border-slate-800">
+                      <Shield className="w-5 h-5 text-slate-700" />
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm font-black text-white uppercase tracking-wider leading-none mb-1">{forjaTeam.team_name}</p>
+                    <p className="text-[10px] font-bold text-amber-500 uppercase tracking-widest leading-none">Time Oficial Forja</p>
+                  </div>
+                </div>
+              ) : (
+                <input 
+                  type="text" 
+                  value={teamName}
+                  onChange={(e) => setTeamName(e.target.value)}
+                  placeholder={role === 'A' ? (lang === 'en' ? 'Team A (Host)' : 'Time A (Host)') : (lang === 'en' ? 'Team B (Guest)' : 'Time B (Convidado)')}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-amber-500 transition-all"
+                />
+              )}
+            </div>
+          )}
+
+          {/* Nickname (Hidden for FORJA Captains to simplify UX) */}
+          {(!isForjaPreset || role === 'SPECTATOR' || !role) && (
+            <div className="space-y-3">
+              <label className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                <User className="w-3 h-3" />
+                {teamSize === 1 ? t.playerName : t.nickname}
+              </label>
               <input 
                 type="text" 
-                value={teamName}
-                onChange={(e) => setTeamName(e.target.value)}
-                placeholder={role === 'A' ? (lang === 'en' ? 'Team A (Host)' : 'Time A (Host)') : (lang === 'en' ? 'Team B (Guest)' : 'Time B (Convidado)')}
+                value={localNickname}
+                onChange={(e) => {
+                  setLocalNickname(e.target.value);
+                  if (captainPosition !== null) {
+                    setPlayerNames(prev => ({ ...prev, [captainPosition]: e.target.value }));
+                  }
+                }}
+                placeholder={t.nicknamePlaceholder}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-amber-500 transition-all"
               />
             </div>
           )}
-
-          {/* Nickname */}
-          <div className="space-y-3">
-            <label className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
-              <User className="w-3 h-3" />
-              {teamSize === 1 ? t.playerName : t.nickname}
-            </label>
-            <input 
-              type="text" 
-              value={localNickname}
-              onChange={(e) => {
-                setLocalNickname(e.target.value);
-                if (captainPosition !== null) {
-                  setPlayerNames(prev => ({ ...prev, [captainPosition]: e.target.value }));
-                }
-              }}
-              placeholder={t.nicknamePlaceholder}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-amber-500 transition-all"
-            />
-          </div>
 
           {/* Role Selection */}
           {!isFinished && (
@@ -237,12 +356,18 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
                     role === 'A' ? "bg-blue-500/10 border-blue-500" : "bg-slate-950 border-slate-800 hover:border-slate-700",
                     !canJoinA && "opacity-40 cursor-not-allowed grayscale"
                   )}
+                  title={!isHostAuthorized ? (lang === 'en' ? "Only the official Captain can take this slot" : "Apenas o Capitão oficial pode assumir esta vaga") : undefined}
                 >
                   <Shield className={cn("w-8 h-8", role === 'A' ? "text-blue-500" : "text-slate-700")} />
                   <span className="text-[10px] font-black uppercase tracking-tighter">
                     {lobby.captain1 === guestId ? (lang === 'en' ? 'RE-JOIN HOST' : 'REENTRAR HOST') : t.roleHost}
                   </span>
-                  {!canJoinA && <LockIcon className="absolute top-2 right-2 w-3 h-3 text-slate-600" />}
+                  {!isHostAuthorized && isForjaPreset && (
+                    <span className="text-[8px] text-amber-500 font-bold uppercase leading-tight text-center max-w-[80px]">
+                      {lang === 'en' ? 'Locked for Captain' : 'Apenas para Capitão'}
+                    </span>
+                  )}
+                  {!canJoinA && <Lock className="absolute top-2 right-2 w-3 h-3 text-slate-600" />}
                 </button>
                 <button
                   disabled={!canJoinB}
@@ -252,12 +377,18 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
                     role === 'B' ? "bg-red-500/10 border-red-500" : "bg-slate-950 border-slate-800 hover:border-slate-700",
                     !canJoinB && "opacity-40 cursor-not-allowed grayscale"
                   )}
+                  title={!isGuestAuthorized ? (lang === 'en' ? "Only the official Captain can take this slot" : "Apenas o Capitão oficial pode assumir esta vaga") : undefined}
                 >
                   <Sword className={cn("w-8 h-8", role === 'B' ? "text-red-500" : "text-slate-700")} />
                   <span className="text-[10px] font-black uppercase tracking-tighter">
                     {lobby.captain2 === guestId ? (lang === 'en' ? 'RE-JOIN GUEST' : 'REENTRAR CONVIDADO') : t.roleGuest}
                   </span>
-                  {!canJoinB && <LockIcon className="absolute top-2 right-2 w-3 h-3 text-slate-600" />}
+                  {!isGuestAuthorized && isForjaPreset && (
+                    <span className="text-[8px] text-amber-500 font-bold uppercase leading-tight text-center max-w-[80px]">
+                      {lang === 'en' ? 'Locked for Captain' : 'Apenas para Capitão'}
+                    </span>
+                  )}
+                  {!canJoinB && <Lock className="absolute top-2 right-2 w-3 h-3 text-slate-600" />}
                 </button>
                 <button
                   onClick={() => setRole('SPECTATOR')}
@@ -280,22 +411,34 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
               animate={{ opacity: 1, height: 'auto' }}
               className="space-y-6"
             >
-              <div className="flex items-center justify-between">
                 <label className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
                   <Users className="w-3 h-3" />
-                  {teamSize === 1 ? t.playerName : t.teamRoster}
+                  {isForjaPreset ? (lang === 'pt' ? 'Confirmar Lineup (Titulares)' : 'Confirm Lineup (Starters)') : (teamSize === 1 ? t.playerName : t.teamRoster)}
                 </label>
-                {teamSize > 1 && (
+                {teamSize > 1 && !isForjaPreset && (
                   <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">
                     {t.selectCaptainPos}
                   </span>
                 )}
-              </div>
+
+              {isForjaPreset && (
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 flex items-center gap-3">
+                  <span className="text-xl">👑</span>
+                  <div>
+                    <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest leading-none mb-1">
+                      {lang === 'pt' ? 'Capitão do Draft' : 'Draft Captain'}
+                    </p>
+                    <p className="text-sm font-bold text-white leading-none">
+                      {userAuthIdentity || forjaTeam?.team_name || '---'}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-4">
                 {activeSlots.map((id) => (
                   <div key={id} className="flex gap-4 items-center">
-                    {teamSize > 1 && (
+                    {teamSize > 1 && !isForjaPreset && (
                       <button
                         onClick={() => handlePositionChange(id)}
                         className={cn(
@@ -310,28 +453,52 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
                       </button>
                     )}
                     <div className="flex-1 relative">
-                      {!isMCL && (
-                        <div 
-                          className="absolute left-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)]"
-                          style={{ backgroundColor: PLAYER_COLORS[id as keyof typeof PLAYER_COLORS] }}
+                      {/* FIXED: No magic turn-based colors here */}
+                      
+                      {isForjaPreset && teamRoster.length > 0 ? (
+                        <div className="relative">
+                          <select
+                            value={playerNames[id] || ''}
+                            onChange={(e) => handlePlayerNameChange(id, e.target.value)}
+                            className={cn(
+                              "w-full bg-slate-950 border rounded-xl pr-10 py-3 text-sm focus:outline-none transition-all appearance-none cursor-pointer",
+                              "px-4",
+                              id === captainPosition ? "font-bold text-amber-500 border-amber-500/50" : "border-slate-800 text-white"
+                            )}
+                          >
+                            {id === captainPosition && !teamRoster.some(p => p.nick === playerNames[id]) && (
+                               <option value={playerNames[id]}>{playerNames[id]}</option>
+                            )}
+                             {teamRoster.map(p => {
+                                const isSelectedElsewhere = Object.entries(playerNames).some(([sid, name]) => Number(sid) !== id && name === p.nick);
+                                return (
+                                  <option key={p.discord_id} value={p.nick} disabled={isSelectedElsewhere}>
+                                    {p.nick} {p.is_reserve ? (lang === 'en' ? '(Reserve)' : '(Reserva)') : ''}
+                                    {isSelectedElsewhere ? (lang === 'en' ? ' (Selected)' : ' (Já selecionado)') : ''}
+                                  </option>
+                                );
+                              })}
+                          </select>
+                          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+                        </div>
+                      ) : (
+                        <input 
+                          type="text"
+                          value={playerNames[id] || ''}
+                          onChange={(e) => handlePlayerNameChange(id, e.target.value)}
+                          placeholder={teamSize === 1 ? t.nicknamePlaceholder : `${getPositionLabel(id)} ${t.playerName}...`}
+                          className={cn(
+                            "w-full bg-slate-950 border rounded-xl pr-4 py-3 text-sm focus:outline-none transition-all",
+                            "px-4",
+                            id === captainPosition ? "font-bold" : "",
+                            role === 'A' ? "focus:border-blue-500" : "focus:border-red-500"
+                          )}
+                          style={{ 
+                            borderColor: id === captainPosition ? (role === 'A' ? '#3b82f6' : '#ec4899') : '#1e293b',
+                            color: 'white'
+                          }}
                         />
                       )}
-                      <input 
-                        type="text"
-                        value={playerNames[id] || ''}
-                        onChange={(e) => handlePlayerNameChange(id, e.target.value)}
-                        placeholder={teamSize === 1 ? t.nicknamePlaceholder : `${getPositionLabel(id)} ${t.playerName}...`}
-                        className={cn(
-                          "w-full bg-slate-950 border rounded-xl pr-4 py-3 text-sm focus:outline-none transition-all",
-                          !isMCL ? "pl-8" : "px-4",
-                          id === captainPosition ? "font-bold" : "",
-                          role === 'A' ? "focus:border-blue-500" : "focus:border-red-500"
-                        )}
-                        style={{ 
-                          borderColor: !isMCL && playerNames[id]?.trim() ? PLAYER_COLORS[id as keyof typeof PLAYER_COLORS] : '#1e293b',
-                          color: !isMCL && id === captainPosition ? PLAYER_COLORS[id as keyof typeof PLAYER_COLORS] : 'white'
-                        }}
-                      />
                     </div>
                     {teamSize > 1 && (
                       <div className="w-24 text-right">
@@ -398,22 +565,3 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
   );
 }
 
-function LockIcon({ className }: { className?: string }) {
-  return (
-    <svg 
-      xmlns="http://www.w3.org/2000/svg" 
-      width="24" 
-      height="24" 
-      viewBox="0 0 24 24" 
-      fill="none" 
-      stroke="currentColor" 
-      strokeWidth="2" 
-      strokeLinecap="round" 
-      strokeLinejoin="round" 
-      className={className}
-    >
-      <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  );
-}

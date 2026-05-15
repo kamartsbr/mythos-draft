@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import { motion } from 'motion/react';
-import { Shield, RefreshCw, Trash2, FastForward, Play, Power } from 'lucide-react';
+import { Shield, RefreshCw, Trash2, FastForward, Play, Power, Edit3 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { DraftEditModal } from './DraftEditModal';
+import { Lobby } from '../../types';
 
 interface AdminBarProps {
   isAdmin: boolean;
@@ -12,11 +15,13 @@ interface AdminBarProps {
   t: any;
   status: string;
   phase: string;
+  lobby: Lobby;
 }
 
 export function AdminBar({ 
-  isAdmin, onResetGame, onResetSeries, onForceFinish, onForceUnpause, onForceStart, t, status, phase 
+  isAdmin, onResetGame, onResetSeries, onForceFinish, onForceUnpause, onForceStart, t, status, phase, lobby 
 }: AdminBarProps) {
+  const [showEditModal, setShowEditModal] = useState(false);
   if (!isAdmin) return null;
 
   const handleResetGame = () => {
@@ -84,6 +89,16 @@ export function AdminBar({
           </button>
         )}
 
+        {/* Edit Draft */}
+        <button
+          onClick={() => setShowEditModal(true)}
+          title="Edit lobby name and captain names in real-time"
+          className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest transition-all shadow-[0_0_15px_rgba(79,70,229,0.3)]"
+        >
+          <Edit3 className="w-3 h-3" />
+          Editar Draft
+        </button>
+
         {/* Soft Reset */}
         <button
           onClick={handleResetGame}
@@ -104,6 +119,13 @@ export function AdminBar({
           Hard Reset
         </button>
       </div>
+
+      <DraftEditModal 
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        lobby={lobby}
+        t={t}
+      />
     </motion.div>
   );
 }

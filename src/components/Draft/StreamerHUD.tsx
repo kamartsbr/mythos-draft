@@ -87,6 +87,11 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
             : updatedLobby.currentGame - 1;
           setDisplayGameIdx(Math.max(0, autoIdx));
         }
+
+        // Sync HUD Scale from database if present
+        if (updatedLobby?.config.streamerHudSize) {
+          setHudScale(updatedLobby.config.streamerHudSize);
+        }
       },
       (err) => {
         console.error("Overlay subscription error:", err);

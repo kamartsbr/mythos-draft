@@ -240,7 +240,7 @@ export function LobbyCreation({
               { 
                 id: 'MCL', 
                 label: t.mclTournament,
-                icon: "https://liquipedia.net/commons/images/c/c0/Mythic_Clan_League_allmode.png"
+                icon: "/mcl-logo.png"
               },
               {
                 id: 'FORJA',
@@ -262,7 +262,7 @@ export function LobbyCreation({
                       {preset.icon ? (
                         <div className={cn(
                           "flex items-center justify-center",
-                          preset.id === 'FORJA' ? "w-20 h-20 -ml-2" : "w-10 h-10"
+                          preset.id === 'FORJA' || preset.id === 'MCL' ? "w-20 h-20 -ml-2" : "w-10 h-10"
                         )}>
                           <img 
                             src={preset.icon} 

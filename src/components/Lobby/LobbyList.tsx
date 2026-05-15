@@ -8,12 +8,13 @@ interface LobbyListProps {
   t: any;
   isAdmin?: boolean;
   onJoin: (id: string) => void;
+  onDelete?: (id: string) => void;
   onClearAll?: () => void;
   onLoadMore?: () => void;
   hasMore?: boolean;
 }
 
-export function LobbyList({ lobbies, t, isAdmin, onJoin, onClearAll, onLoadMore, hasMore }: LobbyListProps) {
+export function LobbyList({ lobbies, t, isAdmin, onJoin, onDelete, onClearAll, onLoadMore, hasMore }: LobbyListProps) {
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredLobbies = useMemo(() => {
@@ -118,7 +119,23 @@ export function LobbyList({ lobbies, t, isAdmin, onJoin, onClearAll, onLoadMore,
                       {pub.captain1Name || 'Captain 1'} vs {pub.captain2Name || 'Captain 2'} • {getLobbyStatus(pub)}
                     </p>
                   </div>
-                  <ChevronRight className="w-5 h-5 text-slate-700 group-hover:text-blue-500 transition-colors" />
+                  <div className="flex items-center gap-3">
+                    {isAdmin && onDelete && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`${t.confirmDelete || 'Delete this lobby?'} (${pub.id})`)) {
+                            onDelete(pub.id);
+                          }
+                        }}
+                        className="p-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all border border-red-500/20"
+                        title={t.deleteLobby || "Delete Lobby"}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                    <ChevronRight className="w-5 h-5 text-slate-700 group-hover:text-blue-500 transition-colors" />
+                  </div>
                 </button>
               ))}
               {hasMore && onLoadMore && (

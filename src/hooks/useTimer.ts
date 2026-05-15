@@ -86,29 +86,37 @@ export function useTimer(
       return;
     }
 
-    let startTime: number;
-    const ts = currentLobby.timerStart;
+    // 🔥 SOLUÇÃO: Timer Absoluto (Sincronização Perfeita)
+    // Usamos o 'turnEndsAt' persistido no Firestore como fonte única da verdade.
+    let endTime: number;
+    const tea = currentLobby.turnEndsAt;
     
-    if (ts && typeof (ts as any).toMillis === 'function') {
-      startTime = (ts as any).toMillis();
-    } else if (ts && typeof (ts as any).toDate === 'function') {
-      const d = (ts as any).toDate();
-      startTime = d ? d.getTime() : Date.now();
-    } else if (typeof ts === 'number') {
-      startTime = ts < 10000000000 ? ts * 1000 : ts;
-    } else if (typeof ts === 'string') {
-      startTime = new Date(ts).getTime();
+    if (tea && typeof (tea as any).toMillis === 'function') {
+      endTime = (tea as any).toMillis();
+    } else if (tea && typeof (tea as any).toDate === 'function') {
+      endTime = (tea as any).toDate().getTime();
+    } else if (typeof tea === 'number') {
+      endTime = tea < 10000000000 ? tea * 1000 : tea;
     } else {
-      startTime = Date.now();
+      // Fallback para lógica antiga caso turnEndsAt não exista (migração)
+      let startTime: number;
+      const ts = currentLobby.timerStart;
+      if (ts && typeof (ts as any).toMillis === 'function') {
+        startTime = (ts as any).toMillis();
+      } else if (typeof ts === 'number') {
+        startTime = ts < 10000000000 ? ts * 1000 : ts;
+      } else {
+        startTime = Date.now();
+      }
+      const duration = currentLobby.config?.timerDuration || 60;
+      endTime = startTime + (duration * 1000);
     }
 
+    const duration = currentLobby.config?.timerDuration || 60;
     const nowServer = await getServerTime();
-    const elapsed = Math.max(0, (nowServer - startTime) / 1000);
-    const duration = (typeof currentLobby.config?.timerDuration === 'number' && !isNaN(currentLobby.config.timerDuration)) 
-      ? currentLobby.config.timerDuration 
-      : 60;
-    const remaining = Math.max(0, duration - Math.floor(elapsed));
-    
+    const remaining = Math.max(0, Math.floor((endTime - nowServer) / 1000));
+    const elapsed = Math.max(0, (nowServer - (endTime - (duration * 1000))) / 1000);
+
     // Protection: if the calculated time is suspiciously large (e.g. > 1 hour),
     // it likely indicates a clock sync issue or a corrupted timestamp.
     if (remaining > 3600 || isNaN(remaining)) {

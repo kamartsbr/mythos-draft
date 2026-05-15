@@ -4,7 +4,7 @@
  * próximas partidas e premiação.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ForjaViewProps, ForjaPlayer, ForjaTeam } from '../types';
 import { useForjaSettings } from '../hooks/useForjaSettings';
 import { useForjaTeams } from '../hooks/useForjaTeams';
@@ -12,7 +12,8 @@ import { useForjaPlayers } from '../hooks/useForjaPlayers';
 import { useForjaSchedule } from '../hooks/useForjaSchedule';
 import { getForjaContentOnce } from '../services/forjaService';
 import { db } from '../../../firebase';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, doc, updateDoc } from 'firebase/firestore';
+import { cn } from '../../../lib/utils';
 
 // ─── Tipos locais ─────────────────────────────────────────────────────────────
 
@@ -27,11 +28,12 @@ interface UpcomingMatch {
   id: string;
   name: string;
   status: string;
-  teamA?: string;
-  teamB?: string;
   scoreA?: number;
   scoreB?: number;
   stage: string;
+  scheduledDate?: any; // Firestore Timestamp
+  scheduledTime?: string;
+  streamerUrl?: string;
   config?: {
     forjaTeamA?: string;
     forjaTeamB?: string;
@@ -172,13 +174,20 @@ function CompactStandings({
   };
 
   return (
-    <div style={{ background: '#0f172a', borderRadius: '0.75rem', overflow: 'hidden', border: '1px solid #1e293b' }}>
-      <div style={{ padding: '0.6rem 0.75rem', background: 'rgba(250,204,21,0.06)', borderBottom: '1px solid #1e293b', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ color: '#facc15', fontWeight: 800, fontSize: '0.85rem', letterSpacing: '0.05em' }}>GRUPO {group}</span>
-        <span style={{ color: '#475569', fontSize: '0.7rem' }}>J · G+ · G- · Pts</span>
-      </div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
-        <tbody style={{ color: '#cbd5e1' }}>
+    <div className="bg-slate-900/50 rounded-xl overflow-hidden border border-slate-800 shadow-xl">
+      <table className="w-full border-collapse">
+        <thead>
+          <tr className="bg-amber-500/5 border-b border-slate-800">
+            <th className="py-2.5 px-4 text-left">
+              <span className="text-amber-500 font-black text-[0.72rem] tracking-[0.15em] uppercase">GRUPO {group}</span>
+            </th>
+            <th className="w-8 text-center text-[0.65rem] font-black text-slate-500 uppercase">J</th>
+            <th className="w-8 text-center text-[0.65rem] font-black text-slate-500 uppercase">G+</th>
+            <th className="w-8 text-center text-[0.65rem] font-black text-slate-500 uppercase">G-</th>
+            <th className="w-10 text-center text-[0.65rem] font-black text-amber-500/80 uppercase">Pts</th>
+          </tr>
+        </thead>
+        <tbody className="text-slate-300">
           {standings.map((row, idx) => {
             const isTop2 = idx < 2;
             return (
@@ -186,28 +195,26 @@ function CompactStandings({
                 key={row.id}
                 onMouseEnter={e => handleMouseEnter(row, e)}
                 onMouseLeave={handleMouseLeave}
-                style={{
-                  borderBottom: '1px solid #1e293b',
-                  background: isTop2 ? 'rgba(74,222,128,0.04)' : undefined,
-                  borderLeft: isTop2 ? '3px solid #4ade80' : '3px solid transparent',
-                  cursor: 'default',
-                  transition: 'background 0.15s',
-                }}
-                className="forja-standings-row"
+                className={cn(
+                  "border-b border-slate-800/40 transition-colors cursor-default hover:bg-slate-800/40",
+                  isTop2 && "bg-emerald-500/[0.03] border-l-2 border-l-emerald-500"
+                )}
               >
-                <td style={{ padding: '0.6rem 0.75rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: '140px', textOverflow: 'ellipsis' }}>
-                  <span style={{ color: isTop2 ? '#4ade80' : '#64748b', marginRight: '0.4rem', fontSize: '0.7rem' }}>{idx + 1}.</span>
+                <td className="py-2.5 px-4 font-bold text-[0.78rem] whitespace-nowrap overflow-hidden max-w-[140px] truncate">
+                  <span className={cn("mr-2 text-[0.65rem] tabular-nums opacity-50", isTop2 && "text-emerald-500 opacity-100")}>
+                    {idx + 1}.
+                  </span>
                   {row.team_name}
                 </td>
-                <td style={{ padding: '0.6rem 0.4rem', textAlign: 'center', color: '#64748b', fontSize: '0.75rem' }}>{row.matchesPlayed}</td>
-                <td style={{ padding: '0.6rem 0.4rem', textAlign: 'center', color: '#4ade80', fontSize: '0.75rem' }}>{row.gamesWon}</td>
-                <td style={{ padding: '0.6rem 0.4rem', textAlign: 'center', color: '#f87171', fontSize: '0.75rem' }}>{row.gamesLost}</td>
-                <td style={{ padding: '0.6rem 0.75rem', textAlign: 'center', fontWeight: 800, color: '#facc15', fontSize: '0.82rem' }}>{row.points}</td>
+                <td className="w-8 text-center text-slate-500 text-[0.75rem] tabular-nums font-medium">{row.matchesPlayed}</td>
+                <td className="w-8 text-center text-emerald-400 text-[0.75rem] tabular-nums font-bold">{row.gamesWon}</td>
+                <td className="w-8 text-center text-rose-400/80 text-[0.75rem] tabular-nums font-medium">{row.gamesLost}</td>
+                <td className="w-10 text-center text-amber-400 text-[0.8rem] tabular-nums font-black">{row.points}</td>
               </tr>
             );
           })}
           {standings.length === 0 && (
-            <tr><td colSpan={5} style={{ padding: '1.5rem', textAlign: 'center', color: '#475569', fontSize: '0.8rem' }}>Sem times</td></tr>
+            <tr><td colSpan={5} className="p-6 text-center text-slate-600 text-[0.75rem] italic">Nenhum time</td></tr>
           )}
         </tbody>
       </table>
@@ -228,6 +235,132 @@ function CompactStandings({
  * @returns The JSX element representing the prize card with formatted currency values
  */
 
+function MatchCountdownCard({ match, isAdmin, onEdit }: { match: UpcomingMatch; isAdmin?: boolean; onEdit?: (m: UpcomingMatch) => void }) {
+  const [timeLeft, setTimeLeft] = useState<string>('');
+
+  const targetDate = useMemo(() => {
+    if (!match.scheduledDate) return null;
+    
+    // 🔥 ULTIMATE TIMEZONE FIX: Split matemático para garantir fuso local sem conversão UTC
+    if (typeof match.scheduledDate === 'string') {
+      const [year, month, day] = match.scheduledDate.split('-').map(Number);
+      const [hour, minute] = (match.scheduledTime || '00:00').split(':').map(Number);
+      return new Date(year, month - 1, day, hour, minute);
+    }
+
+    // Se for Timestamp do Firebase, pegamos os componentes para reconstruir em local
+    const d = match.scheduledDate?.toDate ? match.scheduledDate.toDate() : new Date(match.scheduledDate);
+    if (match.scheduledTime) {
+      const [hh, mm] = match.scheduledTime.split(':').map(Number);
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate(), hh, mm);
+    }
+
+    return d;
+  }, [match.scheduledDate, match.scheduledTime]);
+
+  useEffect(() => {
+    if (!targetDate) return;
+
+    const update = () => {
+      const now = new Date();
+      const diff = targetDate.getTime() - now.getTime();
+      
+      if (diff <= 0) {
+        setTimeLeft(match.status === 'drafting' ? 'AO VIVO' : 'Em andamento');
+        return;
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      
+      setTimeLeft(`Começa em: ${days > 0 ? `${days}d ` : ''}${hours}h ${mins}m`);
+    };
+
+    update();
+    const timer = setInterval(update, 30000); // Atualiza a cada 30s
+    return () => clearInterval(timer);
+  }, [targetDate, match.status]);
+
+  const dateLabel = useMemo(() => {
+    if (!targetDate) return '';
+    const day = new Intl.DateTimeFormat('pt-BR', { weekday: 'long' }).format(targetDate);
+    const capitalizedDay = day.charAt(0).toUpperCase() + day.slice(1);
+    
+    const timeStr = new Intl.DateTimeFormat('pt-BR', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    }).format(targetDate);
+
+    return `${capitalizedDay}, ${timeStr}`;
+  }, [targetDate]);
+
+  return (
+    <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-4 flex flex-col md:flex-row justify-between items-center gap-4 hover:border-amber-500/30 transition-all group">
+      <div className="flex-1">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="bg-amber-500/10 text-amber-500 text-[0.65rem] font-black px-2 py-0.5 rounded uppercase tracking-wider">
+            {match.stage === 'GROUP' ? 'Fase de Grupos' : 'Playoffs'}
+          </span>
+          {match.status === 'drafting' && (
+            <span className="flex items-center gap-1.5 text-emerald-400 text-[0.65rem] font-bold animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> AO VIVO
+            </span>
+          )}
+        </div>
+        <h4 className="text-white font-black text-lg group-hover:text-amber-400 transition-colors">{match.name}</h4>
+        
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-slate-400 text-xs font-medium">
+          <div className="flex items-center gap-1.5">
+            <span>📅</span>
+            <span>{dateLabel || 'Data a definir'}</span>
+          </div>
+          {timeLeft && (
+            <div className="flex items-center gap-1.5 text-amber-500/90 font-bold">
+              <span>⏰</span>
+              <span>{timeLeft}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 w-full md:w-auto">
+        {match.streamerUrl && (
+          <a 
+            href={match.streamerUrl.startsWith('http') ? match.streamerUrl : `https://${match.streamerUrl}`}
+            target="_blank" 
+            rel="noreferrer"
+            className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#9146FF]/10 hover:bg-[#9146FF] text-[#9146FF] hover:text-white border border-[#9146FF]/20 px-4 py-2 rounded-lg text-xs font-black transition-all"
+          >
+            <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+              <path d="M11.571 4.714h1.715v5.143H11.57V4.714zm4.715 0h1.714v5.143h-1.714V4.714zM4.714 0L1.714 3v16.286h5.143V24l4.286-4.714h3.428L22.286 12V0H4.714zm15.857 11.143l-3.428 3.428h-3.857l-3 3v-3H6.857V1.714h13.714v9.429z"/>
+            </svg>
+            AO VIVO
+          </a>
+        )}
+        <a
+          href={`/lobby/${match.id}`}
+          target="_blank"
+          rel="noreferrer"
+          className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-5 py-2 rounded-lg text-xs font-black transition-all"
+        >
+          LOBBY →
+        </a>
+
+        {isAdmin && (
+          <button
+            onClick={() => onEdit?.(match)}
+            className="flex items-center justify-center bg-slate-800/50 hover:bg-amber-500 hover:text-slate-900 text-amber-500 w-10 h-10 rounded-lg transition-all border border-slate-700"
+            title="Editar Agendamento"
+          >
+            ✏️
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PrizeCard({ total, currency, distribution }: {
   total: number;
   currency: string;
@@ -240,13 +373,13 @@ function PrizeCard({ total, currency, distribution }: {
 
   return (
     <div style={{
-      background: 'linear-gradient(135deg, rgba(245,158,11,0.08) 0%, rgba(30,41,59,0.8) 100%)',
+      background: 'linear-gradient(135deg, rgba(245,158,11,0.1) 0%, rgba(30,41,59,0.9) 100%)',
       border: '1px solid rgba(245,158,11,0.25)',
       borderRadius: '1rem',
-      padding: '1.25rem',
+      padding: '1rem 1.25rem',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-        <span style={{ color: '#f59e0b', fontWeight: 800, fontSize: '0.85rem', letterSpacing: '0.08em', textTransform: 'uppercase' }}>🏆 Premiação</span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+        <span style={{ color: '#f59e0b', fontWeight: 900, fontSize: '0.7rem', letterSpacing: '0.15em', textTransform: 'uppercase' }}>🏆 Premiação</span>
         <span style={{ color: '#facc15', fontWeight: 900, fontSize: '1.1rem' }}>{fmt(total)}</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -290,6 +423,39 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
   const [prizeData, setPrizeData] = useState<any>(null);
   const [lobbies, setLobbies] = useState<UpcomingMatch[]>([]);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [editingMatch, setEditingMatch] = useState<UpcomingMatch | null>(null);
+
+  const handleUpdateMatch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMatch) return;
+
+    try {
+      const lobbyRef = doc(db, 'lobbies', editingMatch.id);
+      const form = e.target as HTMLFormElement;
+      const scheduledDate = (form.elements.namedItem('date') as HTMLInputElement).value;
+      const scheduledTime = (form.elements.namedItem('time') as HTMLInputElement).value;
+      const streamerUrl = (form.elements.namedItem('streamer') as HTMLInputElement).value;
+
+      await updateDoc(lobbyRef, {
+        'config.scheduledDate': scheduledDate,
+        'config.scheduledTime': scheduledTime,
+        'config.streamerUrl': streamerUrl
+      });
+
+      // Atualiza estado local para UX instantânea
+      setLobbies(prev => prev.map(l => l.id === editingMatch.id ? { 
+        ...l, 
+        scheduledDate, 
+        scheduledTime, 
+        streamerUrl 
+      } : l));
+
+      setEditingMatch(null);
+      alert('Agendamento atualizado!');
+    } catch (err: any) {
+      alert(`Erro ao atualizar: ${err.message}`);
+    }
+  };
 
   // Cold-fetch de prizes + lobbies
   useEffect(() => {
@@ -314,6 +480,9 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
         scoreA: l.scoreA ?? l.teamAScore ?? 0,
         scoreB: l.scoreB ?? l.teamBScore ?? 0,
         stage: l.config?.tournamentStage ?? 'GROUP',
+        scheduledDate: l.config?.scheduledDate,
+        scheduledTime: l.config?.scheduledTime,
+        streamerUrl: l.config?.streamerUrl,
         config: {
           forjaTeamA: l.config?.forjaTeamA,
           forjaTeamB: l.config?.forjaTeamB,
@@ -420,15 +589,15 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
         {/* Fase atual */}
         <div style={{
           background: 'rgba(30,41,59,0.7)', border: '1px solid #1e293b',
-          borderRadius: '1rem', padding: '1.25rem',
+          borderRadius: '1rem', padding: '1rem 1.25rem',
         }}>
-          <div style={{ color: '#64748b', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Fase Atual</div>
+          <div style={{ color: '#94a3b8', fontSize: '0.65rem', fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.4rem' }}>Fase Atual</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <span style={{ fontSize: '1.5rem' }}>{phaseMeta.icon}</span>
             <span style={{ color: phaseMeta.color, fontWeight: 800, fontSize: '1rem' }}>{phaseMeta.label}</span>
           </div>
           {phase === 'playoffs' && (
-            <div style={{ color: '#94a3b8', fontSize: '0.75rem', marginTop: '0.3rem' }}>
+            <div style={{ color: '#cbd5e1', fontSize: '0.75rem', marginTop: '0.2rem' }}>
               {PLAYOFF_FORMAT_LABEL[playoffFmt] ?? 'Eliminação Simples'}
             </div>
           )}
@@ -437,13 +606,13 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
         {/* Participantes */}
         <div style={{
           background: 'rgba(30,41,59,0.7)', border: '1px solid #1e293b',
-          borderRadius: '1rem', padding: '1.25rem',
+          borderRadius: '1rem', padding: '1rem 1.25rem',
         }}>
-          <div style={{ color: '#64748b', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Participantes</div>
+          <div style={{ color: '#94a3b8', fontSize: '0.65rem', fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.4rem' }}>Participantes</div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem' }}>
             <span style={{ color: '#f8fafc', fontWeight: 900, fontSize: '1.8rem' }}>{teams.length}</span>
-            <span style={{ color: '#64748b', fontSize: '0.85rem' }}>times</span>
-            <span style={{ color: '#475569', fontSize: '0.75rem', marginLeft: '0.25rem' }}>/ {totalPlayers} jogadores</span>
+            <span style={{ color: '#cbd5e1', fontSize: '0.85rem', fontWeight: 600 }}>times</span>
+            <span style={{ color: '#94a3b8', fontSize: '0.75rem', marginLeft: '0.25rem' }}>/ {totalPlayers} jogadores</span>
           </div>
         </div>
 
@@ -484,32 +653,14 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
               Ver tabela completa →
             </button>
           </div>
-          <div style={{ display: 'grid', gap: '0.6rem' }}>
+          <div className="grid gap-3">
             {upcoming.map(match => (
-              <div key={match.id} style={{
-                background: '#0f172a', border: '1px solid #1e293b',
-                borderRadius: '0.75rem', padding: '0.85rem 1rem',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              }}>
-                <div>
-                  <div style={{ color: '#f8fafc', fontWeight: 600, fontSize: '0.88rem' }}>{match.name}</div>
-                  <div style={{ color: '#64748b', fontSize: '0.72rem', marginTop: '0.15rem' }}>
-                    {match.stage === 'GROUP' ? 'Fase de Grupos' : 'Playoffs'} ·{' '}
-                    <span style={{ color: match.status === 'drafting' ? '#4ade80' : '#f59e0b' }}>
-                      {match.status === 'drafting' ? '● AO VIVO' : match.status === 'waiting' ? 'Aguardando' : match.status}
-                    </span>
-                  </div>
-                </div>
-                <a
-                  href={`/lobby/${match.id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="forja-btn forja-btn--primary"
-                  style={{ padding: '0.35rem 0.875rem', fontSize: '0.75rem', textDecoration: 'none' }}
-                >
-                  Entrar →
-                </a>
-              </div>
+              <MatchCountdownCard 
+                key={match.id} 
+                match={match} 
+                isAdmin={isAdmin} 
+                onEdit={setEditingMatch} 
+              />
             ))}
           </div>
         </div>
@@ -530,7 +681,7 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
               Ver completo →
             </button>
           </div>
-          <p style={{ color: '#475569', fontSize: '0.72rem', marginBottom: '0.75rem', marginTop: '-0.25rem' }}>
+          <p style={{ color: '#94a3b8', fontSize: '0.72rem', marginBottom: '0.75rem', marginTop: '-0.25rem', opacity: 0.8, fontStyle: 'italic' }}>
             Passe o mouse sobre um time para ver os membros
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
@@ -563,6 +714,68 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
           >
             Ver inscritos →
           </button>
+        </div>
+      )}
+
+      {/* ── Admin Match Editor Modal ───────────────────────── */}
+      {editingMatch && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <h3 className="text-xl font-black text-white mb-6 flex items-center gap-2">
+              ✏️ Editar Agendamento
+            </h3>
+            
+            <form onSubmit={handleUpdateMatch} className="space-y-4">
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Data da Partida</label>
+                <input 
+                  name="date" 
+                  type="date" 
+                  defaultValue={typeof editingMatch.scheduledDate === 'string' ? editingMatch.scheduledDate : ''} 
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-amber-500"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Horário (Local)</label>
+                <input 
+                  name="time" 
+                  type="time" 
+                  defaultValue={editingMatch.scheduledTime || ''} 
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-amber-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">URL da Stream (Opcional)</label>
+                <input 
+                  name="streamer" 
+                  type="text" 
+                  placeholder="twitch.tv/seu_canal"
+                  defaultValue={editingMatch.streamerUrl || ''} 
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white text-xs focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mt-8">
+                <button 
+                  type="button"
+                  onClick={() => setEditingMatch(null)}
+                  className="bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-all"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3 rounded-xl transition-all"
+                >
+                  Salvar Alterações
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

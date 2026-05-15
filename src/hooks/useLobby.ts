@@ -65,6 +65,7 @@ export function useLobby(initialNickname: string) {
 
   const [lobby, setLobby] = useState<Lobby | null>(null);
   const [lobbyId, setLobbyId] = useState<string | null>(null);
+  const [lobbyInitialLoading, setLobbyInitialLoading] = useState(false);
   const [nickname, setNickname] = useState(initialNickname);
   const [isCaptain1, setIsCaptain1] = useState(false);
   const [isCaptain2, setIsCaptain2] = useState(false);
@@ -145,8 +146,17 @@ export function useLobby(initialNickname: string) {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const id = params.get('lobby');
-    if (id) setLobbyId(id);
+    let id = params.get('lobby');
+    
+    // Support path-based ID: /lobby/hk4ltxt
+    if (!id && window.location.pathname.startsWith('/lobby/')) {
+      id = window.location.pathname.split('/')[2];
+    }
+    
+    if (id) {
+      setLobbyId(id);
+      setLobbyInitialLoading(true);
+    }
   }, []);
 
   // Presence update
@@ -205,6 +215,7 @@ export function useLobby(initialNickname: string) {
     const unsub = lobbyService.subscribeToLobby(
       lobbyId,
       (data) => {
+        setLobbyInitialLoading(false);
         setLobby(prev => {
           if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
           return data;
@@ -224,7 +235,10 @@ export function useLobby(initialNickname: string) {
 
         setIsSpectator(shouldBeSpectator);
       },
-      (err) => setError("Erro no Lobby: " + err.message)
+      (err) => {
+        setLobbyInitialLoading(false);
+        setError("Erro no Lobby: " + err.message);
+      }
     );
 
     return unsub;
@@ -344,6 +358,7 @@ export function useLobby(initialNickname: string) {
     forceFinish,
     forceUnpause,
     forceStartDraft,
-    isAuthReady
+    isAuthReady,
+    lobbyInitialLoading
   };
 }

@@ -447,7 +447,12 @@ export function useDraft(
 
   // Handle ADMIN turns and Revealing phase
   useEffect(() => {
-    if (!lobby || lobby.status !== 'drafting') return;
+    // TRAVA DE SEGURANÇA: O draft nunca progride se não houver confirmação de pronto
+    const isWaitingPhase = lobby.status === 'waiting' || lobby.phase === 'ready' || lobby.phase === 'waiting';
+    const isBothReady = lobby.currentGame === 1 ? (lobby.readyA && lobby.readyB) : (lobby.readyA_nextGame && lobby.readyB_nextGame);
+    
+    if (isWaitingPhase && !isBothReady) return;
+    if (lobby.status !== 'drafting') return;
 
     if (lobby.phase === 'revealing') {
       if (!isCaptain1) return;

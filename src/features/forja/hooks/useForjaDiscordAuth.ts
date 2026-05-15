@@ -196,5 +196,26 @@ export function useForjaDiscordAuth(): UseForjaDiscordAuthResult {
     // 2. Fallback: IDs hardcoded e .env (funcionam mesmo sem registro)
     (discordUser ? isForjaAdmin(discordUser.discord_id) : false);
 
+  // ─── BYPASS LOCAL (MOCK) ──────────────────────────────────────────────────
+  // ⚠️ TODO: COMENTAR/REMOVER ANTES DO DEPLOY PARA PRODUÇÃO
+  const MOCK_AUTH = {
+    discordUser: {
+      discord_id: "123456789", // Alterar aqui para testar o lock do capitão (ex: ID salvo no config do lobby)
+      username: "Admin Local",
+      discriminator: "0000",
+      avatar_url: "",
+      access_token: "mock_token"
+    },
+    isAdmin: true, // Alterar para false quando for testar a visão de jogador/capitão
+    isLoading: false,
+    loginWithDiscord: () => console.log("Login mockado"),
+    logout: () => console.log("Logout mockado"),
+  };
+
+  return MOCK_AUTH;
+
+  // Código Original (Comentado para Reversão Fácil):
+  /*
   return { discordUser, isAdmin, isLoading, loginWithDiscord, logout };
+  */
 }

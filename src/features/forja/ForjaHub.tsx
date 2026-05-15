@@ -39,7 +39,6 @@ const PUBLIC_TABS: ForjaTab[] = [
   { id: 'regras' as ForjaTabId,    label: 'Regras',    icon: '📜' },
   { id: 'mapas' as ForjaTabId,     label: 'Mapas',     icon: '🗺️' },
   { id: 'formato' as ForjaTabId,   label: 'Formato',   icon: '🐍' },
-  { id: 'schedule' as ForjaTabId,  label: 'Schedule',  icon: '📅' },
   { id: 'times' as ForjaTabId,     label: 'Times',     icon: '🛡️' },
   { id: 'tabela' as ForjaTabId,    label: 'Tabela',    icon: '📊' },
 ];
@@ -188,7 +187,7 @@ export default function ForjaHub() {
   })();
 
   return (
-    <div className="forja-hub">
+    <div className="forja-hub relative z-0">
 
       {/* ── Deadline Banner ──────────────────────── */}
       {showDeadlineBanner && (
@@ -273,7 +272,20 @@ export default function ForjaHub() {
         </div>
       </header>
 
-      {/* ── Tabs Nav ──────────────────────────── */}
+      {/* ── Content Area with Background ────────────────── */}
+      <div className="relative z-0 min-h-[60vh]">
+        {/* ── Background Video & Overlay (Localized) ── */}
+        <video 
+          autoPlay 
+          loop 
+          muted 
+          playsInline 
+          src="/mainmenubackground.mp4" 
+          className="absolute inset-0 w-full h-full object-cover -z-20 opacity-100"
+        />
+        <div className="absolute inset-0 bg-slate-950/85 -z-10" />
+
+        {/* ── Tabs Nav ──────────────────────────── */}
       <nav className="forja-tabs-nav" role="tablist">
         <div className="forja-tabs-inner">
           {allVisibleTabs.map(tab => (
@@ -301,7 +313,6 @@ export default function ForjaHub() {
           {activeTab === 'regras'      && <ForjaRulesEditor {...sharedProps} />}
           {activeTab === 'mapas'       && <ForjaMapas {...sharedProps} />}
           {activeTab === 'formato'     && <ForjaFormato {...sharedProps} />}
-          {activeTab === 'schedule'    && <ForjaSchedule {...sharedProps} />}
           {activeTab === 'times'       && <ForjaTimes {...sharedProps} />}
           {activeTab === 'tabela'      && <ForjaTabela {...sharedProps} />}
           {activeTab === 'draft-room'  && showDraftRoomTab && <ForjaDraftRoom {...sharedProps} />}
@@ -309,6 +320,7 @@ export default function ForjaHub() {
           {activeTab === 'admin-draft' && isAdmin && <ForjaAdminDraft {...sharedProps} />}
         </Suspense>
       </main>
+    </div>
 
       {/* ── Registration Modal ─────────────────── */}
       <ForjaRegistrationModal

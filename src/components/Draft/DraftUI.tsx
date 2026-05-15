@@ -202,6 +202,7 @@ export function DraftUI(props: DraftUIProps) {
         t={t}
         status={lobby.status}
         phase={lobby.phase}
+        lobby={lobby}
       />
 
       <main className="flex-1 flex flex-col pt-[68px] md:pt-0 overflow-y-auto md:overflow-hidden relative custom-scrollbar">

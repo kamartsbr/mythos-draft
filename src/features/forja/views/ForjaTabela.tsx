@@ -360,7 +360,7 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
                 <div>
                   <label className="forja-reg-label">Rodada</label>
                   <select className="forja-reg-input" value={groupRound} onChange={e => setGroupRound(e.target.value)}>
-                    {['1', '2', '3', '4', '5', 'Desempate'].map(r => <option key={r} value={r}>Rodada {r}</option>)}
+                    {['1', '2', '3', 'Desempate'].map(r => <option key={r} value={r}>Rodada {r}</option>)}
                   </select>
                 </div>
               </>
@@ -454,10 +454,10 @@ export default function ForjaTabela({ isAdmin }: ForjaViewProps) {
                             >
                               <td style={{ padding: '0.75rem', fontWeight: 600 }}>
                                  <span style={{ marginRight: '0.5rem', opacity: 0.5 }}>{idx + 1}.</span>
-                                 <span style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: 400, marginRight: '0.5rem' }}>
+                                 {row.team_name}
+                                 <span style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: 400, marginLeft: '0.5rem' }}>
                                    [{captainNick}]
                                  </span>
-                                 {row.team_name}
                               </td>
                               <td style={{ padding: '0.75rem', textAlign: 'center' }}>{row.matchesPlayed}</td>
                               <td style={{ padding: '0.75rem', textAlign: 'center', color: '#4ade80' }}>{row.gamesWon}</td>

@@ -220,11 +220,11 @@ function CompactStandings({
 }
 
 /**
- * Renders a prize summary card showing the total prize pool and the top three placement distributions.
+ * Renders a prize summary card showing the total prize pool and the placement distributions.
  *
  * @param total - Total prize amount (numeric value in the provided currency)
  * @param currency - Currency code; when `'BRL'` values are prefixed with `R$`, otherwise with `$`
- * @param distribution - Array of placement entries where `percent` is the percentage share (0–100) for that place; only the first three entries are displayed
+ * @param distribution - Array of placement entries where `percent` is the percentage share (0–100) for that place
  * @returns The JSX element representing the prize card with formatted currency values
  */
 
@@ -250,8 +250,8 @@ function PrizeCard({ total, currency, distribution }: {
         <span style={{ color: '#facc15', fontWeight: 900, fontSize: '1.1rem' }}>{fmt(total)}</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-        {distribution.map((d, i) => (
-          <div key={d.place} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        {Array.isArray(distribution) && distribution.map((d, i) => (
+          <div key={`${d.place}-${i}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ color: PLACE_COLORS[i] ?? '#94a3b8', fontSize: '0.82rem', fontWeight: 600 }}>
               {PLACE_ICONS[i] ?? '🏅'} {d.label}
             </span>

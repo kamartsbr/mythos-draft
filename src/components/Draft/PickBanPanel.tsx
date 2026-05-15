@@ -809,7 +809,12 @@ export function PickBanPanel({
           <div className="flex items-center justify-center gap-2 sm:gap-4">
             {(() => {
               const activeTeam = myTeam || (isCaptain1 ? 'A' : (isCaptain2 ? 'B' : 'A'));
-              const players = activeTeam === 'A' ? (lobby.teamAPlayers || []) : (lobby.teamBPlayers || []);
+              let players = activeTeam === 'A' ? (lobby.teamAPlayers || []) : (lobby.teamBPlayers || []);
+              
+              if (players.length === 0) {
+                const teamSlots = activeTeam === 'A' ? [1, 4, 5] : [2, 3, 6];
+                players = teamSlots.map(id => ({ name: `Player ${id}`, position: id }));
+              }
               
               return players.map((tp, idx) => {
                 const lowerTpName = tp.name.toLowerCase().trim();

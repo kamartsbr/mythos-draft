@@ -70,7 +70,8 @@ export const MAPS: MapInfo[] = [
 
 export const FORJA_MAP_POOL = [
   'anatolia', 'elysium', 'ghost_lake', 'gold_rush', 'marsh', 
-  'mediterranean', 'megalopolis', 'oasis', 'tundra', 'valley_of_kings'
+  'mediterranean', 'megalopolis', 'oasis', 'tundra', 'valley_of_kings',
+  'giza', 'steppe', 'alfheim', 'savannah'
 ];
 
 export const RANKED_MAP_POOL = [

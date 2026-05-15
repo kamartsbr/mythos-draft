@@ -43,10 +43,10 @@ interface UpcomingMatch {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const PHASE_LABELS: Record<string, { label: string; color: string; icon: string }> = {
-  pre_tournament: { label: 'Pré-Torneio',    color: '#94a3b8', icon: '⏳' },
-  group_stage:    { label: 'Fase de Grupos', color: '#60a5fa', icon: '🏟️' },
-  playoffs:       { label: 'Playoffs',        color: '#f59e0b', icon: '🏆' },
-  finished:       { label: 'Encerrado',       color: '#4ade80', icon: '✅' },
+  pre_tournament: { label: 'Pré-Torneio', color: '#94a3b8', icon: '⏳' },
+  group_stage: { label: 'Fase de Grupos', color: '#60a5fa', icon: '🏟️' },
+  playoffs: { label: 'Playoffs', color: '#f59e0b', icon: '🏆' },
+  finished: { label: 'Encerrado', color: '#4ade80', icon: '✅' },
 };
 
 const PLAYOFF_FORMAT_LABEL: Record<string, string> = {
@@ -220,11 +220,11 @@ function CompactStandings({
 }
 
 /**
- * Renders a prize summary card showing the total prize pool and the top three placement distributions.
+ * Renders a prize summary card showing the total prize pool and the placement distributions.
  *
  * @param total - Total prize amount (numeric value in the provided currency)
  * @param currency - Currency code; when `'BRL'` values are prefixed with `R$`, otherwise with `$`
- * @param distribution - Array of placement entries where `percent` is the percentage share (0–100) for that place; only the first three entries are displayed
+ * @param distribution - Array of placement entries where `percent` is the percentage share (0–100) for that place
  * @returns The JSX element representing the prize card with formatted currency values
  */
 
@@ -235,8 +235,8 @@ function PrizeCard({ total, currency, distribution }: {
 }) {
   const fmt = (val: number) => `${currency === 'BRL' ? 'R$' : '$'} ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
 
-  const PLACE_COLORS = ['#facc15', '#94a3b8', '#c2884f'];
-  const PLACE_ICONS  = ['🥇', '🥈', '🥉'];
+  const PLACE_COLORS = ['#facc15', '#94a3b8', '#c2884f', '#64748b'];
+  const PLACE_ICONS = ['🥇', '🥈', '🥉', '🏅'];
 
   return (
     <div style={{
@@ -250,8 +250,8 @@ function PrizeCard({ total, currency, distribution }: {
         <span style={{ color: '#facc15', fontWeight: 900, fontSize: '1.1rem' }}>{fmt(total)}</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-        {distribution.slice(0, 3).map((d, i) => (
-          <div key={d.place} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        {Array.isArray(distribution) && distribution.map((d, i) => (
+          <div key={`${d.place}-${i}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ color: PLACE_COLORS[i] ?? '#94a3b8', fontSize: '0.82rem', fontWeight: 600 }}>
               {PLACE_ICONS[i] ?? '🏅'} {d.label}
             </span>
@@ -282,13 +282,13 @@ interface ForjaHomeProps extends ForjaViewProps {
  * @returns The JSX element for the Forja home/dashboard view.
  */
 export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTabChange }: ForjaHomeProps) {
-  const { settings }         = useForjaSettings();
-  const { teams }             = useForjaTeams(true);
-  const { rankedPlayers }     = useForjaPlayers(true);
+  const { settings } = useForjaSettings();
+  const { teams } = useForjaTeams(true);
+  const { rankedPlayers } = useForjaPlayers(true);
   const { entries: schedule } = useForjaSchedule();
 
-  const [prizeData,  setPrizeData]  = useState<any>(null);
-  const [lobbies,    setLobbies]    = useState<UpcomingMatch[]>([]);
+  const [prizeData, setPrizeData] = useState<any>(null);
+  const [lobbies, setLobbies] = useState<UpcomingMatch[]>([]);
   const [dataLoaded, setDataLoaded] = useState(false);
 
   // Cold-fetch de prizes + lobbies
@@ -308,12 +308,12 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
       const officialLobbies = (lobbiesRaw as any[]).filter(l => l.config?.isOfficialForjaMatch || l.config?.forjaTeamA);
 
       const mapped: UpcomingMatch[] = officialLobbies.map(l => ({
-        id:     l.id,
-        name:   l.config?.name ?? 'Partida',
+        id: l.id,
+        name: l.config?.name ?? 'Partida',
         status: l.status ?? 'waiting',
         scoreA: l.scoreA ?? l.teamAScore ?? 0,
         scoreB: l.scoreB ?? l.teamBScore ?? 0,
-        stage:  l.config?.tournamentStage ?? 'GROUP',
+        stage: l.config?.tournamentStage ?? 'GROUP',
         config: {
           forjaTeamA: l.config?.forjaTeamA,
           forjaTeamB: l.config?.forjaTeamB,
@@ -322,7 +322,7 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
         }
       }));
       // Debug helper: expose raw lobbies in dev mode only (not shipped to production)
-      if (process.env.NODE_ENV === 'development') {
+      if (import.meta.env.DEV) {
         (window as any).__forjaLobbiesRaw__ = lobbiesRaw;
       }
       setLobbies(mapped);
@@ -333,18 +333,18 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
 
   // Standings por grupo
   const calculateStandings = (groupId: string): StandingRow[] => {
-    const groupTeams   = teams.filter(t => t.groupId === groupId);
+    const groupTeams = teams.filter(t => t.groupId === groupId);
     const groupLobbies = lobbies.filter(l => l.stage === 'GROUP' && l.config?.forjaGroupId === groupId && (l.status === 'completed' || l.status === 'finished'));
 
     return groupTeams.map(team => {
       let gamesWon = 0, gamesLost = 0, matchesPlayed = 0;
       groupLobbies.forEach(l => {
         if (l.config?.forjaTeamA === team.id) {
-          gamesWon  += (l.scoreA ?? 0);
+          gamesWon += (l.scoreA ?? 0);
           gamesLost += (l.scoreB ?? 0);
           if (l.status === 'completed' || l.status === 'finished') matchesPlayed++;
         } else if (l.config?.forjaTeamB === team.id) {
-          gamesWon  += (l.scoreB ?? 0);
+          gamesWon += (l.scoreB ?? 0);
           gamesLost += (l.scoreA ?? 0);
           if (l.status === 'completed' || l.status === 'finished') matchesPlayed++;
         }
@@ -356,9 +356,9 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
   const groups = ['A', 'B', 'C', 'D'].filter(g => teams.some(t => t.groupId === g));
   const activeGroups = groups.length > 0 ? groups : [];
 
-  const phase        = settings?.current_phase ?? 'pre_tournament';
-  const phaseMeta    = PHASE_LABELS[phase] ?? PHASE_LABELS.pre_tournament;
-  const playoffFmt   = settings?.playoff_format ?? 'single_elim';
+  const phase = settings?.current_phase ?? 'pre_tournament';
+  const phaseMeta = PHASE_LABELS[phase] ?? PHASE_LABELS.pre_tournament;
+  const playoffFmt = settings?.playoff_format ?? 'single_elim';
   const totalPlayers = rankedPlayers.filter(p => !p.is_reserve).length;
   const isRegistered = rankedPlayers.some(p => p.discord_id === discordUser?.discord_id);
 

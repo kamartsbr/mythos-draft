@@ -422,3 +422,63 @@ interface LobbyConfig {
 
 ### 16.8 useDraft — startsWithB para FORJA
 O hook `useDraft.ts` tem uma condição `startsWithB` que determina que, no Game 3, o perdedor do Game 2 escolhe o mapa primeiro. Essa condição foi expandida para incluir o preset `FORJA` além do `MCL`.
+
+---
+
+## 17. ARQUITETURA DE ESTADO DO DRAFT (Fluxograma)
+
+A hierarquia de estado no React e a interação com o Firestore seguem um fluxo estrito para garantir sincronia em tempo real e prevenção de concorrência.
+
+```mermaid
+sequenceDiagram
+    participant UI as PickBanPanel.tsx
+    participant Hook as useDraft.ts
+    participant App as App.tsx / useLobby.ts
+    participant Service as draftService.ts
+    participant DB as Firestore (Lobby Doc)
+
+    App->>DB: Escuta documento (onSnapshot)
+    DB-->>App: Novo estado do Lobby
+    App->>Hook: Passa lobby, isCaptain1, isCaptain2
+    Hook->>Hook: Deriva `isMyTurn`, `myTeam`, `currentTurn`
+    Hook-->>UI: Fornece flags e função `handleAction`
+    
+    Note over UI, Hook: Usuário clica em um Deus/Mapa
+    
+    UI->>Hook: handleAction(godId, playerId, playerName)
+    Hook->>Service: handleAction(lobby, actionData, ...)
+    Service->>Service: Valida Turno, Fase e Permissões
+    Service->>DB: Atualiza Doc Transactionalmente
+    DB-->>App: Dispara novo Snapshot (Ciclo recomeça)
+```
+
+**Conceitos Críticos da Arquitetura:**
+1. **Unidirectional Data Flow:** O componente visual (`PickBanPanel`, `DraftBoard`) **NUNCA** muta estado local permanente. Tudo é delegado para o `handleAction` no `useDraft.ts`, que chama `draftService.ts`.
+2. **Derivação de Identidade (`myTeam` e `isMyTurn`):** A identidade não é baseada apenas no Auth Anônimo, mas num wrapper (`isCaptain1` e `isCaptain2`) que no caso da Forja é **sobreposto pela checagem do Discord Team ID**.
+
+---
+
+## 18. LIFECYCLE DE LOBBIES E ELENCOS (O "Ghost Roster Bug")
+
+A inicialização dos elencos (`teamAPlayers` e `teamBPlayers`) difere brutalmente dependendo do contexto da partida. É crucial entender isso para evitar que a UI de seleção trave.
+
+### Cenário 1: Partida Padrão (MCL ou Casual)
+1. Link do lobby é acessado.
+2. `App.tsx` detecta que o usuário não é `captain1` nem `captain2`.
+3. Modal `JoinLobbyModal.tsx` é forçado na tela.
+4. Usuário preenche os nomes de sua equipe.
+5. `JoinLobbyModal` chama `lobbyService.joinLobby`, que **popula `teamAPlayers` ou `teamBPlayers`**.
+6. Draft prossegue normalmente.
+
+### Cenário 2: Partidas Oficiais da Forja (Aba Tabela)
+1. Admin clica em "Criar Partida". O lobby é gerado no Firestore com `teamAPlayers: []` e `teamBPlayers: []`.
+2. Como a funcionalidade foi corrigida, **`ForjaTabela.tsx` injeta os jogadores no ato da criação** utilizando o cache do Firebase (`forjaPlayers`).
+3. Quando os capitães entram na sala, o `App.tsx` reconhece seus `discord_id` via `forjaTeamA/B` e lhes concede `isCaptain1/2` igual a `true`.
+4. O `JoinLobbyModal` é **bypassado inteiramente**.
+5. O draft prossegue usando os elencos pré-populados.
+
+### Cenário 3: Draft Rápido da Forja (Testes / Solo Join)
+1. Semelhante à Partida Oficial, mas `isOfficialForjaMatch` é FALSO.
+2. Ao utilizar a opção "Solo Join (Dev)" para testes, o `JoinLobbyModal` é bypassado **sem** preencher as listas de elenco.
+3. Isso causa um estado vazio nas arrays.
+4. **O Sistema de Fallback:** Para evitar a quebra completa da UI (`PickBanPanel.tsx` parando de exibir botões), foi implementado um **fallback estático**. Se `teamAPlayers/teamBPlayers` estiver vazio em presets `MCL/FORJA`, o painel gera objetos genéricos (`Player 1`, `Player 2`, etc.) instantaneamente para destravar a interação.

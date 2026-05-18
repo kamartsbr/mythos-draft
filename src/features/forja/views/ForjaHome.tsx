@@ -10,9 +10,13 @@ import { useForjaSettings } from '../hooks/useForjaSettings';
 import { useForjaTeams } from '../hooks/useForjaTeams';
 import { useForjaPlayers } from '../hooks/useForjaPlayers';
 import { useForjaSchedule } from '../hooks/useForjaSchedule';
-import { getForjaContentOnce } from '../services/forjaService';
+import { getForjaContentOnce, deleteForjaLobby } from '../services/forjaService';
+import { FORJA_MAP_POOL, getMCLPicks } from '../../../constants';
+import { LobbyConfig, Lobby } from '../../../types';
+import { lobbyService, generateId } from '../../../services/lobbyService';
+import { MAJOR_GODS } from '../../../data/gods';
 import { db } from '../../../firebase';
-import { collection, query, where, getDocs, orderBy, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, orderBy, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { cn } from '../../../lib/utils';
 
 // ─── Tipos locais ─────────────────────────────────────────────────────────────
@@ -235,6 +239,137 @@ function CompactStandings({
  * @returns The JSX element representing the prize card with formatted currency values
  */
 
+function MatchConfrontationCard({ lobby, isAdmin, onEdit, onDelete, teams, players }: {
+  lobby: any;
+  isAdmin: boolean;
+  onEdit: (lobby: any) => void;
+  onDelete: (lobbyId: string) => void;
+  teams: ForjaTeam[];
+  players: ForjaPlayer[];
+}) {
+  const teamA = teams.find(t => t.id === lobby.config?.forjaTeamA);
+  const teamB = teams.find(t => t.id === lobby.config?.forjaTeamB);
+
+  const getCaptainNick = (team: any) => {
+    if (!team || !team.captain_id) return '';
+    const cap = players.find(p => p.discord_id === team.captain_id);
+    return cap ? ` (Cap. ${cap.nick})` : '';
+  };
+
+  const nameA = teamA ? `${teamA.team_name}${getCaptainNick(teamA)}` : lobby.config?.teamAName ?? 'Time A';
+  const nameB = teamB ? `${teamB.team_name}${getCaptainNick(teamB)}` : lobby.config?.teamBName ?? 'Time B';
+
+  const isCompleted = lobby.status === 'completed' || lobby.status === 'finished';
+  const scoreA = lobby.scoreA ?? lobby.teamAScore ?? 0;
+  const scoreB = lobby.scoreB ?? lobby.teamBScore ?? 0;
+
+  return (
+    <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-5 flex flex-col justify-between gap-4 hover:border-amber-500/30 transition-all group relative overflow-hidden">
+      {/* Header com Fase / Info */}
+      <div className="flex items-center justify-between border-b border-slate-800/50 pb-3">
+        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+          {lobby.config?.tournamentStage === 'GROUP' ? `Fase de Grupos — Grupo ${lobby.config?.forjaGroupId || ''}` : 'Playoffs'}
+        </span>
+        {lobby.status === 'drafting' ? (
+          <span className="flex items-center gap-1 text-emerald-400 text-[10px] font-bold animate-pulse">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> AO VIVO
+          </span>
+        ) : isCompleted ? (
+          <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest bg-emerald-500/10 px-2 py-0.5 rounded">
+            Concluído
+          </span>
+        ) : (
+          <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest bg-amber-500/10 px-2 py-0.5 rounded">
+            Agendado
+          </span>
+        )}
+      </div>
+
+      {/* Nome dos times e placar */}
+      <div className="flex items-center justify-between gap-3 my-2">
+        {/* Time A */}
+        <div className="flex-1 text-left min-w-0">
+          <p className={cn(
+            "text-sm font-bold truncate",
+            isCompleted && scoreA > scoreB ? "text-emerald-400 font-black" : "text-slate-200"
+          )}>
+            {nameA}
+          </p>
+        </div>
+
+        {/* Placar ou VS */}
+        <div className="flex items-center justify-center bg-slate-950/80 border border-slate-800 rounded-lg px-3 py-1.5 min-w-[70px]">
+          {isCompleted ? (
+            <div className="flex items-center gap-1.5 text-sm font-black">
+              <span className={scoreA > scoreB ? "text-emerald-400" : "text-slate-400"}>{scoreA}</span>
+              <span className="text-slate-600 font-normal">x</span>
+              <span className={scoreB > scoreA ? "text-emerald-400" : "text-slate-400"}>{scoreB}</span>
+            </div>
+          ) : (
+            <span className="text-xs font-black text-slate-500 uppercase tracking-wider">VS</span>
+          )}
+        </div>
+
+        {/* Time B */}
+        <div className="flex-1 text-right min-w-0">
+          <p className={cn(
+            "text-sm font-bold truncate",
+            isCompleted && scoreB > scoreA ? "text-emerald-400 font-black" : "text-slate-200"
+          )}>
+            {nameB}
+          </p>
+        </div>
+      </div>
+
+      {/* Footer com link do lobby / external link e admin controls */}
+      <div className="flex items-center justify-between border-t border-slate-800/50 pt-3 mt-1">
+        <div className="flex gap-2">
+          {!isCompleted && (
+            <a
+              href={`/lobby/${lobby.id}`}
+              target="_blank"
+              rel="noreferrer"
+              className="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 text-[10px] font-black uppercase tracking-wider hover:bg-amber-400 transition-all shadow-[0_0_15px_rgba(245,158,11,0.15)]"
+            >
+              Lobby →
+            </a>
+          )}
+          {lobby.externalLink && (
+            <a
+              href={lobby.externalLink.startsWith('http') ? lobby.externalLink : `https://${lobby.externalLink}`}
+              target="_blank"
+              rel="noreferrer"
+              className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-black uppercase tracking-wider transition-all"
+            >
+              Draft Externo 🔗
+            </a>
+          )}
+        </div>
+
+        {/* Admin actions */}
+        {isAdmin && (
+          <div className="flex items-center gap-1.5 ml-auto">
+            <button
+              onClick={() => onEdit(lobby)}
+              className="w-8 h-8 rounded-lg bg-slate-800/60 hover:bg-amber-500 hover:text-slate-950 text-amber-500 flex items-center justify-center transition-all border border-slate-800"
+              title="Encerrar Partida Manual"
+            >
+              📝
+            </button>
+            <button
+              onClick={() => onDelete(lobby.id)}
+              className="w-8 h-8 rounded-lg bg-slate-800/60 hover:bg-rose-500 hover:text-white text-rose-400 flex items-center justify-center transition-all border border-slate-800"
+              title="Remover Partida"
+            >
+              🗑️
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function MatchCountdownCard({ match, isAdmin, onEdit }: { match: UpcomingMatch; isAdmin?: boolean; onEdit?: (m: UpcomingMatch) => void }) {
   const [timeLeft, setTimeLeft] = useState<string>('');
 
@@ -425,6 +560,41 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
   const [dataLoaded, setDataLoaded] = useState(false);
   const [editingMatch, setEditingMatch] = useState<UpcomingMatch | null>(null);
 
+  // Match Creator Form States
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [selectedTeamA, setSelectedTeamA] = useState('');
+  const [selectedTeamB, setSelectedTeamB] = useState('');
+  const [matchStage, setMatchStage] = useState<'GROUP' | 'PLAYOFFS_BO3' | 'PLAYOFFS_BO5'>('GROUP');
+  const [matchGroup, setMatchGroup] = useState<string>('A');
+  const [groupRound, setGroupRound] = useState<string>('1');
+  const [playoffRound, setPlayoffRound] = useState<string>('Quartas');
+  const [scheduledDate, setScheduledDate] = useState<string>('');
+  const [scheduledTime, setScheduledTime] = useState<string>('');
+  const [streamerUrl, setStreamerUrl] = useState<string>('');
+
+  // Match Center Tab State
+  const [selectedPhase, setSelectedPhase] = useState<'A' | 'B' | 'C' | 'D' | 'PLAYOFFS'>('A');
+
+  // Manual editing lobby state (Match Center)
+  const [editingLobby, setEditingLobby] = useState<any | null>(null);
+
+  // Reset selected teams on changes
+  useEffect(() => {
+    setSelectedTeamA('');
+    setSelectedTeamB('');
+  }, [matchGroup, matchStage]);
+
+  const availableTeamsForA = useMemo(() => {
+    if (matchStage === 'GROUP') {
+      return teams.filter(t => t.groupId === matchGroup);
+    }
+    return teams;
+  }, [teams, matchGroup, matchStage]);
+
+  const availableTeamsForB = useMemo(() => {
+    return availableTeamsForA.filter(t => t.id !== selectedTeamA);
+  }, [availableTeamsForA, selectedTeamA]);
+
   const handleUpdateMatch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingMatch) return;
@@ -446,7 +616,7 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
         'config.streamerUrl': streamerUrl
       });
 
-      // Atualiza estado local para UX instantânea
+      // Local state update for instant feedback
       setLobbies(prev => prev.map(l => l.id === editingMatch.id ? { 
         ...l, 
         scheduledDate, 
@@ -461,47 +631,246 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
     }
   };
 
-  // Cold-fetch de prizes + lobbies
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([
-      getForjaContentOnce('prizes').catch(() => null),
-      getDocs(query(
-        collection(db, 'lobbies'),
-        where('config.preset', '==', 'FORJA'),
-        orderBy('createdAt', 'desc')
-      )).then(s => s.docs.map(d => ({ id: d.id, ...d.data() } as any))).catch(() => []),
-    ]).then(([prizes, lobbiesRaw]) => {
-      if (cancelled) return;
-      setPrizeData(prizes);
-      // Upcoming: lobbies não concluídos primeiro, depois os mais recentes
-      const officialLobbies = (lobbiesRaw as any[]).filter(l => l.config?.isOfficialForjaMatch || l.config?.forjaTeamA);
+  const handleCreateMatch = async () => {
+    if (!selectedTeamA || !selectedTeamB || selectedTeamA === selectedTeamB) {
+      alert('Selecione dois times diferentes.');
+      return;
+    }
 
-      const mapped: UpcomingMatch[] = officialLobbies.map(l => ({
-        id: l.id,
-        name: l.config?.name ?? 'Partida',
-        status: l.status ?? 'waiting',
-        scoreA: l.scoreA ?? l.teamAScore ?? 0,
-        scoreB: l.scoreB ?? l.teamBScore ?? 0,
-        stage: l.config?.tournamentStage ?? 'GROUP',
-        scheduledDate: l.config?.scheduledDate,
-        scheduledTime: l.config?.scheduledTime,
-        streamerUrl: l.config?.streamerUrl,
-        config: {
-          forjaTeamA: l.config?.forjaTeamA,
-          forjaTeamB: l.config?.forjaTeamB,
-          forjaGroupId: l.config?.forjaGroupId,
-          tournamentStage: l.config?.tournamentStage
+    const teamA = teams.find(t => t.id === selectedTeamA);
+    const teamB = teams.find(t => t.id === selectedTeamB);
+
+    let matchName = '';
+    if (matchStage === 'GROUP') {
+      matchName = `Gr${matchGroup} - R${groupRound} - ${teamA?.team_name} x ${teamB?.team_name}`;
+    } else {
+      matchName = `${playoffRound} - ${teamA?.team_name} x ${teamB?.team_name}`;
+    }
+
+    const isPlayoffs = matchStage !== 'GROUP';
+
+    const config: LobbyConfig = {
+      name: matchName,
+      preset: 'FORJA',
+      isOfficialForjaMatch: true,
+      tournamentStage: matchStage,
+      forjaTeamA: teamA?.id,
+      forjaTeamB: teamB?.id,
+      forjaGroupId: matchStage === 'GROUP' ? matchGroup : undefined,
+      seriesType: matchStage === 'GROUP' ? '3G' : (matchStage === 'PLAYOFFS_BO5' ? 'BO5' : 'BO3'),
+      teamSize: 3,
+      customGameCount: matchStage === 'GROUP' ? 3 : (matchStage === 'PLAYOFFS_BO5' ? 5 : 3),
+      pickType: 'alternated',
+      isExclusive: true,
+      hasBans: false,
+      banCount: 0,
+      mapBanCount: 0,
+      mapTurnOrder: [],
+      godTurnOrder: [],
+      allowedMaps: FORJA_MAP_POOL,
+      allowedPantheons: MAJOR_GODS.map(g => g.id),
+      firstMapRandom: false,
+      loserPicksNextMap: false,
+      acePick: false,
+      acePickHidden: false,
+      isPrivate: false,
+      timerDuration: 60,
+      hasMap3RandomRoll: true,
+      hasPerMapBans: isPlayoffs,
+      captainA_discordId: teamA?.captain_id,
+      captainB_discordId: teamB?.captain_id,
+      scheduledDate: (() => {
+        if (!scheduledDate) return null;
+        const [year, month, day] = scheduledDate.split('-').map(Number);
+        const [hours, minutes] = (scheduledTime || '00:00').split(':').map(Number);
+        return new Date(year, month - 1, day, hours, minutes);
+      })(),
+      scheduledTime: scheduledTime || null,
+      streamerUrl: streamerUrl || null,
+    };
+
+    const populateTeam = (team: any) => {
+      if (!team || !team.members) return [];
+      return team.members.slice(0, 3).map((discordId: string, idx: number) => {
+        return { name: `Player ${idx + 1}` };
+      });
+    };
+
+    const id = generateId();
+    const lobby: Lobby = {
+      id,
+      status: 'waiting',
+      phase: 'waiting',
+      captain1: null,
+      captain2: null,
+      captain1Name: '',
+      captain2Name: null,
+      teamAPlayers: populateTeam(teamA),
+      teamBPlayers: populateTeam(teamB),
+      readyA: false,
+      readyB: false,
+      readyA_report: false,
+      readyB_report: false,
+      readyA_nextGame: false,
+      readyB_nextGame: false,
+      rosterChangedA: false,
+      rosterChangedB: false,
+      lastSubs: [],
+      resetRequest: null,
+      spectators: [],
+      config,
+      selectedMap: null,
+      seriesMaps: Array(config.customGameCount ?? 3).fill(''),
+      mapBans: [],
+      turn: 0,
+      turnOrder: [],
+      bans: [],
+      picks: getMCLPicks(1, null, null),
+      scoreA: 0,
+      scoreB: 0,
+      reportVoteA: null,
+      reportVoteB: null,
+      voteConflict: false,
+      voteConflictCount: 0,
+      currentGame: 1,
+      pickerVoteA: null,
+      pickerVoteB: null,
+      pickerPlayerA: null,
+      pickerPlayerB: null,
+      history: [],
+      replayLog: [],
+      lastWinner: null,
+      mapPool: [],
+      timerStart: serverTimestamp() as any,
+      createdAt: serverTimestamp() as any,
+      lastActivityAt: serverTimestamp() as any,
+      hiddenActions: [],
+    };
+
+    try {
+      await lobbyService.createLobby(id, lobby);
+
+      if (streamerUrl) {
+        try {
+          const castersRef = collection(db, 'casters');
+          const cleanUrl = streamerUrl.trim().toLowerCase();
+          const castersQuery = query(castersRef, where('streamUrl', '==', cleanUrl));
+          
+          onSnapshot(castersQuery, async (snap) => {
+            if (snap.empty) {
+              const namePart = cleanUrl.includes('twitch.tv/') 
+                ? cleanUrl.split('twitch.tv/')[1]?.split('/')[0] 
+                : 'Caster Oficial';
+              await updateDoc(doc(db, 'casters', generateId()), {
+                name: namePart.toUpperCase(),
+                streamUrl: cleanUrl,
+                status: 'approved',
+                createdAt: serverTimestamp()
+              });
+            }
+          });
+        } catch (e) {
+          console.error('[Caster Registration Error]', e);
         }
-      }));
-      // Debug helper: expose raw lobbies in dev mode only (not shipped to production)
-      if (import.meta.env.DEV) {
-        (window as any).__forjaLobbiesRaw__ = lobbiesRaw;
       }
-      setLobbies(mapped);
-      setDataLoaded(true);
+
+      alert(`Partida criada com sucesso!`);
+      setSelectedTeamA('');
+      setSelectedTeamB('');
+      setScheduledDate('');
+      setScheduledTime('');
+      setStreamerUrl('');
+    } catch (err: any) {
+      alert(`Erro: ${err.message}`);
+    }
+  };
+
+  const handleManualClose = async (lobbyId: string, teamAScore: number, teamBScore: number, externalLink?: string) => {
+    if (!confirm('Deseja encerrar esta partida manualmente?')) return;
+    try {
+      const lobbyRef = doc(db, 'lobbies', lobbyId);
+      await updateDoc(lobbyRef, {
+        status: 'completed',
+        phase: 'finished',
+        scoreA: teamAScore,
+        scoreB: teamBScore,
+        'config.externalDraftLink': externalLink || null,
+        finishedAt: serverTimestamp(),
+      });
+      setEditingLobby(null);
+    } catch (err: any) {
+      alert(`Erro ao encerrar: ${err.message}`);
+    }
+  };
+
+  const handleDeleteMatch = async (lobbyId: string) => {
+    if (!confirm('Tem certeza que deseja remover esta partida? Esta ação é irreversível.')) return;
+    try {
+      await deleteForjaLobby(lobbyId);
+    } catch (err: any) {
+      alert(`Erro ao remover: ${err.message}`);
+    }
+  };
+
+  const filteredLobbies = useMemo(() => {
+    return lobbies.filter(l => {
+      if (selectedPhase === 'PLAYOFFS') {
+        return l.stage !== 'GROUP';
+      }
+      return l.stage === 'GROUP' && l.config?.forjaGroupId === selectedPhase;
     });
-    return () => { cancelled = true; };
+  }, [lobbies, selectedPhase]);
+
+  // Real-time Lobbies listener
+  useEffect(() => {
+    const q = query(
+      collection(db, 'lobbies'),
+      where('config.preset', '==', 'FORJA'),
+      orderBy('createdAt', 'desc')
+    );
+    const unsub = onSnapshot(q,
+      snap => {
+        const rawLobbies = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+        const officialLobbies = rawLobbies.filter(l => l.config?.isOfficialForjaMatch || l.config?.forjaTeamA);
+        const mapped = officialLobbies.map(l => ({
+          id: l.id,
+          name: l.config?.name ?? 'Partida',
+          status: l.status ?? 'waiting',
+          scoreA: l.scoreA ?? l.teamAScore ?? 0,
+          scoreB: l.scoreB ?? l.teamBScore ?? 0,
+          stage: l.config?.tournamentStage ?? 'GROUP',
+          scheduledDate: l.config?.scheduledDate,
+          scheduledTime: l.config?.scheduledTime,
+          streamerUrl: l.config?.streamerUrl,
+          externalLink: l.externalLink ?? l.config?.externalDraftLink ?? l.config?.externalLink ?? '',
+          config: {
+            name: l.config?.name ?? 'Partida',
+            forjaTeamA: l.config?.forjaTeamA,
+            forjaTeamB: l.config?.forjaTeamB,
+            forjaGroupId: l.config?.forjaGroupId,
+            tournamentStage: l.config?.tournamentStage,
+            externalLink: l.config?.externalDraftLink ?? l.config?.externalLink ?? ''
+          }
+        }));
+        setLobbies(mapped);
+        setDataLoaded(true);
+      },
+      err => {
+        console.error('Erro ao buscar partidas Forja', err);
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  // Fetch prizes
+  useEffect(() => {
+    getForjaContentOnce('prizes')
+      .then(prizes => {
+        setPrizeData(prizes);
+      })
+      .catch(err => {
+        console.error('Erro ao buscar premiações', err);
+      });
   }, []);
 
   // Standings por grupo
@@ -583,6 +952,208 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
             >
               Ver perfil →
             </button>
+          )}
+        </div>
+      )}
+
+      {/* ── Admin Match Creator Accordion ─────────────────────────────────── */}
+      {isAdmin && (
+        <div style={{ marginBottom: '2rem' }}>
+          <button 
+            onClick={() => setShowCreateForm(!showCreateForm)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem',
+              width: '100%',
+              padding: '1rem',
+              background: 'rgba(30, 41, 59, 0.4)',
+              border: '2px dashed rgba(245, 158, 11, 0.2)',
+              borderRadius: '1rem',
+              color: '#facc15',
+              fontWeight: 800,
+              fontSize: '0.85rem',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              cursor: 'pointer',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+            }}
+            className="hover:bg-slate-900/60 hover:border-amber-400 hover:text-white"
+          >
+            <span>{showCreateForm ? '✕' : '➕'}</span>
+            <span>{showCreateForm ? 'Fechar Formulário de Criação' : 'Criar Lobby Oficial de Partida'}</span>
+          </button>
+          {showCreateForm && (
+            <div style={{ marginTop: '1rem', background: 'rgba(15, 23, 42, 0.4)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '1rem', padding: '1.5rem' }}>
+              <h3 style={{ color: '#f8fafc', fontSize: '0.9rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
+                ⚙️ Criar Nova Partida Oficial do Forja
+              </h3>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1.25rem' }}>
+                {/* Stage Selection */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.4rem' }}>Fase da Partida</label>
+                  <select 
+                    value={matchStage} 
+                    onChange={e => setMatchStage(e.target.value as any)}
+                    style={{ width: '100%', padding: '0.75rem 1rem', background: '#090d16', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '0.75rem', color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 700, outline: 'none' }}
+                    className="focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
+                  >
+                    <option value="GROUP">Fase de Grupos</option>
+                    <option value="PLAYOFFS_BO3">Playoffs (BO3)</option>
+                    <option value="PLAYOFFS_BO5">Playoffs (BO5)</option>
+                  </select>
+                </div>
+
+                {/* Conditional Fields based on Stage */}
+                {matchStage === 'GROUP' ? (
+                  <>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.4rem' }}>Grupo</label>
+                      <select 
+                        value={matchGroup} 
+                        onChange={e => setMatchGroup(e.target.value)}
+                        style={{ width: '100%', padding: '0.75rem 1rem', background: '#090d16', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '0.75rem', color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 700, outline: 'none' }}
+                        className="focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
+                      >
+                        <option value="A">Grupo A</option>
+                        <option value="B">Grupo B</option>
+                        <option value="C">Grupo C</option>
+                        <option value="D">Grupo D</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.4rem' }}>Rodada</label>
+                      <select 
+                        value={groupRound} 
+                        onChange={e => setGroupRound(e.target.value)}
+                        style={{ width: '100%', padding: '0.75rem 1rem', background: '#090d16', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '0.75rem', color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 700, outline: 'none' }}
+                        className="focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
+                      >
+                        <option value="1">1ª Rodada</option>
+                        <option value="2">2ª Rodada</option>
+                        <option value="3">3ª Rodada</option>
+                      </select>
+                    </div>
+                  </>
+                ) : (
+                  /* Playoffs Stage */
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.4rem' }}>Rodada Playoffs</label>
+                    <select 
+                      value={playoffRound} 
+                      onChange={e => setPlayoffRound(e.target.value)}
+                      style={{ width: '100%', padding: '0.75rem 1rem', background: '#090d16', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '0.75rem', color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 700, outline: 'none' }}
+                      className="focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
+                    >
+                      <option value="Quartas">Quartas de Final</option>
+                      <option value="Semifinal">Semifinal</option>
+                      <option value="Decisão 3º Lugar">Decisão de 3º Lugar</option>
+                      <option value="Grande Final">Grande Final</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Seleção de Times */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginTop: '1.25rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.4rem' }}>Time A (Host)</label>
+                  <select 
+                    value={selectedTeamA} 
+                    onChange={e => setSelectedTeamA(e.target.value)}
+                    style={{ width: '100%', padding: '0.75rem 1rem', background: '#090d16', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '0.75rem', color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 700, outline: 'none' }}
+                    className="focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
+                  >
+                    <option value="">Selecione o Time A</option>
+                    {availableTeamsForA.map(t => (
+                      <option key={t.id} value={t.id}>{t.team_name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.4rem' }}>Time B (Guest)</label>
+                  <select 
+                    value={selectedTeamB} 
+                    onChange={e => setSelectedTeamB(e.target.value)}
+                    disabled={!selectedTeamA}
+                    style={{ width: '100%', padding: '0.75rem 1rem', background: '#090d16', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '0.75rem', color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 700, outline: 'none', opacity: selectedTeamA ? 1 : 0.5 }}
+                    className="focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
+                  >
+                    <option value="">Selecione o Time B</option>
+                    {availableTeamsForB.map(t => (
+                      <option key={t.id} value={t.id}>{t.team_name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Data, Horário e Caster */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginTop: '1.25rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.4rem' }}>Data do Jogo</label>
+                  <input 
+                    type="date" 
+                    value={scheduledDate} 
+                    onChange={e => setScheduledDate(e.target.value)}
+                    style={{ width: '100%', padding: '0.7rem 1rem', background: '#090d16', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '0.75rem', color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 700, outline: 'none' }}
+                    className="focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.4rem' }}>Horário (Local BRT)</label>
+                  <input 
+                    type="time" 
+                    value={scheduledTime} 
+                    onChange={e => setScheduledTime(e.target.value)}
+                    style={{ width: '100%', padding: '0.7rem 1rem', background: '#090d16', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '0.75rem', color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 700, outline: 'none' }}
+                    className="focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.4rem' }}>Canal de Transmissão (URL)</label>
+                  <input 
+                    type="text" 
+                    placeholder="twitch.tv/nome_do_caster"
+                    value={streamerUrl} 
+                    onChange={e => setStreamerUrl(e.target.value)}
+                    style={{ width: '100%', padding: '0.7rem 1rem', background: '#090d16', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '0.75rem', color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 700, outline: 'none' }}
+                    className="focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
+                  />
+                </div>
+              </div>
+
+              {/* Botão de Envio */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.75rem' }}>
+                <button 
+                  onClick={handleCreateMatch}
+                  disabled={!selectedTeamA || !selectedTeamB}
+                  style={{
+                    background: selectedTeamA && selectedTeamB ? 'linear-gradient(135deg, #facc15 0%, #eab308 100%)' : '#1e293b',
+                    color: selectedTeamA && selectedTeamB ? '#0f172a' : '#64748b',
+                    border: 'none',
+                    borderRadius: '0.75rem',
+                    padding: '0.75rem 2rem',
+                    fontSize: '0.75rem',
+                    fontWeight: 900,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    cursor: selectedTeamA && selectedTeamB ? 'pointer' : 'not-allowed',
+                    boxShadow: selectedTeamA && selectedTeamB ? '0 4px 15px rgba(234, 179, 8, 0.3)' : 'none',
+                    transition: 'all 0.2s ease',
+                  }}
+                  className="hover:scale-[1.02]"
+                >
+                  🚀 Inicializar Partida Oficial
+                </button>
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -672,23 +1243,16 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
 
       {/* ── Tabela de Grupos Compacta ──────────────────────────────────────── */}
       {activeGroups.length > 0 && (
-        <div>
+        <div style={{ marginTop: '2.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-            <h3 style={{ color: '#f8fafc', fontSize: '0.95rem', fontWeight: 800, margin: 0 }}>
+            <h3 style={{ color: '#f8fafc', fontSize: '1.05rem', fontWeight: 900, margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               📊 Classificação — Fase de Grupos
             </h3>
-            <button
-              className="forja-btn forja-btn--ghost"
-              style={{ fontSize: '0.72rem', padding: '0.3rem 0.75rem' }}
-              onClick={() => onTabChange?.('inscritos')}
-            >
-              Ver completo →
-            </button>
           </div>
           <p style={{ color: '#94a3b8', fontSize: '0.72rem', marginBottom: '0.75rem', marginTop: '-0.25rem', opacity: 0.8, fontStyle: 'italic' }}>
             Passe o mouse sobre um time para ver os membros
           </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 w-full">
             {activeGroups.map(g => (
               <CompactStandings
                 key={g}
@@ -697,6 +1261,124 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
                 players={rankedPlayers}
               />
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Match Center (O Histórico de Partidas) ────────────────────────── */}
+      <div style={{ marginTop: '3.5rem', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '2.5rem' }}>
+        <h3 style={{ color: '#f8fafc', fontSize: '1.05rem', fontWeight: 900, margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span>🏟️</span> Match Center Oficial
+        </h3>
+
+        {/* Sub-navegação interna (Pills estilo Tailwind) */}
+        <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.75rem', marginBottom: '1.5rem', scrollbarWidth: 'none' }}>
+          {['A', 'B', 'C', 'D', 'PLAYOFFS'].map((phaseCode) => {
+            const label = phaseCode === 'PLAYOFFS' ? 'Playoffs' : `Grupo ${phaseCode}`;
+            const isActive = selectedPhase === phaseCode;
+            return (
+              <button
+                key={phaseCode}
+                onClick={() => setSelectedPhase(phaseCode as any)}
+                style={{
+                  padding: '0.5rem 1.25rem',
+                  borderRadius: '9999px',
+                  background: isActive ? '#facc15' : 'rgba(30, 41, 59, 0.4)',
+                  color: isActive ? '#0f172a' : '#94a3b8',
+                  border: isActive ? 'none' : '1px solid rgba(255,255,255,0.05)',
+                  fontSize: '0.72rem',
+                  fontWeight: 900,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  whiteSpace: 'nowrap',
+                  boxShadow: isActive ? '0 4px 15px rgba(250, 204, 21, 0.3)' : 'none'
+                }}
+                className="hover:scale-105"
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Lista de Partidas Filtradas */}
+        {filteredLobbies.length === 0 ? (
+          <div className="forja-empty" style={{ padding: '3rem 2rem' }}>
+            <span style={{ fontSize: '2.5rem' }}>⚔️</span>
+            <p style={{ marginTop: '0.75rem', color: '#64748b' }}>Nenhuma partida registrada nesta fase.</p>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.25rem' }}>
+            {filteredLobbies.map(lobby => (
+              <MatchConfrontationCard
+                key={lobby.id}
+                lobby={lobby}
+                isAdmin={isAdmin}
+                onEdit={setEditingLobby}
+                onDelete={handleDeleteMatch}
+                teams={teams}
+                players={rankedPlayers}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Modal de Encerramento Manual de Partida */}
+      {editingLobby && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 w-full max-w-md shadow-2xl">
+            <h3 className="text-xl font-black text-white uppercase tracking-tight mb-4">Encerrar Partida Manual</h3>
+            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-6">{editingLobby.config?.name || 'Partida'}</p>
+            
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div>
+                <label className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2 block">Placar Host</label>
+                <input 
+                  type="number" 
+                  id="scoreA"
+                  defaultValue={editingLobby.scoreA || 0}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-2 block">Placar Guest</label>
+                <input 
+                  type="number" 
+                  id="scoreB"
+                  defaultValue={editingLobby.scoreB || 0}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-red-500"
+                />
+              </div>
+            </div>
+
+            <div className="mb-8">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Link do Draft Externo (Opcional)</label>
+              <input 
+                type="text" 
+                id="externalLink"
+                placeholder="ex: mythosdraft.com/lobby/abc123xyz"
+                defaultValue={editingLobby.externalLink || ''}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white text-xs focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={() => setEditingLobby(null)} className="flex-1 py-3 rounded-xl bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest hover:bg-slate-700 transition-all">Cancelar</button>
+              <button 
+                onClick={() => {
+                  const sA = parseInt((document.getElementById('scoreA') as HTMLInputElement).value) || 0;
+                  const sB = parseInt((document.getElementById('scoreB') as HTMLInputElement).value) || 0;
+                  const ext = (document.getElementById('externalLink') as HTMLInputElement).value;
+                  handleManualClose(editingLobby.id, sA, sB, ext);
+                }}
+                className="flex-1 py-3 rounded-xl bg-amber-500 text-slate-950 text-[10px] font-black uppercase tracking-widest hover:bg-amber-400 transition-all shadow-[0_0_20px_rgba(245,158,11,0.2)]"
+              >
+                Confirmar
+              </button>
+            </div>
           </div>
         </div>
       )}

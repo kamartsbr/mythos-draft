@@ -23,7 +23,6 @@ const ForjaMapas       = lazyWithRetry(() => import('./views/ForjaMapas'));
 const ForjaFormato     = lazyWithRetry(() => import('./views/ForjaFormato'));
 const ForjaSchedule    = lazyWithRetry(() => import('./views/ForjaSchedule'));
 const ForjaTimes       = lazyWithRetry(() => import('./views/ForjaTimes'));
-const ForjaTabela      = lazyWithRetry(() => import('./views/ForjaTabela'));
 const ForjaAdminDraft  = lazyWithRetry(() => import('./views/ForjaAdminDraft'));
 const ForjaDraftRoom   = lazyWithRetry(() => import('./views/ForjaDraftRoom'));
 const ForjaDraftOBS    = lazyWithRetry(() => import('./views/ForjaDraftOBS'));
@@ -40,7 +39,6 @@ const PUBLIC_TABS: ForjaTab[] = [
   { id: 'mapas' as ForjaTabId,     label: 'Mapas',     icon: '🗺️' },
   { id: 'formato' as ForjaTabId,   label: 'Formato',   icon: '🐍' },
   { id: 'times' as ForjaTabId,     label: 'Times',     icon: '🛡️' },
-  { id: 'tabela' as ForjaTabId,    label: 'Tabela',    icon: '📊' },
 ];
 
 /** Visível para qualquer usuário Discord autenticado (participante ou admin). */
@@ -306,7 +304,7 @@ export default function ForjaHub() {
       </nav>
 
       {/* ── Tab Content ───────────────────────── */}
-      <main className="forja-tab-content">
+      <main className={`forja-tab-content ${activeTab === 'times' || activeTab === 'inscritos' || activeTab === 'inicio' ? '!max-w-none w-[95vw] mx-auto' : ''}`} style={activeTab === 'times' || activeTab === 'inscritos' || activeTab === 'inicio' ? { maxWidth: '95vw', width: '95vw' } : undefined}>
         <Suspense fallback={<TabFallback />}>
           {activeTab === 'inicio'      && <ForjaHome {...sharedProps} onRegisterClick={() => setShowRegModal(true)} onTabChange={handleTabChange} />}
           {activeTab === 'inscritos'    && <ForjaInicio {...sharedProps} onRegisterClick={() => setShowRegModal(true)} />}
@@ -314,7 +312,6 @@ export default function ForjaHub() {
           {activeTab === 'mapas'       && <ForjaMapas {...sharedProps} />}
           {activeTab === 'formato'     && <ForjaFormato {...sharedProps} />}
           {activeTab === 'times'       && <ForjaTimes {...sharedProps} />}
-          {activeTab === 'tabela'      && <ForjaTabela {...sharedProps} />}
           {activeTab === 'draft-room'  && showDraftRoomTab && <ForjaDraftRoom {...sharedProps} />}
           {activeTab === 'custom-draft' && discordUser && <ForjaCustomDraft {...sharedProps} />}
           {activeTab === 'admin-draft' && isAdmin && <ForjaAdminDraft {...sharedProps} />}

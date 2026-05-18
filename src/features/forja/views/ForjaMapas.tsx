@@ -16,7 +16,7 @@ import { saveForjaMapPool, seedDefaultMapPool } from '../services/forjaService';
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
 const MIN_POOL_SIZE = 8;
-const MAX_POOL_SIZE = 15;
+const MAX_POOL_SIZE = MAPS.length;
 
 // ─── MapCard (público, read-only) ─────────────────────────────────────────────
 

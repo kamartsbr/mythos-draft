@@ -191,17 +191,28 @@ function RulesAccordion() {
 // ─── Profile Preview Card (ATUALIZADO PARA MOSTRAR ELOS) ───────────────────────
 function ProfilePreview({ data, discordAvatar }: { data: any; discordAvatar: string }) {
   const [imgErr, setImgErr] = useState(false);
-  const src = (!imgErr && data.avatar_url) ? data.avatar_url : discordAvatar;
+  const getAvatarFallback = () => {
+    if (discordAvatar) return discordAvatar;
+    const defaultD = `https://cdn.discordapp.com/embed/avatars/${parseInt(String(data?.profile_id || 0).slice(-1)) % 6}.png`;
+    return defaultD;
+  };
+  const src = (!imgErr && data?.avatar_url) ? data.avatar_url : getAvatarFallback();
 
   return (
     <div className="forja-reg-profile-preview">
-      <img
-        src={src}
-        alt="Avatar"
-        className="forja-reg-profile-preview__avatar"
-        referrerPolicy="no-referrer"
-        onError={() => setImgErr(true)}
-      />
+      {src ? (
+        <img
+          src={src}
+          alt="Avatar"
+          className="forja-reg-profile-preview__avatar"
+          referrerPolicy="no-referrer"
+          onError={() => setImgErr(true)}
+        />
+      ) : (
+        <div className="forja-reg-profile-preview__avatar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#334155', color: '#94a3b8', fontSize: '1rem', fontWeight: 'bold' }}>
+          🛡️
+        </div>
+      )}
       <div className="forja-reg-profile-preview__info">
         <span className="forja-reg-profile-preview__alias" style={{ color: '#4ade80' }}>
           ✓ Perfil Localizado
@@ -223,6 +234,7 @@ function ProfilePreview({ data, discordAvatar }: { data: any; discordAvatar: str
     </div>
   );
 }
+
 
 // ─── Main Registration Form ───────────────────────────────────────────────────
 interface FormStepProps {
@@ -326,14 +338,21 @@ function RegistrationForm({ discordUser, onSubmit, onClose, submitting, deadline
 
       {/* Discord banner */}
       <div className="forja-reg-user-banner">
-        <img src={discordUser.avatar_url} alt={discordUser.username}
-          className="forja-reg-avatar" referrerPolicy="no-referrer" />
+        {discordUser.avatar_url ? (
+          <img src={discordUser.avatar_url} alt={discordUser.username}
+            className="forja-reg-avatar" referrerPolicy="no-referrer" />
+        ) : (
+          <div className="forja-reg-avatar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#334155', color: '#94a3b8', fontSize: '1rem', fontWeight: 'bold' }}>
+            {discordUser.username.slice(0, 2).toUpperCase()}
+          </div>
+        )}
         <div>
           <span className="forja-reg-username">{discordUser.username}</span>
           <span className="forja-reg-userid">Discord ID: {discordUser.discord_id}</span>
         </div>
         <span className="forja-reg-verified">✓ Discord</span>
       </div>
+
 
       {/* Step indicator */}
       <div className="forja-reg-steps">

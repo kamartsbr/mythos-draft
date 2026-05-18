@@ -4,13 +4,20 @@
  * Fase 3: Elo Efetivo (Média) Integrado
  */
 
-import React, { useState, useMemo } from 'react';
-import { ForjaViewProps, ForjaGodStat, ForjaTier } from '../types';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { ForjaViewProps, ForjaGodStat, ForjaTier, ForjaTeam, ForjaPlayer } from '../types';
 import { RankedPlayer, TIER_META, AVAILABILITY_LABELS, eloColor, getEsportsEloDisplay } from '../forjaUtils';
 import { useForjaPlayers } from '../hooks/useForjaPlayers';
 import { useForjaSettings } from '../hooks/useForjaSettings';
-import { removeForjaPlayer } from '../services/forjaService';
+import { useForjaTeams } from '../hooks/useForjaTeams';
+import { removeForjaPlayer, deleteForjaLobby, updateTeamGroup } from '../services/forjaService';
 import { MAJOR_GODS } from '../../../data/gods';
+import { FORJA_MAP_POOL, getMCLPicks } from '../../../constants';
+import { LobbyConfig, Lobby } from '../../../types';
+import { lobbyService, generateId } from '../../../services/lobbyService';
+import { db } from '../../../firebase';
+import { collection, query, where, onSnapshot, orderBy, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
+import { cn } from '../../../lib/utils';
 import AdminPlayerModal from '../components/AdminPlayerModal';
 import PlayerSelfServiceModal from '../components/PlayerSelfServiceModal';
 import ForjaTournamentSettingsModal from '../components/ForjaTournamentSettingsModal';
@@ -178,7 +185,7 @@ function PlayerCard({
       {/* Header */}
       <div className="forja-player-card__header">
         <div className="forja-player-avatar">
-          <img src={imgErr ? fallback : player.avatar_url} alt={player.nick}
+          <img src={imgErr || !player.avatar_url ? fallback : player.avatar_url} alt={player.nick}
             onError={() => setImgErr(true)} referrerPolicy="no-referrer" loading="lazy" />
           <span className="forja-player-flag" title={player.is_brazilian ? 'Brasil' : 'Portugal'}>
             {player.is_brazilian ? '🇧🇷' : '🇵🇹'}
@@ -474,7 +481,7 @@ function PlayerTable({ players, isAdmin }: { players: RankedPlayer[]; isAdmin: b
                     {p.is_reserve ? '—' : `#${p.rank}`}
                   </td>
                   <td style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <img src={p.avatar_url} style={{ width: '2rem', height: '2rem', borderRadius: '0.2rem' }}
+                    <img src={p.avatar_url || `https://cdn.discordapp.com/embed/avatars/${(parseInt(p.discord_id?.slice(-1)) || 0) % 6}.png`} style={{ width: '2rem', height: '2rem', borderRadius: '0.2rem' }}
                       referrerPolicy="no-referrer" alt={p.nick} />
                     {p.nick}
                     {p.is_reserve && (
@@ -547,6 +554,156 @@ function PlayerCardsGrid({
   return <div className="forja-players-grid">{elements}</div>;
 }
 
+// ─── StandingRow, Popover & CompactStandings ───────────────────────────────────
+
+interface StandingRow extends ForjaTeam {
+  gamesWon: number;
+  gamesLost: number;
+  matchesPlayed: number;
+  points: number;
+}
+
+function MemberRow({ member, isCaptain }: { member: ForjaPlayer; isCaptain: boolean }) {
+  const [imgErr, setImgErr] = useState(false);
+  const fallback = `https://cdn.discordapp.com/embed/avatars/${(parseInt(member.discord_id.slice(-1)) || 0) % 6}.png`;
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+      <img
+        src={imgErr || !member.avatar_url ? fallback : member.avatar_url}
+        onError={() => setImgErr(true)}
+        alt={member.nick}
+        referrerPolicy="no-referrer"
+        style={{ width: '1.75rem', height: '1.75rem', borderRadius: '0.3rem', objectFit: 'cover' }}
+      />
+      <span style={{ color: '#f8fafc', fontSize: '0.82rem', fontWeight: 600 }}>{member.nick}</span>
+      {isCaptain && (
+        <span style={{ fontSize: '0.6rem', color: '#facc15', fontWeight: 700, background: 'rgba(250,204,21,0.1)', padding: '0.1rem 0.3rem', borderRadius: '0.2rem' }}>CAP</span>
+      )}
+    </div>
+  );
+}
+
+function TeamMemberPopover({
+  team,
+  players,
+  anchor,
+}: {
+  team: StandingRow;
+  players: ForjaPlayer[];
+  anchor: { x: number; y: number };
+}) {
+  const members = team.members
+    .map(id => players.find(p => p.discord_id === id))
+    .filter(Boolean) as ForjaPlayer[];
+
+  if (members.length === 0) return null;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        left: anchor.x,
+        top: anchor.y,
+        zIndex: 9999,
+        background: 'rgba(15, 23, 42, 0.97)',
+        border: '1px solid rgba(250,204,21,0.25)',
+        borderRadius: '0.75rem',
+        padding: '0.75rem 1rem',
+        minWidth: '200px',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(250,204,21,0.1)',
+        pointerEvents: 'none',
+        backdropFilter: 'blur(8px)',
+      }}
+    >
+      <div style={{ fontSize: '0.7rem', color: '#f59e0b', fontWeight: 800, letterSpacing: '0.1em', marginBottom: '0.5rem', textTransform: 'uppercase' }}>
+        {team.team_name}
+      </div>
+      {members.map(p => (
+        <MemberRow key={p.discord_id} member={p} isCaptain={p.discord_id === team.captain_id} />
+      ))}
+    </div>
+  );
+}
+
+function CompactStandings({
+  group,
+  standings,
+  players,
+}: {
+  group: string;
+  standings: StandingRow[];
+  players: ForjaPlayer[];
+}) {
+  const [hovered, setHovered] = useState<{ team: StandingRow; x: number; y: number } | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleMouseEnter = (team: StandingRow, e: React.MouseEvent) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const popX = rect.right + 8 < window.innerWidth - 220 ? rect.right + 8 : rect.left - 220;
+    const popY = Math.min(rect.top, window.innerHeight - 180);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setHovered({ team, x: popX, y: popY }), 150);
+  };
+
+  const handleMouseLeave = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setHovered(null);
+  };
+
+  return (
+    <div className="bg-slate-900/50 rounded-xl overflow-hidden border border-slate-800 shadow-xl">
+      <table className="w-full border-collapse">
+        <thead>
+          <tr className="bg-amber-500/5 border-b border-slate-800">
+            <th className="py-2.5 px-4 text-left">
+              <span className="text-amber-500 font-black text-[0.72rem] tracking-[0.15em] uppercase">GRUPO {group}</span>
+            </th>
+            <th className="w-8 text-center text-[0.65rem] font-black text-slate-500 uppercase">J</th>
+            <th className="w-8 text-center text-[0.65rem] font-black text-slate-500 uppercase">G+</th>
+            <th className="w-8 text-center text-[0.65rem] font-black text-slate-500 uppercase">G-</th>
+            <th className="w-10 text-center text-[0.65rem] font-black text-amber-500/80 uppercase">Pts</th>
+          </tr>
+        </thead>
+        <tbody className="text-slate-300">
+          {standings.map((row, idx) => {
+            const isTop2 = idx < 2;
+            return (
+              <tr
+                key={row.id}
+                onMouseEnter={e => handleMouseEnter(row, e)}
+                onMouseLeave={handleMouseLeave}
+                className={cn(
+                  "border-b border-slate-800/40 transition-colors cursor-default hover:bg-slate-800/40",
+                  isTop2 && "bg-emerald-500/[0.03] border-l-2 border-l-emerald-500"
+                )}
+              >
+                <td className="py-2.5 px-4 font-bold text-[0.78rem] whitespace-nowrap overflow-hidden max-w-[140px] truncate">
+                  <span className={cn("mr-2 text-[0.65rem] tabular-nums opacity-50", isTop2 && "text-emerald-500 opacity-100")}>
+                    {idx + 1}.
+                  </span>
+                  {row.team_name}
+                </td>
+                <td className="w-8 text-center text-slate-500 text-[0.75rem] tabular-nums font-medium">{row.matchesPlayed}</td>
+                <td className="w-8 text-center text-emerald-400 text-[0.75rem] tabular-nums font-bold">{row.gamesWon}</td>
+                <td className="w-8 text-center text-rose-400/80 text-[0.75rem] tabular-nums font-medium">{row.gamesLost}</td>
+                <td className="w-10 text-center text-amber-400 text-[0.8rem] tabular-nums font-black">{row.points}</td>
+              </tr>
+            );
+          })}
+          {standings.length === 0 && (
+            <tr><td colSpan={5} className="p-6 text-center text-slate-600 text-[0.75rem] italic">Nenhum time</td></tr>
+          )}
+        </tbody>
+      </table>
+
+      {hovered && (
+        <TeamMemberPopover team={hovered.team} players={players} anchor={{ x: hovered.x, y: hovered.y }} />
+      )}
+    </div>
+  );
+}
+
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface ForjaInicioProps extends ForjaViewProps {
@@ -574,6 +731,239 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
   const [showAddPlayerModal,    setShowAddPlayerModal]    = useState(false);
 
   const currentUserId = discordUser?.discord_id ?? null;
+
+  // ─── Match Center Merged States ────────────────────────────────────────────
+  const { teams } = useForjaTeams(true);
+  const [lobbies, setLobbies] = useState<any[]>([]);
+  const [selectedPhase, setSelectedPhase] = useState<'A' | 'B' | 'C' | 'D' | 'PLAYOFFS'>('A');
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [editingLobby, setEditingLobby] = useState<any>(null);
+
+  // Match Creator Form States
+  const [selectedTeamA, setSelectedTeamA] = useState('');
+  const [selectedTeamB, setSelectedTeamB] = useState('');
+  const [matchStage, setMatchStage] = useState<'GROUP' | 'PLAYOFFS_BO3' | 'PLAYOFFS_BO5'>('GROUP');
+  const [matchGroup, setMatchGroup] = useState<string>('A');
+  const [groupRound, setGroupRound] = useState<string>('1');
+  const [playoffRound, setPlayoffRound] = useState<string>('Quartas');
+  const [scheduledDate, setScheduledDate] = useState<string>('');
+  const [scheduledTime, setScheduledTime] = useState<string>('');
+  const [streamerUrl, setStreamerUrl] = useState<string>('');
+
+  useEffect(() => {
+    const q = query(
+      collection(db, 'lobbies'),
+      where('config.preset', '==', 'FORJA'),
+      orderBy('createdAt', 'desc')
+    );
+    const unsub = onSnapshot(q,
+      snap => {
+        const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setLobbies(docs.filter((d: any) => d.config?.isOfficialForjaMatch || d.config?.forjaTeamA));
+      },
+      err => {
+        console.error('Erro ao buscar partidas Forja', err);
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    setSelectedTeamA('');
+    setSelectedTeamB('');
+  }, [matchGroup, matchStage]);
+
+  const availableTeamsForA = useMemo(() => {
+    if (matchStage === 'GROUP') {
+      return teams.filter(t => t.groupId === matchGroup);
+    }
+    return teams;
+  }, [teams, matchGroup, matchStage]);
+
+  const availableTeamsForB = useMemo(() => {
+    return availableTeamsForA.filter(t => t.id !== selectedTeamA);
+  }, [availableTeamsForA, selectedTeamA]);
+
+  const handleCreateMatch = async () => {
+    if (!selectedTeamA || !selectedTeamB || selectedTeamA === selectedTeamB) {
+      alert('Selecione dois times diferentes.');
+      return;
+    }
+
+    const teamA = teams.find(t => t.id === selectedTeamA);
+    const teamB = teams.find(t => t.id === selectedTeamB);
+
+    let matchName = '';
+    if (matchStage === 'GROUP') {
+      matchName = `Gr${matchGroup} - R${groupRound} - ${teamA?.team_name} x ${teamB?.team_name}`;
+    } else {
+      matchName = `${playoffRound} - ${teamA?.team_name} x ${teamB?.team_name}`;
+    }
+
+    const isPlayoffs = matchStage !== 'GROUP';
+
+    const config: LobbyConfig = {
+      name: matchName,
+      preset: 'FORJA',
+      isOfficialForjaMatch: true,
+      tournamentStage: matchStage,
+      forjaTeamA: teamA?.id,
+      forjaTeamB: teamB?.id,
+      forjaGroupId: matchStage === 'GROUP' ? matchGroup : undefined,
+      seriesType: matchStage === 'GROUP' ? '3G' : (matchStage === 'PLAYOFFS_BO5' ? 'BO5' : 'BO3'),
+      teamSize: 3,
+      customGameCount: matchStage === 'GROUP' ? 3 : (matchStage === 'PLAYOFFS_BO5' ? 5 : 3),
+      pickType: 'alternated',
+      isExclusive: true,
+      hasBans: false,
+      banCount: 0,
+      mapBanCount: 0,
+      mapTurnOrder: [],
+      godTurnOrder: [],
+      allowedMaps: FORJA_MAP_POOL,
+      allowedPantheons: MAJOR_GODS.map(g => g.id),
+      firstMapRandom: false,
+      loserPicksNextMap: false,
+      acePick: false,
+      acePickHidden: false,
+      isPrivate: false,
+      timerDuration: 60,
+      hasMap3RandomRoll: true,
+      hasPerMapBans: isPlayoffs,
+      captainA_discordId: teamA?.captain_id,
+      captainB_discordId: teamB?.captain_id,
+      scheduledDate: (() => {
+        if (!scheduledDate) return null;
+        const [year, month, day] = scheduledDate.split('-').map(Number);
+        const [hours, minutes] = (scheduledTime || '00:00').split(':').map(Number);
+        return new Date(year, month - 1, day, hours, minutes);
+      })(),
+      scheduledTime: scheduledTime || null,
+      streamerUrl: streamerUrl || null,
+    };
+
+    const populateTeam = (team: any) => {
+      if (!team || !team.members) return [];
+      return team.members.slice(0, 3).map((discordId: string, idx: number) => {
+        return { name: `Player ${idx + 1}` };
+      });
+    };
+
+    const id = generateId();
+    const lobby: Lobby = {
+      id,
+      status: 'waiting',
+      phase: 'waiting',
+      captain1: null,
+      captain2: null,
+      captain1Name: '',
+      captain2Name: null,
+      teamAPlayers: populateTeam(teamA),
+      teamBPlayers: populateTeam(teamB),
+      readyA: false,
+      readyB: false,
+      readyA_report: false,
+      readyB_report: false,
+      readyA_nextGame: false,
+      readyB_nextGame: false,
+      rosterChangedA: false,
+      rosterChangedB: false,
+      lastSubs: [],
+      resetRequest: null,
+      spectators: [],
+      config,
+      selectedMap: null,
+      seriesMaps: Array(config.customGameCount ?? 3).fill(''),
+      mapBans: [],
+      turn: 0,
+      turnOrder: [],
+      bans: [],
+      picks: getMCLPicks(1, null, null),
+      scoreA: 0,
+      scoreB: 0,
+      reportVoteA: null,
+      reportVoteB: null,
+      voteConflict: false,
+      voteConflictCount: 0,
+      currentGame: 1,
+      pickerVoteA: null,
+      pickerVoteB: null,
+      pickerPlayerA: null,
+      pickerPlayerB: null,
+      history: [],
+      replayLog: [],
+      lastWinner: null,
+      mapPool: [],
+      timerStart: serverTimestamp() as any,
+      createdAt: serverTimestamp() as any,
+      lastActivityAt: serverTimestamp() as any,
+      hiddenActions: [],
+    };
+
+    try {
+      await lobbyService.createLobby(id, lobby);
+
+      if (streamerUrl) {
+        try {
+          const castersRef = collection(db, 'casters');
+          const cleanUrl = streamerUrl.trim().toLowerCase();
+          const castersQuery = query(castersRef, where('streamUrl', '==', cleanUrl));
+          
+          onSnapshot(castersQuery, async (snap) => {
+            if (snap.empty) {
+              const namePart = cleanUrl.includes('twitch.tv/') 
+                ? cleanUrl.split('twitch.tv/')[1]?.split('/')[0] 
+                : 'Caster Oficial';
+              await updateDoc(doc(db, 'casters', generateId()), {
+                name: namePart.toUpperCase(),
+                streamUrl: cleanUrl,
+                status: 'approved',
+                createdAt: serverTimestamp()
+              });
+            }
+          });
+        } catch (e) {
+          console.error('[Caster Registration Error]', e);
+        }
+      }
+
+      alert(`Partida criada com sucesso!`);
+      setSelectedTeamA('');
+      setSelectedTeamB('');
+      setScheduledDate('');
+      setScheduledTime('');
+      setStreamerUrl('');
+    } catch (err: any) {
+      alert(`Erro: ${err.message}`);
+    }
+  };
+
+  const handleManualClose = async (lobbyId: string, teamAScore: number, teamBScore: number, externalLink?: string) => {
+    if (!confirm('Deseja encerrar esta partida manualmente?')) return;
+    try {
+      const lobbyRef = doc(db, 'lobbies', lobbyId);
+      await updateDoc(lobbyRef, {
+        status: 'completed',
+        phase: 'finished',
+        scoreA: teamAScore,
+        scoreB: teamBScore,
+        'config.externalDraftLink': externalLink || null,
+        finishedAt: serverTimestamp(),
+      });
+      setEditingLobby(null);
+    } catch (err: any) {
+      alert(`Erro ao encerrar: ${err.message}`);
+    }
+  };
+
+  const handleDeleteMatch = async (lobbyId: string) => {
+    if (!confirm('Tem certeza que deseja remover esta partida? Esta ação é irreversível.')) return;
+    try {
+      await deleteForjaLobby(lobbyId);
+    } catch (err: any) {
+      alert(`Erro ao remover: ${err.message}`);
+    }
+  };
 
   // Inscrições fechadas se: toggle off OU deadline passou OU máx atingido
   const now = Date.now();
@@ -634,6 +1024,41 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
   }, [rankedPlayers, filter]);
 
   const hasReserves = rankedPlayers.some(p => p.is_reserve);
+
+  // Standings por grupo
+  const calculateStandings = (groupId: string): StandingRow[] => {
+    const groupTeams = teams.filter(t => t.groupId === groupId);
+    const groupLobbies = lobbies.filter(l => l.config?.tournamentStage === 'GROUP' && l.config?.forjaGroupId === groupId && (l.status === 'completed' || l.status === 'finished'));
+
+    return groupTeams.map(team => {
+      let gamesWon = 0, gamesLost = 0, matchesPlayed = 0;
+      groupLobbies.forEach(l => {
+        if (l.config?.forjaTeamA === team.id) {
+          gamesWon += (l.scoreA ?? 0);
+          gamesLost += (l.scoreB ?? 0);
+          if (l.status === 'completed' || l.status === 'finished') matchesPlayed++;
+        } else if (l.config?.forjaTeamB === team.id) {
+          gamesWon += (l.scoreB ?? 0);
+          gamesLost += (l.scoreA ?? 0);
+          if (l.status === 'completed' || l.status === 'finished') matchesPlayed++;
+        }
+      });
+      return { ...team, gamesWon, gamesLost, matchesPlayed, points: gamesWon } as StandingRow;
+    }).sort((a, b) => b.points - a.points || (b.gamesWon - b.gamesLost) - (a.gamesWon - a.gamesLost));
+  };
+
+  const groups = ['A', 'B', 'C', 'D'].filter(g => teams.some(t => t.groupId === g));
+  const activeGroups = groups.length > 0 ? groups : [];
+
+  const filteredLobbies = useMemo(() => {
+    return lobbies.filter(lobby => {
+      const isPlayoffStage = lobby.config?.tournamentStage && lobby.config.tournamentStage.startsWith('PLAYOFF');
+      if (selectedPhase === 'PLAYOFFS') {
+        return isPlayoffStage;
+      }
+      return lobby.config?.tournamentStage === 'GROUP' && lobby.config?.forjaGroupId === selectedPhase;
+    });
+  }, [lobbies, selectedPhase]);
 
   return (
     <section className="forja-view forja-view--inicio">
@@ -711,6 +1136,218 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
         </div>
       )}
 
+      {isAdmin && (
+        <div style={{ marginBottom: '2rem' }}>
+          <button 
+            onClick={() => setShowCreateForm(!showCreateForm)}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem',
+              padding: '1rem',
+              background: 'rgba(15, 23, 42, 0.4)',
+              backdropFilter: 'blur(12px)',
+              border: '2px dashed rgba(245, 158, 11, 0.2)',
+              borderRadius: '1rem',
+              color: '#facc15',
+              fontWeight: 800,
+              fontSize: '0.85rem',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              cursor: 'pointer',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+            }}
+            className="hover:bg-slate-900/60 hover:border-amber-400 hover:text-white"
+          >
+            <span>{showCreateForm ? '✕' : '➕'}</span>
+            <span>{showCreateForm ? 'Fechar Formulário de Criação' : 'Criar Lobby Oficial de Partida'}</span>
+          </button>
+
+          {showCreateForm && (
+            <div style={{
+              marginTop: '1rem',
+              background: 'rgba(15, 23, 42, 0.55)',
+              backdropFilter: 'blur(16px)',
+              border: '1px solid rgba(255, 255, 255, 0.05)',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
+              borderRadius: '1.25rem',
+              padding: '1.75rem',
+            }}>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 900, color: '#f8fafc', marginBottom: '1.5rem', letterSpacing: '0.04em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ color: '#facc15' }}>⚡</span> Configuração de Novo Confronto Oficial
+              </h3>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+                {/* Etapa */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.4rem' }}>Fase da Partida</label>
+                  <select 
+                    value={matchStage} 
+                    onChange={e => setMatchStage(e.target.value as any)}
+                    style={{ width: '100%', padding: '0.75rem 1rem', background: '#090d16', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '0.75rem', color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 700, outline: 'none' }}
+                    className="focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
+                  >
+                    <option value="GROUP">Fase de Grupos</option>
+                    <option value="PLAYOFFS_BO3">Playoffs (MD3)</option>
+                    <option value="PLAYOFFS_BO5">Playoffs (MD5)</option>
+                  </select>
+                </div>
+
+                {matchStage === 'GROUP' ? (
+                  <>
+                    {/* Grupo */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.4rem' }}>Grupo</label>
+                      <select 
+                        value={matchGroup} 
+                        onChange={e => setMatchGroup(e.target.value)}
+                        style={{ width: '100%', padding: '0.75rem 1rem', background: '#090d16', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '0.75rem', color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 700, outline: 'none' }}
+                        className="focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
+                      >
+                        <option value="A">Grupo A</option>
+                        <option value="B">Grupo B</option>
+                        <option value="C">Grupo C</option>
+                        <option value="D">Grupo D</option>
+                      </select>
+                    </div>
+
+                    {/* Rodada */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.4rem' }}>Rodada</label>
+                      <select 
+                        value={groupRound} 
+                        onChange={e => setGroupRound(e.target.value)}
+                        style={{ width: '100%', padding: '0.75rem 1rem', background: '#090d16', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '0.75rem', color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 700, outline: 'none' }}
+                        className="focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
+                      >
+                        <option value="1">1ª Rodada</option>
+                        <option value="2">2ª Rodada</option>
+                        <option value="3">3ª Rodada</option>
+                      </select>
+                    </div>
+                  </>
+                ) : (
+                  /* Playoffs Stage */
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.4rem' }}>Rodada Playoffs</label>
+                    <select 
+                      value={playoffRound} 
+                      onChange={e => setPlayoffRound(e.target.value)}
+                      style={{ width: '100%', padding: '0.75rem 1rem', background: '#090d16', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '0.75rem', color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 700, outline: 'none' }}
+                      className="focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
+                    >
+                      <option value="Quartas">Quartas de Final</option>
+                      <option value="Semifinal">Semifinal</option>
+                      <option value="Decisão 3º Lugar">Decisão de 3º Lugar</option>
+                      <option value="Grande Final">Grande Final</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Seleção de Times */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginTop: '1.25rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.4rem' }}>Time A (Host)</label>
+                  <select 
+                    value={selectedTeamA} 
+                    onChange={e => setSelectedTeamA(e.target.value)}
+                    style={{ width: '100%', padding: '0.75rem 1rem', background: '#090d16', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '0.75rem', color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 700, outline: 'none' }}
+                    className="focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
+                  >
+                    <option value="">Selecione o Time A</option>
+                    {availableTeamsForA.map(t => (
+                      <option key={t.id} value={t.id}>{t.team_name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.4rem' }}>Time B (Guest)</label>
+                  <select 
+                    value={selectedTeamB} 
+                    onChange={e => setSelectedTeamB(e.target.value)}
+                    disabled={!selectedTeamA}
+                    style={{ width: '100%', padding: '0.75rem 1rem', background: '#090d16', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '0.75rem', color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 700, outline: 'none', opacity: selectedTeamA ? 1 : 0.5 }}
+                    className="focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
+                  >
+                    <option value="">Selecione o Time B</option>
+                    {availableTeamsForB.map(t => (
+                      <option key={t.id} value={t.id}>{t.team_name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Data, Horário e Caster */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginTop: '1.25rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.4rem' }}>Data do Jogo</label>
+                  <input 
+                    type="date" 
+                    value={scheduledDate} 
+                    onChange={e => setScheduledDate(e.target.value)}
+                    style={{ width: '100%', padding: '0.7rem 1rem', background: '#090d16', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '0.75rem', color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 700, outline: 'none' }}
+                    className="focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.4rem' }}>Horário (Local BRT)</label>
+                  <input 
+                    type="time" 
+                    value={scheduledTime} 
+                    onChange={e => setScheduledTime(e.target.value)}
+                    style={{ width: '100%', padding: '0.7rem 1rem', background: '#090d16', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '0.75rem', color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 700, outline: 'none' }}
+                    className="focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.4rem' }}>Canal de Transmissão (URL)</label>
+                  <input 
+                    type="text" 
+                    placeholder="twitch.tv/nome_do_caster"
+                    value={streamerUrl} 
+                    onChange={e => setStreamerUrl(e.target.value)}
+                    style={{ width: '100%', padding: '0.7rem 1rem', background: '#090d16', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '0.75rem', color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 700, outline: 'none' }}
+                    className="focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
+                  />
+                </div>
+              </div>
+
+              {/* Botão de Envio */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.75rem' }}>
+                <button 
+                  onClick={handleCreateMatch}
+                  disabled={!selectedTeamA || !selectedTeamB}
+                  style={{
+                    background: selectedTeamA && selectedTeamB ? 'linear-gradient(135deg, #facc15 0%, #eab308 100%)' : '#1e293b',
+                    color: selectedTeamA && selectedTeamB ? '#0f172a' : '#64748b',
+                    border: 'none',
+                    borderRadius: '0.75rem',
+                    padding: '0.75rem 2rem',
+                    fontSize: '0.75rem',
+                    fontWeight: 900,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    cursor: selectedTeamA && selectedTeamB ? 'pointer' : 'not-allowed',
+                    boxShadow: selectedTeamA && selectedTeamB ? '0 4px 15px rgba(234, 179, 8, 0.3)' : 'none',
+                    transition: 'all 0.2s ease',
+                  }}
+                  className="hover:scale-[1.02]"
+                >
+                  🚀 Inicializar Partida Oficial
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {error && (
         <div className="forja-admin-banner" style={{ borderColor: 'rgba(251,191,36,0.3)', marginBottom: '1rem' }}>
           ⚠️ {error}
@@ -785,6 +1422,147 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
             >
               ⚙️ Configurações
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Classificação - Fase de Grupos ── */}
+      {activeGroups.length > 0 && (
+        <div style={{ marginTop: '3rem', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+            <h3 style={{ color: '#f8fafc', fontSize: '0.95rem', fontWeight: 800, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              📊 Classificação — Fase de Grupos
+            </h3>
+          </div>
+          <p style={{ color: '#94a3b8', fontSize: '0.72rem', marginBottom: '1.25rem', marginTop: '-0.25rem', opacity: 0.8, fontStyle: 'italic' }}>
+            Passe o mouse sobre um time para ver os membros
+          </p>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 w-full">
+            {activeGroups.map(g => (
+              <CompactStandings
+                key={g}
+                group={g}
+                standings={calculateStandings(g)}
+                players={rankedPlayers}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Match Center (O Histórico de Partidas) ── */}
+      <div style={{ marginTop: '3.5rem', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '2.5rem' }}>
+        <h3 style={{ color: '#f8fafc', fontSize: '1.05rem', fontWeight: 900, margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span>🏟️</span> Match Center Oficial
+        </h3>
+
+        {/* Sub-navegação interna (Pills estilo Tailwind) */}
+        <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.75rem', marginBottom: '1.5rem', scrollbarWidth: 'none' }}>
+          {['A', 'B', 'C', 'D', 'PLAYOFFS'].map((phaseCode) => {
+            const label = phaseCode === 'PLAYOFFS' ? 'Playoffs' : `Grupo ${phaseCode}`;
+            const isActive = selectedPhase === phaseCode;
+            return (
+              <button
+                key={phaseCode}
+                onClick={() => setSelectedPhase(phaseCode as any)}
+                style={{
+                  padding: '0.5rem 1.25rem',
+                  borderRadius: '9999px',
+                  background: isActive ? '#facc15' : 'rgba(30, 41, 59, 0.4)',
+                  color: isActive ? '#0f172a' : '#94a3b8',
+                  border: isActive ? 'none' : '1px solid rgba(255,255,255,0.05)',
+                  fontSize: '0.72rem',
+                  fontWeight: 900,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  whiteSpace: 'nowrap',
+                  boxShadow: isActive ? '0 4px 15px rgba(250, 204, 21, 0.3)' : 'none'
+                }}
+                className="hover:scale-105"
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Lista de Partidas Filtradas */}
+        {filteredLobbies.length === 0 ? (
+          <div className="forja-empty" style={{ padding: '3rem 2rem' }}>
+            <span style={{ fontSize: '2.5rem' }}>⚔️</span>
+            <p style={{ marginTop: '0.75rem', color: '#64748b' }}>Nenhuma partida registrada nesta fase.</p>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.25rem' }}>
+            {filteredLobbies.map(lobby => (
+              <MatchConfrontationCard
+                key={lobby.id}
+                lobby={lobby}
+                isAdmin={isAdmin}
+                onEdit={setEditingLobby}
+                onDelete={handleDeleteMatch}
+                teams={teams}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Modal de Encerramento Manual */}
+      {editingLobby && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 w-full max-w-md shadow-2xl">
+            <h3 className="text-xl font-black text-white uppercase tracking-tight mb-4">Encerrar Partida Manual</h3>
+            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-6">{editingLobby.config?.name || 'Partida'}</p>
+            
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div>
+                <label className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2 block">Placar Host</label>
+                <input 
+                  type="number" 
+                  id="scoreA"
+                  defaultValue={editingLobby.scoreA || 0}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-2 block">Placar Guest</label>
+                <input 
+                  type="number" 
+                  id="scoreB"
+                  defaultValue={editingLobby.scoreB || 0}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-red-500"
+                />
+              </div>
+            </div>
+
+            <div className="mb-8">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Link do Draft Externo (Opcional)</label>
+              <input 
+                type="text" 
+                id="externalLink"
+                placeholder="ex: mythosdraft.com/lobby/abc123xyz"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white text-xs focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={() => setEditingLobby(null)} className="flex-1 py-3 rounded-xl bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest hover:bg-slate-700 transition-all">Cancelar</button>
+              <button 
+                onClick={() => {
+                  const sA = parseInt((document.getElementById('scoreA') as HTMLInputElement).value) || 0;
+                  const sB = parseInt((document.getElementById('scoreB') as HTMLInputElement).value) || 0;
+                  const ext = (document.getElementById('externalLink') as HTMLInputElement).value;
+                  handleManualClose(editingLobby.id, sA, sB, ext);
+                }}
+                className="flex-1 py-3 rounded-xl bg-amber-500 text-slate-950 text-[10px] font-black uppercase tracking-widest hover:bg-amber-400 transition-all shadow-[0_0_20px_rgba(245,158,11,0.2)]"
+              >
+                Confirmar
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -74,7 +74,7 @@ function MemberRow({ member, isCaptain }: { member: ForjaPlayer; isCaptain: bool
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
       <img
-        src={imgErr ? fallback : member.avatar_url}
+        src={imgErr || !member.avatar_url ? fallback : member.avatar_url}
         onError={() => setImgErr(true)}
         alt={member.nick}
         referrerPolicy="no-referrer"
@@ -652,7 +652,7 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
             <button
               className="forja-btn forja-btn--ghost"
               style={{ fontSize: '0.72rem', padding: '0.3rem 0.75rem' }}
-              onClick={() => onTabChange?.('tabela')}
+              onClick={() => onTabChange?.('inscritos')}
             >
               Ver tabela completa →
             </button>
@@ -680,7 +680,7 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
             <button
               className="forja-btn forja-btn--ghost"
               style={{ fontSize: '0.72rem', padding: '0.3rem 0.75rem' }}
-              onClick={() => onTabChange?.('tabela')}
+              onClick={() => onTabChange?.('inscritos')}
             >
               Ver completo →
             </button>

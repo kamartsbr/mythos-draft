@@ -8,6 +8,7 @@ import {
   collection, doc, setDoc, addDoc, updateDoc, deleteDoc,
   onSnapshot, query, orderBy, serverTimestamp, Unsubscribe,
   getDoc, getDocs, writeBatch, arrayUnion, arrayRemove,
+  where, getCountFromServer,
 } from 'firebase/firestore';
 import { db } from '../../../firebase';
 import {
@@ -109,32 +110,8 @@ export async function registerForjaPlayer(
   const profileId = parseAomProfileId(form.aomstats_url);
   if (!profileId) throw new Error('URL do aomstats inválida.');
 
-  // Prevenção de Sobrescrita: Garanta que o usuário não está inscrito para evitar corromper dados antigos.
   const playerRef = doc(db, PLAYERS_COL, discordUser.discord_id);
   const existingDoc = await getDoc(playerRef);
-  if (existingDoc.exists()) {
-    throw new Error('Você já está inscrito neste torneio.');
-  }
-
-  // 1. BUSCA AS CONFIGURAÇÕES TÉCNICAS (Deadline e Vagas)
-  const settingsRef = doc(db, CONTENT_COL, 'settings');
-  const settingsSnap = await getDoc(settingsRef);
-  const settings = settingsSnap.data() as ForjaSettings | undefined;
-  const maxParticipants = settings?.max_participants ?? 48;
-
-  // 2. BUSCA TODOS OS JOGADORES EXISTENTES PARA FAZER A CHECAGEM DE LIMITE E SOBRESCRITA
-  const playersSnap = await getDocs(collection(db, PLAYERS_COL));
-  const allPlayers = playersSnap.docs.map(d => d.data() as ForjaPlayer);
-
-  // Conta quantos jogadores inscritos são titulares (is_reserve !== true e status !== 'banned')
-  const activeStartersCount = allPlayers.filter(p => !p.is_reserve && p.status !== 'banned').length;
-
-  // 3. LÓGICA DE RESERVA DINÂMICA E TRAVA DE VAGAS
-  // Se não houver settings, ou se o tempo atual passou da deadline, ou se atingiu o limite de titulares, vira reserva.
-  const now = Date.now();
-  const isLate = settings ? now > settings.registration_deadline_ms : true;
-  const isOverLimit = activeStartersCount >= maxParticipants;
-  const shouldBeReserve = isLate || isOverLimit;
 
   const pd = form.aom_profile_data;
   const avatar_url = pd?.avatar_url ?? discordUser.avatar_url;
@@ -142,32 +119,78 @@ export async function registerForjaPlayer(
   const normalizedNick = form.nick.trim().toLowerCase();
   const esportsElo = ESPORTS_ELO_OVERRIDES[normalizedNick] ?? ESPORTS_ELO_OVERRIDES[String(profileId)] ?? undefined;
 
-  const player: Omit<ForjaPlayer, 'discord_id'> = {
-    aom_profile_id:     profileId,
-    aom_id:             String(profileId),
-    nick:               form.nick.trim() || discordUser.username,
-    avatar_url,
-    discord_avatar_url: discordUser.avatar_url,
-    is_brazilian:       form.is_brazilian,
-    pitch_quote:        form.pitch_quote.slice(0, 50),
-    availability:       form.availability,
-    elo_1v1:            pd?.elo_1v1 ?? 0,
-    elo_tg:             pd?.elo_tg ?? 0,
-    top_gods:           pd?.top_gods ?? [],
-    elo_snapshot:       pd?.elo_1v1 ?? 0,
-    ...(esportsElo !== undefined && { esports_elo: esportsElo }),
-    status:             'available',
-    tier:               null,
-    team_id:            null,
-    // ✅ AGORA É DINÂMICO COM TRAVA DE VAGAS:
-    is_reserve:         shouldBeReserve, 
-    registered_at:      serverTimestamp() as any,
-    consent_rules:      form.consent_rules,
-    consent_format:     form.consent_format,
-  };
+  let playerUpdate: Partial<ForjaPlayer>;
 
-  await setDoc(playerRef, player, { merge: true });
+  if (existingDoc.exists()) {
+    // Caso 1: O jogador está atualizando seu perfil.
+    // REGRA DE OURO: ESTRITAMENTE PROIBIDO recalcular ou alterar os campos is_reserve e registered_at neste cenário.
+    playerUpdate = {
+      aom_profile_id:     profileId,
+      aom_id:             String(profileId),
+      nick:               form.nick.trim() || discordUser.username,
+      avatar_url,
+      discord_avatar_url: discordUser.avatar_url,
+      is_brazilian:       form.is_brazilian,
+      pitch_quote:        form.pitch_quote.slice(0, 50),
+      availability:       form.availability,
+      elo_1v1:            pd?.elo_1v1 ?? 0,
+      elo_tg:             pd?.elo_tg ?? 0,
+      top_gods:           pd?.top_gods ?? [],
+      elo_snapshot:       pd?.elo_1v1 ?? 0,
+      ...(esportsElo !== undefined ? { esports_elo: esportsElo } : {}),
+      consent_rules:      form.consent_rules,
+      consent_format:     form.consent_format,
+    };
+  } else {
+    // Caso 2: Inscrição nova.
+    // 1. BUSCA AS CONFIGURAÇÕES TÉCNICAS (Deadline e Vagas)
+    const settingsRef = doc(db, CONTENT_COL, 'settings');
+    const settingsSnap = await getDoc(settingsRef);
+    const settings = settingsSnap.data() as ForjaSettings | undefined;
+    const maxParticipants = settings?.max_participants ?? 48;
+
+    // 2. BUSCA A CONTAGEM DE TITULARES ATIVOS USANDO A FUNÇÃO DE AGREGAÇÃO OTIMIZADA getCountFromServer
+    const q = query(
+      collection(db, PLAYERS_COL),
+      where('is_reserve', '==', false),
+      where('status', '!=', 'banned')
+    );
+    const countSnapshot = await getCountFromServer(q);
+    const activeStartersCount = countSnapshot.data().count;
+
+    // 3. LÓGICA DE RESERVA DINÂMICA E TRAVA DE VAGAS
+    const now = Date.now();
+    const isLate = settings ? now > settings.registration_deadline_ms : true;
+    const isOverLimit = activeStartersCount >= maxParticipants;
+    const shouldBeReserve = isLate || isOverLimit;
+
+    playerUpdate = {
+      aom_profile_id:     profileId,
+      aom_id:             String(profileId),
+      nick:               form.nick.trim() || discordUser.username,
+      avatar_url,
+      discord_avatar_url: discordUser.avatar_url,
+      is_brazilian:       form.is_brazilian,
+      pitch_quote:        form.pitch_quote.slice(0, 50),
+      availability:       form.availability,
+      elo_1v1:            pd?.elo_1v1 ?? 0,
+      elo_tg:             pd?.elo_tg ?? 0,
+      top_gods:           pd?.top_gods ?? [],
+      elo_snapshot:       pd?.elo_1v1 ?? 0,
+      ...(esportsElo !== undefined ? { esports_elo: esportsElo } : {}),
+      status:             'available',
+      tier:               null,
+      team_id:            null,
+      is_reserve:         shouldBeReserve,
+      registered_at:      serverTimestamp() as any,
+      consent_rules:      form.consent_rules,
+      consent_format:     form.consent_format,
+    };
+  }
+
+  await setDoc(playerRef, playerUpdate, { merge: true });
 }
+
 
 
 export async function removeForjaPlayer(discordId: string): Promise<void> {

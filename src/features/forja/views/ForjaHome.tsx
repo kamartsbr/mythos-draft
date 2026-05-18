@@ -264,7 +264,7 @@ function MatchConfrontationCard({ lobby, isAdmin, onEdit, onDelete, teams, playe
   const scoreB = lobby.scoreB ?? lobby.teamBScore ?? 0;
 
   return (
-    <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-5 flex flex-col justify-between gap-4 hover:border-amber-500/30 transition-all group relative overflow-hidden">
+    <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-6 flex flex-col justify-between gap-5 hover:border-amber-500/30 transition-all group relative overflow-hidden">
       {/* Header com Fase / Info */}
       <div className="flex items-center justify-between border-b border-slate-800/50 pb-3">
         <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
@@ -288,9 +288,9 @@ function MatchConfrontationCard({ lobby, isAdmin, onEdit, onDelete, teams, playe
       {/* Nome dos times e placar */}
       <div className="flex items-center justify-between gap-3 my-2">
         {/* Time A */}
-        <div className="flex-1 text-left min-w-0">
+        <div className="flex-1 text-left min-w-0" title={nameA}>
           <p className={cn(
-            "text-sm font-bold truncate",
+            "text-sm font-bold line-clamp-2",
             isCompleted && scoreA > scoreB ? "text-emerald-400 font-black" : "text-slate-200"
           )}>
             {nameA}
@@ -311,9 +311,9 @@ function MatchConfrontationCard({ lobby, isAdmin, onEdit, onDelete, teams, playe
         </div>
 
         {/* Time B */}
-        <div className="flex-1 text-right min-w-0">
+        <div className="flex-1 text-right min-w-0" title={nameB}>
           <p className={cn(
-            "text-sm font-bold truncate",
+            "text-sm font-bold line-clamp-2",
             isCompleted && scoreB > scoreA ? "text-emerald-400 font-black" : "text-slate-200"
           )}>
             {nameB}
@@ -1310,7 +1310,7 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
             <p style={{ marginTop: '0.75rem', color: '#64748b' }}>Nenhuma partida registrada nesta fase.</p>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.25rem' }}>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {filteredLobbies.map(lobby => (
               <MatchConfrontationCard
                 key={lobby.id}

@@ -573,6 +573,7 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
   const { settings, maxParticipants, tierASize, isRegistrationOpen, deadlineMs } = useForjaSettings();
   const [filter, setFilter] = useState<'all' | 'A' | 'B' | 'C' | 'reserve'>('all');
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const [adminModalPlayer, setAdminModalPlayer] = useState<RankedPlayer | null>(null);
   const [selfServiceModalPlayer, setSelfServiceModalPlayer] = useState<RankedPlayer | null>(null);
@@ -634,10 +635,23 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
   };
 
   const filtered = useMemo(() => {
-    if (filter === 'reserve') return rankedPlayers.filter(p => p.is_reserve);
-    if (filter === 'all') return rankedPlayers;
-    return rankedPlayers.filter(p => p.computedTier === filter && !p.is_reserve);
-  }, [rankedPlayers, filter]);
+    let list = rankedPlayers;
+    
+    // 1. Filtro de Tier/Reserva
+    if (filter === 'reserve') {
+      list = list.filter(p => p.is_reserve);
+    } else if (filter !== 'all') {
+      list = list.filter(p => p.computedTier === filter && !p.is_reserve);
+    }
+
+    // 2. Filtro de Pesquisa (Nome)
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(p => p.nick.toLowerCase().includes(q));
+    }
+    
+    return list;
+  }, [rankedPlayers, filter, searchQuery]);
 
   const hasReserves = rankedPlayers.some(p => p.is_reserve);
 
@@ -724,28 +738,52 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
 
       {!loading && <StatsBar players={rankedPlayers} isLive={isLive} />}
 
-      <div className="forja-filter-row" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <span className="forja-filter-label">Filtrar:</span>
-          {(['all', 'A', 'B', 'C'] as const).map(f => (
-            <button key={f} id={`forja-filter-${f}`} className={`forja-filter-btn ${filter === f ? 'forja-filter-btn--active' : ''}`} onClick={() => setFilter(f)}>
-              {f === 'all' ? 'Todos' : `Tier ${f}`}
-            </button>
-          ))}
-          {hasReserves && (
-            <button id="forja-filter-reserve" className={`forja-filter-btn ${filter === 'reserve' ? 'forja-filter-btn--active' : ''}`} style={{ color: '#94a3b8', borderColor: '#334155' }} onClick={() => setFilter('reserve')}>
-              🪑 Reservas
-            </button>
-          )}
-          {!loading && (
-            <span className="forja-filter-count">
-              {filtered.length} jogador{filtered.length !== 1 ? 'es' : ''}
-            </span>
-          )}
+      <div className="forja-filter-row" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
+        {/* Barra de Pesquisa */}
+        <div style={{ display: 'flex', width: '100%' }}>
+          <div style={{ position: 'relative', width: '100%', maxWidth: '400px' }}>
+            <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }}>🔍</span>
+            <input
+              type="text"
+              placeholder="Pesquisar por nick..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: '100%', padding: '0.6rem 1rem 0.6rem 2.5rem',
+                background: 'rgba(30,41,59,0.5)', border: '1px solid #334155',
+                borderRadius: '0.5rem', color: '#f8fafc', fontSize: '0.9rem',
+                outline: 'none', transition: 'border-color 0.2s'
+              }}
+              onFocus={(e) => e.target.style.borderColor = '#60a5fa'}
+              onBlur={(e) => e.target.style.borderColor = '#334155'}
+            />
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className={`forja-btn ${viewMode === 'cards' ? 'forja-btn--primary' : 'forja-btn--ghost'}`} style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }} onClick={() => setViewMode('cards')}>🃏 Cards</button>
-          <button className={`forja-btn ${viewMode === 'table' ? 'forja-btn--primary' : 'forja-btn--ghost'}`} style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }} onClick={() => setViewMode('table')}>📋 Tabela</button>
+
+        {/* Filtros e View Mode */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <span className="forja-filter-label">Filtrar:</span>
+            {(['all', 'A', 'B', 'C'] as const).map(f => (
+              <button key={f} id={`forja-filter-${f}`} className={`forja-filter-btn ${filter === f ? 'forja-filter-btn--active' : ''}`} onClick={() => setFilter(f)}>
+                {f === 'all' ? 'Todos' : `Tier ${f}`}
+              </button>
+            ))}
+            {hasReserves && (
+              <button id="forja-filter-reserve" className={`forja-filter-btn ${filter === 'reserve' ? 'forja-filter-btn--active' : ''}`} style={{ color: '#94a3b8', borderColor: '#334155' }} onClick={() => setFilter('reserve')}>
+                🪑 Reservas
+              </button>
+            )}
+            {!loading && (
+              <span className="forja-filter-count">
+                {filtered.length} jogador{filtered.length !== 1 ? 'es' : ''}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button className={`forja-btn ${viewMode === 'cards' ? 'forja-btn--primary' : 'forja-btn--ghost'}`} style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }} onClick={() => setViewMode('cards')}>🃏 Cards</button>
+            <button className={`forja-btn ${viewMode === 'table' ? 'forja-btn--primary' : 'forja-btn--ghost'}`} style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }} onClick={() => setViewMode('table')}>📋 Tabela</button>
+          </div>
         </div>
       </div>
 

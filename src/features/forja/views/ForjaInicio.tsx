@@ -320,6 +320,42 @@ function PlayerSkeleton() {
 // ─── PlayerTable ──────────────────────────────────────────────────────────────
 
 function PlayerTable({ players, isAdmin }: { players: RankedPlayer[]; isAdmin: boolean }) {
+  const [sortConfig, setSortConfig] = useState<{ key: 'effectiveElo' | 'elo_1v1' | 'elo_tg'; direction: 'asc' | 'desc' } | null>(null);
+
+  const handleSort = (key: 'effectiveElo' | 'elo_1v1' | 'elo_tg') => {
+    setSortConfig(current => {
+      if (!current || current.key !== key) {
+        return { key, direction: 'desc' }; // maior elo no topo por padrão (decrescente)
+      }
+      if (current.direction === 'desc') {
+        return { key, direction: 'asc' };
+      }
+      return null; // desativa ordenação customizada, volta ao ranking original
+    });
+  };
+
+  const sortedPlayers = useMemo(() => {
+    if (!sortConfig) return players;
+
+    return [...players].sort((a, b) => {
+      const getVal = (p: RankedPlayer, k: typeof sortConfig.key) => {
+        if (k === 'effectiveElo') {
+          return p.effectiveElo || Math.round(((p.elo_1v1 || 0) + (p.elo_tg || 0)) / 2);
+        }
+        return p[k] || 0;
+      };
+
+      const valA = getVal(a, sortConfig.key);
+      const valB = getVal(b, sortConfig.key);
+
+      if (valA !== valB) {
+        return sortConfig.direction === 'asc' ? valA - valB : valB - valA;
+      }
+      // Se empatar, mantém pelo rank original
+      return a.rank - b.rank;
+    });
+  }, [players, sortConfig]);
+
   return (
     <div style={{ overflowX: 'auto', background: '#0f172a', borderRadius: '1rem', border: '1px solid #1e293b' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '800px' }}>
@@ -327,20 +363,88 @@ function PlayerTable({ players, isAdmin }: { players: RankedPlayer[]; isAdmin: b
           <tr>
             <th style={{ padding: '1rem' }}>#</th>
             <th style={{ padding: '1rem' }}>Jogador</th>
-            <th style={{ padding: '1rem', textAlign: 'center' }}>ELO MÉDIO</th>
+            
+            {/* ELO MÉDIO HEADER */}
+            <th 
+              onClick={() => handleSort('effectiveElo')}
+              style={{ 
+                padding: '1rem', 
+                textAlign: 'center', 
+                cursor: 'pointer', 
+                userSelect: 'none',
+                color: sortConfig?.key === 'effectiveElo' ? '#f59e0b' : '#94a3b8',
+                transition: 'all 0.2s ease',
+              }}
+              className="hover:text-slate-200"
+            >
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', justifyContent: 'center', width: '100%' }}>
+                <span>ELO MÉDIO</span>
+                {sortConfig?.key === 'effectiveElo' && (
+                  <span style={{ fontSize: '0.75rem', color: '#f59e0b' }}>
+                    {sortConfig.direction === 'asc' ? '▲' : '▼'}
+                  </span>
+                )}
+              </div>
+            </th>
+            
             <th style={{ padding: '1rem' }}>Tier</th>
             <th style={{ padding: '1rem' }}>Esports ELO</th>
-            <th style={{ padding: '1rem' }}>1v1 ELO</th>
-            <th style={{ padding: '1rem' }}>TG ELO</th>
+            
+            {/* 1v1 ELO HEADER */}
+            <th 
+              onClick={() => handleSort('elo_1v1')}
+              style={{ 
+                padding: '1rem', 
+                cursor: 'pointer', 
+                userSelect: 'none',
+                color: sortConfig?.key === 'elo_1v1' ? '#60a5fa' : '#94a3b8',
+                transition: 'all 0.2s ease',
+              }}
+              className="hover:text-slate-200"
+            >
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                <span>1v1 ELO</span>
+                {sortConfig?.key === 'elo_1v1' && (
+                  <span style={{ fontSize: '0.75rem', color: '#60a5fa' }}>
+                    {sortConfig.direction === 'asc' ? '▲' : '▼'}
+                  </span>
+                )}
+              </div>
+            </th>
+            
+            {/* TG ELO HEADER */}
+            <th 
+              onClick={() => handleSort('elo_tg')}
+              style={{ 
+                padding: '1rem', 
+                cursor: 'pointer', 
+                userSelect: 'none',
+                color: sortConfig?.key === 'elo_tg' ? '#60a5fa' : '#94a3b8',
+                transition: 'all 0.2s ease',
+              }}
+              className="hover:text-slate-200"
+            >
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                <span>TG ELO</span>
+                {sortConfig?.key === 'elo_tg' && (
+                  <span style={{ fontSize: '0.75rem', color: '#60a5fa' }}>
+                    {sortConfig.direction === 'asc' ? '▲' : '▼'}
+                  </span>
+                )}
+              </div>
+            </th>
+            
             <th style={{ padding: '1rem' }}>Disponibilidade</th>
           </tr>
         </thead>
         <tbody>
-          {players.map((p, idx) => {
+          {sortedPlayers.map((p, idx) => {
             const esportsEloValue = getEsportsEloDisplay(p);
             const effectiveElo = p.effectiveElo || Math.round(((p.elo_1v1 || 0) + (p.elo_tg || 0)) / 2);
-            const prevTier = idx > 0 ? players[idx - 1].computedTier : null;
-            const needsSep = p.computedTier && p.computedTier !== prevTier && !p.is_reserve;
+            const prevTier = idx > 0 ? sortedPlayers[idx - 1].computedTier : null;
+            
+            // Oculta o separador de Tier caso exista ordenação customizada ativa para evitar layout bagunçado
+            const needsSep = !sortConfig && p.computedTier && p.computedTier !== prevTier && !p.is_reserve;
 
             return (
               <React.Fragment key={p.discord_id}>
@@ -409,6 +513,7 @@ function PlayerTable({ players, isAdmin }: { players: RankedPlayer[]; isAdmin: b
     </div>
   );
 }
+
 
 // ─── PlayerCardsGrid ──────────────────────────────────────────────────────────
 

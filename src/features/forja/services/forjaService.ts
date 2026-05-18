@@ -109,15 +109,32 @@ export async function registerForjaPlayer(
   const profileId = parseAomProfileId(form.aomstats_url);
   if (!profileId) throw new Error('URL do aomstats inválida.');
 
-  // 1. BUSCA AS CONFIGURAÇÕES TÉCNICAS (Deadline)
+  // Prevenção de Sobrescrita: Garanta que o usuário não está inscrito para evitar corromper dados antigos.
+  const playerRef = doc(db, PLAYERS_COL, discordUser.discord_id);
+  const existingDoc = await getDoc(playerRef);
+  if (existingDoc.exists()) {
+    throw new Error('Você já está inscrito neste torneio.');
+  }
+
+  // 1. BUSCA AS CONFIGURAÇÕES TÉCNICAS (Deadline e Vagas)
   const settingsRef = doc(db, CONTENT_COL, 'settings');
   const settingsSnap = await getDoc(settingsRef);
   const settings = settingsSnap.data() as ForjaSettings | undefined;
+  const maxParticipants = settings?.max_participants ?? 48;
 
-  // 2. LÓGICA DE RESERVA DINÂMICA
-  // Se não houver settings, ou se o tempo atual passou da deadline, vira reserva.
+  // 2. BUSCA TODOS OS JOGADORES EXISTENTES PARA FAZER A CHECAGEM DE LIMITE E SOBRESCRITA
+  const playersSnap = await getDocs(collection(db, PLAYERS_COL));
+  const allPlayers = playersSnap.docs.map(d => d.data() as ForjaPlayer);
+
+  // Conta quantos jogadores inscritos são titulares (is_reserve !== true e status !== 'banned')
+  const activeStartersCount = allPlayers.filter(p => !p.is_reserve && p.status !== 'banned').length;
+
+  // 3. LÓGICA DE RESERVA DINÂMICA E TRAVA DE VAGAS
+  // Se não houver settings, ou se o tempo atual passou da deadline, ou se atingiu o limite de titulares, vira reserva.
   const now = Date.now();
   const isLate = settings ? now > settings.registration_deadline_ms : true;
+  const isOverLimit = activeStartersCount >= maxParticipants;
+  const shouldBeReserve = isLate || isOverLimit;
 
   const pd = form.aom_profile_data;
   const avatar_url = pd?.avatar_url ?? discordUser.avatar_url;
@@ -142,14 +159,14 @@ export async function registerForjaPlayer(
     status:             'available',
     tier:               null,
     team_id:            null,
-    // ✅ AGORA É DINÂMICO:
-    is_reserve:         isLate, 
+    // ✅ AGORA É DINÂMICO COM TRAVA DE VAGAS:
+    is_reserve:         shouldBeReserve, 
     registered_at:      serverTimestamp() as any,
     consent_rules:      form.consent_rules,
     consent_format:     form.consent_format,
   };
 
-  await setDoc(doc(db, PLAYERS_COL, discordUser.discord_id), player);
+  await setDoc(playerRef, player, { merge: true });
 }
 
 
@@ -862,7 +879,7 @@ export async function adminRegisterPlayer(params: {
     role:               'player',
   };
 
-  await setDoc(doc(db, PLAYERS_COL, discordId), player);
+  await setDoc(doc(db, PLAYERS_COL, discordId), player, { merge: true });
 }
 
 export async function updateForjaContent(

@@ -923,7 +923,7 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <img
-              src={discordUser.avatar_url}
+              src={discordUser.avatar_url || undefined}
               alt={discordUser.username}
               style={{ width: '2rem', height: '2rem', borderRadius: '50%' }}
               referrerPolicy="no-referrer"

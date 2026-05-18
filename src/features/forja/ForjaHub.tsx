@@ -244,7 +244,7 @@ export default function ForjaHub() {
                 </div>
               ) : discordUser ? (
                 <div className="forja-auth-user">
-                  <img src={discordUser.avatar_url} alt={discordUser.username}
+                  <img src={discordUser.avatar_url || undefined} alt={discordUser.username}
                     className="forja-auth-avatar" referrerPolicy="no-referrer" />
                   <div className="forja-auth-info">
                     <span className="forja-auth-name">{discordUser.username}</span>

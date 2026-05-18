@@ -77,7 +77,7 @@ function GodIcon({ god }: { god: any }) {
   let godName = '';
   if (typeof god === 'string') godName = god;
   else if (typeof god === 'object' && god.god && typeof god.god === 'string') godName = god.god;
-  
+
   if (!godName) return null;
 
   const normalizedName = normalizeId(godName);
@@ -108,13 +108,13 @@ function PlayerCard({
   currentUserId: string | null;
   onCardClick: (p: RankedPlayer) => void;
 }) {
-  const [imgErr, setImgErr]     = useState(false);
+  const [imgErr, setImgErr] = useState(false);
   const [removing, setRemoving] = useState(false);
   const fallback = `https://cdn.discordapp.com/embed/avatars/${(parseInt(player.discord_id.slice(-1)) || 0) % 6}.png`;
 
   const esportsEloValue = getEsportsEloDisplay(player);
   const isOwnCard = currentUserId === player.discord_id;
-  const canClick  = isAdmin || isOwnCard;
+  const canClick = isAdmin || isOwnCard;
 
   // CÁLCULO ELO EFETIVO (MÉDIA)
   const effectiveElo = player.effectiveElo || Math.round(((player.elo_1v1 || 0) + (player.elo_tg || 0)) / 2);
@@ -129,7 +129,8 @@ function PlayerCard({
   return (
     <article
       className="forja-player-card"
-      style={{ opacity: removing ? 0.4 : 1, transition: 'opacity 0.3s',
+      style={{
+        opacity: removing ? 0.4 : 1, transition: 'opacity 0.3s',
         cursor: canClick ? 'pointer' : 'default',
         outline: canClick ? undefined : 'none',
       }}
@@ -142,9 +143,9 @@ function PlayerCard({
       {/* Esports Badge */}
       {esportsEloValue && (
         <div className="forja-seed-badge" style={{
-          right: '2.5rem', 
+          right: '2.5rem',
           background: 'linear-gradient(135deg, rgba(245,158,11,0.2) 0%, rgba(217,119,6,0.3) 100%)',
-          color: '#fcd34d', 
+          color: '#fcd34d',
           borderColor: 'rgba(245,158,11,0.6)',
           textShadow: '0 0 5px rgba(245,158,11,0.4)',
           fontWeight: 800,
@@ -235,7 +236,7 @@ function PlayerCard({
           <div className="forja-player-gods__row">
             {player.top_gods.slice(0, 5).map((g: any, i: number) => (
               <GodIcon key={i} god={g} />
-              ))}
+            ))}
           </div>
         </div>
       )}
@@ -370,14 +371,14 @@ function PlayerTable({ players, isAdmin }: { players: RankedPlayer[]; isAdmin: b
           <tr>
             <th style={{ padding: '1rem' }}>#</th>
             <th style={{ padding: '1rem' }}>Jogador</th>
-            
+
             {/* ELO MÉDIO HEADER */}
-            <th 
+            <th
               onClick={() => handleSort('effectiveElo')}
-              style={{ 
-                padding: '1rem', 
-                textAlign: 'center', 
-                cursor: 'pointer', 
+              style={{
+                padding: '1rem',
+                textAlign: 'center',
+                cursor: 'pointer',
                 userSelect: 'none',
                 color: sortConfig?.key === 'effectiveElo' ? '#f59e0b' : '#94a3b8',
                 transition: 'all 0.2s ease',
@@ -393,16 +394,16 @@ function PlayerTable({ players, isAdmin }: { players: RankedPlayer[]; isAdmin: b
                 )}
               </div>
             </th>
-            
+
             <th style={{ padding: '1rem' }}>Tier</th>
             <th style={{ padding: '1rem' }}>Esports ELO</th>
-            
+
             {/* 1v1 ELO HEADER */}
-            <th 
+            <th
               onClick={() => handleSort('elo_1v1')}
-              style={{ 
-                padding: '1rem', 
-                cursor: 'pointer', 
+              style={{
+                padding: '1rem',
+                cursor: 'pointer',
                 userSelect: 'none',
                 color: sortConfig?.key === 'elo_1v1' ? '#60a5fa' : '#94a3b8',
                 transition: 'all 0.2s ease',
@@ -418,13 +419,13 @@ function PlayerTable({ players, isAdmin }: { players: RankedPlayer[]; isAdmin: b
                 )}
               </div>
             </th>
-            
+
             {/* TG ELO HEADER */}
-            <th 
+            <th
               onClick={() => handleSort('elo_tg')}
-              style={{ 
-                padding: '1rem', 
-                cursor: 'pointer', 
+              style={{
+                padding: '1rem',
+                cursor: 'pointer',
                 userSelect: 'none',
                 color: sortConfig?.key === 'elo_tg' ? '#60a5fa' : '#94a3b8',
                 transition: 'all 0.2s ease',
@@ -440,7 +441,7 @@ function PlayerTable({ players, isAdmin }: { players: RankedPlayer[]; isAdmin: b
                 )}
               </div>
             </th>
-            
+
             <th style={{ padding: '1rem' }}>Disponibilidade</th>
           </tr>
         </thead>
@@ -449,7 +450,7 @@ function PlayerTable({ players, isAdmin }: { players: RankedPlayer[]; isAdmin: b
             const esportsEloValue = getEsportsEloDisplay(p);
             const effectiveElo = p.effectiveElo || Math.round(((p.elo_1v1 || 0) + (p.elo_tg || 0)) / 2);
             const prevTier = idx > 0 ? sortedPlayers[idx - 1].computedTier : null;
-            
+
             // Oculta o separador de Tier caso exista ordenação customizada ativa para evitar layout bagunçado
             const needsSep = !sortConfig && p.computedTier && p.computedTier !== prevTier && !p.is_reserve;
 
@@ -570,13 +571,13 @@ interface ForjaInicioProps extends ForjaViewProps {
 export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: ForjaInicioProps) {
   const { rankedPlayers, loading, error, isLive } = useForjaPlayers(true);
   const { settings, maxParticipants, tierASize, isRegistrationOpen, deadlineMs } = useForjaSettings();
-  const [filter, setFilter]    = useState<'all' | 'A' | 'B' | 'C' | 'reserve'>('all');
+  const [filter, setFilter] = useState<'all' | 'A' | 'B' | 'C' | 'reserve'>('all');
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
 
-  const [adminModalPlayer,      setAdminModalPlayer]      = useState<RankedPlayer | null>(null);
+  const [adminModalPlayer, setAdminModalPlayer] = useState<RankedPlayer | null>(null);
   const [selfServiceModalPlayer, setSelfServiceModalPlayer] = useState<RankedPlayer | null>(null);
-  const [showSettingsModal,     setShowSettingsModal]     = useState(false);
-  const [showAddPlayerModal,    setShowAddPlayerModal]    = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
 
   const currentUserId = discordUser?.discord_id ?? null;
 
@@ -586,7 +587,7 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
   const activePlayersCount = rankedPlayers.filter(p => !p.is_reserve).length;
   const limitReached = activePlayersCount >= maxParticipants;
   const isReservesOpen = settings?.reserves_open ?? false;
-  
+
   // Inscrições fechadas se: (toggle off OU deadline passou OU máx atingido) E reserves_open for false
   // Se reserves_open for true, a inscrição nunca é totalmente bloqueada (sempre permite reserva)
   const registrationBlocked = (!isRegistrationOpen || deadlinePassed || limitReached) && !isReservesOpen;
@@ -594,14 +595,14 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
   const registrationBlockReason = !isRegistrationOpen && !isReservesOpen
     ? 'Inscrições encerradas pelo organizador.'
     : deadlinePassed && !isReservesOpen
-    ? 'O prazo de inscrições encerrou.'
-    : (limitReached || !isRegistrationOpen || deadlinePassed) && isReservesOpen
-    ? `Inscrições principais encerradas. Novos jogadores entram como reserva.`
-    : limitReached
-    ? `Limite de ${maxParticipants} participantes atingido. Novos jogadores entram como reserva.`
-    : null;
+      ? 'O prazo de inscrições encerrou.'
+      : (limitReached || !isRegistrationOpen || deadlinePassed) && isReservesOpen
+        ? `Inscrições principais encerradas. Novos jogadores entram como reserva.`
+        : limitReached
+          ? `Limite de ${maxParticipants} participantes atingido. Novos jogadores entram como reserva.`
+          : null;
 
-  const isRegistered = useMemo(() => 
+  const isRegistered = useMemo(() =>
     rankedPlayers.some(p => p.discord_id === currentUserId),
     [rankedPlayers, currentUserId]
   );
@@ -634,7 +635,7 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
 
   const filtered = useMemo(() => {
     if (filter === 'reserve') return rankedPlayers.filter(p => p.is_reserve);
-    if (filter === 'all')     return rankedPlayers;
+    if (filter === 'all') return rankedPlayers;
     return rankedPlayers.filter(p => p.computedTier === filter && !p.is_reserve);
   }, [rankedPlayers, filter]);
 

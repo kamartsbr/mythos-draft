@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Forja de Hefesto — Aba: Início
  * Fase 2: Banner Inteligente + Botão Sair do Torneio
  * Fase 3: Elo Efetivo (Média) Integrado
@@ -639,41 +639,6 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
   }, [rankedPlayers, filter]);
 
   const hasReserves = rankedPlayers.some(p => p.is_reserve);
-
-  // Standings por grupo
-  const calculateStandings = (groupId: string): StandingRow[] => {
-    const groupTeams = teams.filter(t => t.groupId === groupId);
-    const groupLobbies = lobbies.filter(l => l.config?.tournamentStage === 'GROUP' && l.config?.forjaGroupId === groupId && (l.status === 'completed' || l.status === 'finished'));
-
-    return groupTeams.map(team => {
-      let gamesWon = 0, gamesLost = 0, matchesPlayed = 0;
-      groupLobbies.forEach(l => {
-        if (l.config?.forjaTeamA === team.id) {
-          gamesWon += (l.scoreA ?? 0);
-          gamesLost += (l.scoreB ?? 0);
-          if (l.status === 'completed' || l.status === 'finished') matchesPlayed++;
-        } else if (l.config?.forjaTeamB === team.id) {
-          gamesWon += (l.scoreB ?? 0);
-          gamesLost += (l.scoreA ?? 0);
-          if (l.status === 'completed' || l.status === 'finished') matchesPlayed++;
-        }
-      });
-      return { ...team, gamesWon, gamesLost, matchesPlayed, points: gamesWon } as StandingRow;
-    }).sort((a, b) => b.points - a.points || (b.gamesWon - b.gamesLost) - (a.gamesWon - a.gamesLost));
-  };
-
-  const groups = ['A', 'B', 'C', 'D'].filter(g => teams.some(t => t.groupId === g));
-  const activeGroups = groups.length > 0 ? groups : [];
-
-  const filteredLobbies = useMemo(() => {
-    return lobbies.filter(lobby => {
-      const isPlayoffStage = lobby.config?.tournamentStage && lobby.config.tournamentStage.startsWith('PLAYOFF');
-      if (selectedPhase === 'PLAYOFFS') {
-        return isPlayoffStage;
-      }
-      return lobby.config?.tournamentStage === 'GROUP' && lobby.config?.forjaGroupId === selectedPhase;
-    });
-  }, [lobbies, selectedPhase]);
 
   return (
     <section className="forja-view forja-view--inicio">

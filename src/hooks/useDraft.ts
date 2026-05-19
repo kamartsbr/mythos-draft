@@ -332,9 +332,9 @@ export function useDraft(
     }
   }, [lobby, effectiveIsCaptain1, effectiveIsCaptain2, isProcessing]);
 
-  const reportScore = useCallback(async (winner: 'A' | 'B' | null) => {
+  const reportScore = useCallback(async (winner: 'A' | 'B' | null, isAdminOverride: boolean = false) => {
     if (!lobby) return;
-    const result = await draftService.reportScore(lobby, winner, effectiveIsCaptain1, effectiveIsCaptain2, (cfg, gn, lw) => generateStandardTurnOrder(cfg, gn, lw));
+    const result = await draftService.reportScore(lobby, winner, effectiveIsCaptain1, effectiveIsCaptain2, (cfg, gn, lw) => generateStandardTurnOrder(cfg, gn, lw), isAdminOverride);
     if (!result.success) {
       setError(result.error || "Report failed");
     }

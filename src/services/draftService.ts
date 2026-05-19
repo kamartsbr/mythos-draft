@@ -342,13 +342,14 @@ export const draftService = {
     winner: 'A' | 'B' | null,
     isCaptain1: boolean,
     isCaptain2: boolean,
-    generateStandardTurnOrder: (cfg: any, gameNumber?: number, lastWinner?: 'A' | 'B' | null) => { mapOrder: DraftTurn[], godOrder: DraftTurn[] }
+    generateStandardTurnOrder: (cfg: any, gameNumber?: number, lastWinner?: 'A' | 'B' | null) => { mapOrder: DraftTurn[], godOrder: DraftTurn[] },
+    isAdminOverride: boolean = false
   ): Promise<{ success: boolean; error?: string }> {
     if (IS_DEV) {
       const freshLobby = getLocalLobby(lobby.id);
       if (!freshLobby) return { success: false, error: "Lobby not found" };
 
-      const result = this._processReportLogic(freshLobby, winner, isCaptain1, isCaptain2, generateStandardTurnOrder);
+      const result = this._processReportLogic(freshLobby, winner, isCaptain1, isCaptain2, generateStandardTurnOrder, isAdminOverride);
       if (result.success && result.updates) {
         setLocalLobby(lobby.id, cleanData({ ...freshLobby, ...result.updates }));
         return { success: true };
@@ -363,7 +364,7 @@ export const draftService = {
         if (!lobbyDoc.exists()) return { success: false, error: "Lobby not found" };
 
         const freshLobby = normalizeLobbyData({ id: lobbyDoc.id, ...lobbyDoc.data() });
-        const result = this._processReportLogic(freshLobby, winner, isCaptain1, isCaptain2, generateStandardTurnOrder);
+        const result = this._processReportLogic(freshLobby, winner, isCaptain1, isCaptain2, generateStandardTurnOrder, isAdminOverride);
 
         if (!result.success) return { success: false, error: result.error };
 
@@ -384,13 +385,19 @@ export const draftService = {
     winner: 'A' | 'B' | null,
     isCaptain1: boolean,
     isCaptain2: boolean,
-    generateStandardTurnOrder: any
+    generateStandardTurnOrder: any,
+    isAdminOverride: boolean = false
   ): { success: boolean, error?: string, updates?: Partial<Lobby> } {
     const nextLobby = { ...lobby };
 
     if (nextLobby.phase === 'post_draft' && nextLobby.status === 'drafting') {
-      if (isCaptain1) nextLobby.readyA_report = true;
-      if (isCaptain2) nextLobby.readyB_report = true;
+      if (isAdminOverride) {
+        nextLobby.readyA_report = true;
+        nextLobby.readyB_report = true;
+      } else {
+        if (isCaptain1) nextLobby.readyA_report = true;
+        if (isCaptain2) nextLobby.readyB_report = true;
+      }
 
       if (nextLobby.readyA_report && nextLobby.readyB_report) {
         nextLobby.phase = 'reporting';
@@ -404,8 +411,13 @@ export const draftService = {
 
     if (!winner) return { success: false, error: "No winner selected" };
 
-    if (isCaptain1) nextLobby.reportVoteA = winner;
-    if (isCaptain2) nextLobby.reportVoteB = winner;
+    if (isAdminOverride) {
+      nextLobby.reportVoteA = winner;
+      nextLobby.reportVoteB = winner;
+    } else {
+      if (isCaptain1) nextLobby.reportVoteA = winner;
+      if (isCaptain2) nextLobby.reportVoteB = winner;
+    }
 
     if (!lobby.reportVoteA && !lobby.reportVoteB) {
       nextLobby.reportStartAt = now();

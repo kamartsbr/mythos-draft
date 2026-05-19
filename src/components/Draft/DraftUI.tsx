@@ -34,7 +34,7 @@ interface DraftUIProps {
   isMyTurn: boolean;
   myTeam: 'A' | 'B' | 'BOTH' | null;
   handlePickerAction: (id: string, playerId?: number) => void;
-  reportScore: (winner: 'A' | 'B') => void;
+  reportScore: (winner: 'A' | 'B' | null, isAdminOverride?: boolean) => void;
   resetVotes: () => void;
   nickname: string;
   setNickname: (val: string) => void;

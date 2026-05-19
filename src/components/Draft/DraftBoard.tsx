@@ -24,7 +24,7 @@ interface DraftBoardProps {
   isProcessing: boolean;
   optimisticReady: boolean | null;
   optimisticAction: { id: string, type: 'pick' | 'ban' | 'map_pick' | 'map_ban' } | null;
-  reportScore: (winner: 'A' | 'B') => void;
+  reportScore: (winner: 'A' | 'B' | null, isAdminOverride?: boolean) => void;
   resetVotes: () => void;
   onHome: () => void;
   lang: string;
@@ -521,6 +521,29 @@ export function DraftBoard(props: DraftBoardProps) {
           </div>
           <h2 className="text-4xl font-black text-white mb-4 uppercase tracking-tight">{t.reportResult}</h2>
           <p className="text-slate-400 mb-12">{t.reportDesc}</p>
+
+          {isAdmin && (
+            <div className="mb-8 border border-red-500/30 bg-red-500/5 rounded-2xl p-6">
+              <p className="text-red-500 font-bold uppercase tracking-widest text-xs mb-4 flex items-center justify-center gap-2">
+                <Shield className="w-4 h-4" />
+                Admin Override (Force Result)
+              </p>
+              <div className="flex gap-4">
+                <button
+                  onClick={() => reportScore('A', true)}
+                  className="flex-1 py-3 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-500 font-black rounded-xl uppercase tracking-widest transition-all text-xs"
+                >
+                  FORCE WIN {(lobby.captain1Name || t.teamA)}
+                </button>
+                <button
+                  onClick={() => reportScore('B', true)}
+                  className="flex-1 py-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-500 font-black rounded-xl uppercase tracking-widest transition-all text-xs"
+                >
+                  FORCE WIN {(lobby.captain2Name || t.teamB)}
+                </button>
+              </div>
+            </div>
+          )}
 
           {!isVoted ? (
             <>

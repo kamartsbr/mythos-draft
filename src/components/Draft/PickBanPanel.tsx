@@ -19,7 +19,7 @@ interface PickBanPanelProps {
   handleAction: (id: string, playerId?: number, playerName?: string) => void;
   t: any;
   lang: string;
-  reportScore: (winner: 'A' | 'B') => void;
+  reportScore: (winner: 'A' | 'B' | null, isAdminOverride?: boolean) => void;
   viewGameIndex: number | null;
   setViewGameIndex: (val: number | null) => void;
   isAdmin: boolean;
@@ -601,21 +601,23 @@ export function PickBanPanel({
             </p>
           </div>
 
-          {timeLeft !== null && !isNaN(timeLeft) && (
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className={cn(
-                "px-10 py-3 md:py-4 rounded-2xl border-2 flex items-center gap-6 transition-all duration-300 bg-slate-900/40 backdrop-blur-md shadow-xl",
-                timeLeft <= 5 ? "border-red-500 shadow-[0_0_30px_rgba(239,68,68,0.3)]" : "border-slate-800"
-              )}
-            >
-              <Clock className={cn("w-6 h-6 md:w-8 md:h-8", timeLeft <= 5 ? "text-red-500 animate-pulse" : "text-amber-500")} />
-              <span className={cn("text-4xl md:text-6xl font-black tabular-nums tracking-tight", (timeLeft || 0) <= 5 ? "text-red-500" : "text-white")}>
-                {typeof timeLeft === 'number' && !isNaN(timeLeft) ? timeLeft : '--'}
-              </span>
-            </motion.div>
-          )}
+          <div className="h-[72px] md:h-[88px] flex items-center justify-center w-full transition-all">
+            {timeLeft !== null && !isNaN(timeLeft) && (
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className={cn(
+                  "px-10 py-3 md:py-4 rounded-2xl border-2 flex items-center gap-6 transition-all duration-300 bg-slate-900/40 backdrop-blur-md shadow-xl",
+                  timeLeft <= 5 ? "border-red-500 shadow-[0_0_30px_rgba(239,68,68,0.3)]" : "border-slate-800"
+                )}
+              >
+                <Clock className={cn("w-6 h-6 md:w-8 md:h-8", timeLeft <= 5 ? "text-red-500 animate-pulse" : "text-amber-500")} />
+                <span className={cn("text-4xl md:text-6xl font-black tabular-nums tracking-tight", (timeLeft || 0) <= 5 ? "text-red-500" : "text-white")}>
+                  {typeof timeLeft === 'number' && !isNaN(timeLeft) ? timeLeft : '--'}
+                </span>
+              </motion.div>
+            )}
+          </div>
 
           <div className="w-full flex items-center justify-between">
             <div className="flex items-center gap-4">

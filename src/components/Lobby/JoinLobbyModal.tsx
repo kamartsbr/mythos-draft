@@ -161,10 +161,10 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
       }
     } else if (teamSize === 1) {
       const existingTeamName = role === 'A' ? lobby.captain1Name : lobby.captain2Name;
-      setTeamName(existingTeamName || localNickname);
-    } else {
-      const existingTeamName = role === 'A' ? lobby.captain1Name : lobby.captain2Name;
-      setTeamName(existingTeamName || (role === 'A' ? t.teamA : t.teamB));
+      setTeamName(prev => {
+        if (!roleChanged && prev) return prev;
+        return existingTeamName || prev || (role === 'A' ? t.teamA : t.teamB);
+      });
     }
   }, [role, teamSize, isForjaPreset, forjaTeam?.id, teamRoster, userAuthIdentity, t.teamA, t.teamB, activeSlots, captainPosition]);
 
@@ -285,61 +285,6 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
         </div>
 
         <div className="p-8 space-y-8 max-h-[70vh] overflow-y-auto">
-          {/* Team Name */}
-          {!isFinished && teamSize > 1 && (
-            <div className="space-y-3">
-              <label className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                <Shield className="w-3 h-3" />
-                {t.teamName}
-              </label>
-              {isForjaPreset && forjaTeam ? (
-                <div className="flex items-center gap-4 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3">
-                  {forjaTeam.image_url ? (
-                    <img src={forjaTeam.image_url} alt={forjaTeam.team_name} className="w-10 h-10 rounded-lg object-cover border border-slate-800 shadow-lg" />
-                  ) : (
-                    <div className="w-10 h-10 rounded-lg bg-slate-900 flex items-center justify-center border border-slate-800">
-                      <Shield className="w-5 h-5 text-slate-700" />
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-sm font-black text-white uppercase tracking-wider leading-none mb-1">{forjaTeam.team_name}</p>
-                    <p className="text-[10px] font-bold text-amber-500 uppercase tracking-widest leading-none">Time Oficial Forja</p>
-                  </div>
-                </div>
-              ) : (
-                <input 
-                  type="text" 
-                  value={teamName}
-                  onChange={(e) => setTeamName(e.target.value)}
-                  placeholder={role === 'A' ? (lang === 'en' ? 'Team A (Host)' : 'Time A (Host)') : (lang === 'en' ? 'Team B (Guest)' : 'Time B (Convidado)')}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-amber-500 transition-all"
-                />
-              )}
-            </div>
-          )}
-
-          {/* Nickname (Hidden for FORJA Captains to simplify UX) */}
-          {(!isForjaPreset || role === 'SPECTATOR' || !role) && (
-            <div className="space-y-3">
-              <label className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                <User className="w-3 h-3" />
-                {teamSize === 1 ? t.playerName : t.nickname}
-              </label>
-              <input 
-                type="text" 
-                value={localNickname}
-                onChange={(e) => {
-                  setLocalNickname(e.target.value);
-                  if (captainPosition !== null) {
-                    setPlayerNames(prev => ({ ...prev, [captainPosition]: e.target.value }));
-                  }
-                }}
-                placeholder={t.nicknamePlaceholder}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-amber-500 transition-all"
-              />
-            </div>
-          )}
-
           {/* Role Selection */}
           {!isFinished && (
             <div className="space-y-3">
@@ -403,6 +348,71 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
               </div>
             </div>
           )}
+
+          {/* Team Name */}
+          {!isFinished && teamSize > 1 && role && role !== 'SPECTATOR' && (
+            <motion.div 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="space-y-3"
+            >
+              <label className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                <Shield className="w-3 h-3" />
+                {t.teamName}
+              </label>
+              {isForjaPreset && forjaTeam ? (
+                <div className="flex items-center gap-4 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3">
+                  {forjaTeam.image_url ? (
+                    <img src={forjaTeam.image_url} alt={forjaTeam.team_name} className="w-10 h-10 rounded-lg object-cover border border-slate-800 shadow-lg" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-lg bg-slate-900 flex items-center justify-center border border-slate-800">
+                      <Shield className="w-5 h-5 text-slate-700" />
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm font-black text-white uppercase tracking-wider leading-none mb-1">{forjaTeam.team_name}</p>
+                    <p className="text-[10px] font-bold text-amber-500 uppercase tracking-widest leading-none">Time Oficial Forja</p>
+                  </div>
+                </div>
+              ) : (
+                <input 
+                  type="text" 
+                  value={teamName}
+                  onChange={(e) => setTeamName(e.target.value)}
+                  placeholder={role === 'A' ? (lang === 'en' ? 'Team A (Host)' : 'Time A (Host)') : (lang === 'en' ? 'Team B (Guest)' : 'Time B (Convidado)')}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-amber-500 transition-all"
+                />
+              )}
+            </motion.div>
+          )}
+
+          {/* Nickname (Hidden for FORJA Captains to simplify UX) */}
+          {(!isForjaPreset || role === 'SPECTATOR') && role && (
+            <motion.div 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="space-y-3"
+            >
+              <label className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                <User className="w-3 h-3" />
+                {teamSize === 1 ? t.playerName : t.nickname}
+              </label>
+              <input 
+                type="text" 
+                value={localNickname}
+                onChange={(e) => {
+                  setLocalNickname(e.target.value);
+                  if (captainPosition !== null) {
+                    setPlayerNames(prev => ({ ...prev, [captainPosition]: e.target.value }));
+                  }
+                }}
+                placeholder={t.nicknamePlaceholder}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-amber-500 transition-all"
+              />
+            </motion.div>
+          )}
+
+
 
           {/* Team Roster (Only for players) */}
           {!isFinished && role && role !== 'SPECTATOR' && (

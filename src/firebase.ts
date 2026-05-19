@@ -4,7 +4,7 @@ import { getAuth } from 'firebase/auth';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Inicializa o App com as configurações do JSON
-const app = initializeApp(firebaseConfig);
+export const app = initializeApp(firebaseConfig);
 
 export const FIRESTORE_DB_ID = firebaseConfig.firestoreDatabaseId;
 

@@ -17,6 +17,7 @@
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
     "clsx": "^2.1.1",
+    "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "firebase": "^10.14.1",

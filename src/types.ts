@@ -129,6 +129,7 @@ export type ReplayStep = {
 
 export type TeamPlayer = {
   name: string;
+  position: number;
 };
 
 export type Substitution = {

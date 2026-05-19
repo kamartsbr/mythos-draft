@@ -77,9 +77,10 @@ function parseAuthCode(): string | null {
   return params.get('code');
 }
 
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getApp } from 'firebase/app';
 import { signInWithCustomToken } from 'firebase/auth';
 import { auth } from '../../../firebase';
+import firebaseConfig from '../../../../firebase-applet-config.json';
 
 /** 
  * Chama a Cloud Function para validar o code e obter o Custom Token do Firebase.
@@ -87,14 +88,21 @@ import { auth } from '../../../firebase';
  */
 async function authenticateDiscordWithFirebase(code: string): Promise<ForjaDiscordUser | null> {
   try {
-    const functions = getFunctions();
-    const verifyFn = httpsCallable<{ code: string; redirectUri: string }, { customToken: string; discordUser: any }>(
-      functions, 
-      'verifydiscordtoken'
-    );
+    const projectId = firebaseConfig.projectId || getApp().options.projectId; 
+    const FUNCTIONS_URL = `https://us-central1-${projectId}.cloudfunctions.net/verifydiscordtoken`;
     
-    const result = await verifyFn({ code, redirectUri: getRedirectUri() });
-    const { customToken, discordUser } = result.data;
+    const response = await fetch(FUNCTIONS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, redirectUri: getRedirectUri() })
+    });
+    
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error || 'Falha na autenticação');
+    }
+    
+    const { customToken, discordUser } = await response.json();
 
     // 1. Autenticar no Firebase com o Custom Token
     await signInWithCustomToken(auth, customToken);
@@ -210,26 +218,5 @@ export function useForjaDiscordAuth(): UseForjaDiscordAuthResult {
     // 2. Fallback: IDs hardcoded e .env (funcionam mesmo sem registro)
     (discordUser ? isForjaAdmin(discordUser.discord_id) : false);
 
-  // ─── BYPASS LOCAL (MOCK) ──────────────────────────────────────────────────
-  // ⚠️ TODO: COMENTAR/REMOVER ANTES DO DEPLOY PARA PRODUÇÃO
-  const MOCK_AUTH = {
-    discordUser: {
-      discord_id: "123456789", // Alterar aqui para testar o lock do capitão (ex: ID salvo no config do lobby)
-      username: "Admin Local",
-      discriminator: "0000",
-      avatar_url: "",
-      access_token: "mock_token"
-    },
-    isAdmin: true, // Alterar para false quando for testar a visão de jogador/capitão
-    isLoading: false,
-    loginWithDiscord: () => console.log("Login mockado"),
-    logout: () => console.log("Logout mockado"),
-  };
-
-  return MOCK_AUTH;
-
-  // Código Original (Comentado para Reversão Fácil):
-  /*
   return { discordUser, isAdmin, isLoading, loginWithDiscord, logout };
-  */
 }

@@ -22,13 +22,16 @@ export const PLAYER_POSITION_MAP = {
 };
 
 /**
- * FIXED: Returns stritctly chronological pick order for the team.
- * The order in which players choose gods is fixed in the engine.
+ * Returns strictly chronological pick order for the team, respecting game alternation.
+ * The order in which players choose gods changes between Game 1 and Game 2.
  */
-export const getMCLTeamOrder = (team: 'A' | 'B'): number[] => {
-  // Team A picks in slots: 1st, 4th, 5th
-  // Team B picks in slots: 2nd, 3rd, 6th
-  return team === 'A' ? [1, 4, 5] : [2, 3, 6];
+export const getMCLTeamOrder = (team: 'A' | 'B', _mapId?: string | null, useGame2Order?: boolean): number[] => {
+  // G1: [1, 2, 3, 4, 5, 6] -> A: [1, 4, 5], B: [2, 3, 6]
+  // G2: [3, 4, 1, 2, 6, 5] -> A: [4, 1, 5], B: [3, 2, 6]
+  const gameNumber = useGame2Order ? 2 : 1;
+  const timeline = getDraftTimeline(gameNumber);
+  
+  return timeline.filter(id => PLAYER_TEAM_MAP[id as keyof typeof PLAYER_TEAM_MAP] === team);
 };
 
 export const getDraftTimeline = (gameNumber: number): number[] => {

@@ -1,0 +1,11 @@
+# Contexto Global
+Você é um desenvolvedor Sênior Full-Stack operando o repositório do Mythos Draft.
+Stack principal: React, TypeScript, Firebase (Firestore, Hosting, Cloud Functions).
+
+# Regras de Tipagem e Código
+- O TypeScript é a fonte absoluta da verdade. NUNCA use `any`. Se um tipo ou interface não existir, crie-o antes de implementar a lógica.
+- Mantenha a separação de responsabilidades entre UI (React) e regras de negócio (Firebase/Funções).
+- Na interface, privilegie a expansão horizontal de containers (CSS Grid/Flexbox) em vez de longos scrolls verticais.
+
+# Comandos Permitidos
+- Você tem permissão para rodar testes de tipagem (ex: `npx tsc --noEmit`) no terminal para validar seu próprio código após aplicar mudanças. Se o terminal retornar erro, corrija-o antes de finalizar a tarefa.

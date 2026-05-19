@@ -4,6 +4,7 @@
 
 const { onCall, onRequest } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2");
+
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const { getFirestore } = require("firebase-admin/firestore");
@@ -198,50 +199,55 @@ exports.fetchaomprofile = onCall({ secrets: [VERCEL_API_KEY] }, async (request) 
  * Verifica o token do Discord e retorna um custom token do Firebase.
  * Isso garante que o UID do Firebase seja o próprio Discord ID do usuário.
  */
-exports.verifydiscordtoken = onCall({ secrets: [DISCORD_CLIENT_SECRET, DISCORD_CLIENT_ID] }, async (request) => {
-  const { code, redirectUri } = request.data;
-  if (!code) throw new Error("Code ausente");
+exports.verifydiscordtoken = onRequest({ cors: true, secrets: [DISCORD_CLIENT_SECRET, DISCORD_CLIENT_ID] }, async (req, res) => {
+    const { code, redirectUri } = req.body;
+    if (!code) {
+      res.status(400).json({ error: "Code ausente" });
+      return;
+    }
 
-  try {
-    // 1. Trocar o CODE pelo ACCESS TOKEN (Server-side para segurança)
-    const params = new URLSearchParams();
-    params.append('client_id', DISCORD_CLIENT_ID.value());
-    params.append('client_secret', DISCORD_CLIENT_SECRET.value());
-    params.append('grant_type', 'authorization_code');
-    params.append('code', code);
-    params.append('redirect_uri', redirectUri);
+    try {
+      // 1. Trocar o CODE pelo ACCESS TOKEN (Server-side para segurança)
+      const params = new URLSearchParams();
+      params.append('client_id', DISCORD_CLIENT_ID.value());
+      params.append('client_secret', DISCORD_CLIENT_SECRET.value());
+      params.append('grant_type', 'authorization_code');
+      params.append('code', code);
+      params.append('redirect_uri', redirectUri);
 
-    const tokenRes = await axios.post('https://discord.com/api/oauth2/token', params, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-    });
+      const tokenRes = await axios.post('https://discord.com/api/oauth2/token', params, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      });
 
-    const accessToken = tokenRes.data.access_token;
+      const accessToken = tokenRes.data.access_token;
 
-    // 2. Buscar o usuário no Discord
-    const userRes = await axios.get('https://discord.com/api/users/@me', {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
+      // 2. Buscar o usuário no Discord
+      const userRes = await axios.get('https://discord.com/api/users/@me', {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
 
-    const discordUser = userRes.data;
+      const discordUser = userRes.data;
 
-    // 3. Criar Custom Token no Firebase usando o Discord ID como UID
-    const customToken = await admin.auth().createCustomToken(discordUser.id, {
-      discord_id: discordUser.id,
-      username: discordUser.username,
-      avatar: discordUser.avatar
-    });
-
-    return {
-      customToken,
-      discordUser: {
-        id: discordUser.id,
+      // 3. Criar Custom Token no Firebase usando o Discord ID como UID
+      const customToken = await admin.auth().createCustomToken(discordUser.id, {
+        discord_id: discordUser.id,
         username: discordUser.username,
-        avatar: discordUser.avatar,
-        accessToken // Opcional, se precisar de outras APIs do Discord
-      }
-    };
-  } catch (error) {
-    console.error("Erro na verificação do Discord:", error.response?.data || error.message);
-    throw new Error("Falha na autenticação com Discord");
-  }
+        avatar: discordUser.avatar
+      });
+
+      res.json({
+        customToken,
+        discordUser: {
+          id: discordUser.id,
+          username: discordUser.username,
+          avatar: discordUser.avatar,
+          accessToken // Opcional, se precisar de outras APIs do Discord
+        }
+      });
+    } catch (error) {
+      console.error("Erro na verificação do Discord:", error.response?.data || error.message);
+      // Retorna detalhes do erro para facilitar o debug no cliente (sem expor secrets)
+      const errorMessage = error.response?.data?.error || "Falha na autenticação com Discord";
+      res.status(500).json({ error: errorMessage });
+    }
 });

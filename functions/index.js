@@ -19,6 +19,9 @@ setGlobalOptions({ region: "us-central1" });
 // API_KEY removida daqui — use VERCEL_API_KEY.value() dentro das funções
 const TARGET_ORIGIN = 'https://mythosdraft.com';
 
+const DISCORD_CLIENT_SECRET = defineSecret('DISCORD_CLIENT_SECRET');
+const DISCORD_CLIENT_ID = defineSecret('DISCORD_CLIENT_ID');
+
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function fetchWithRetry(url, config, retries = 3, backoff = 1000) {
@@ -174,10 +177,71 @@ exports.updateEloSnapshot = onCall({ timeoutSeconds: 540, memory: "256MiB", secr
 });
 
 // --- FUNÇÃO 2: Busca Individual ---
-exports.fetchaomprofile = onRequest({ cors: true, secrets: [VERCEL_API_KEY] }, async (req, res) => {
-  const profileId = req.query.id;
-  if (!profileId) return res.status(400).send("ID ausente");
+exports.fetchaomprofile = onCall({ secrets: [VERCEL_API_KEY] }, async (request) => {
+  if (!request.auth) {
+    throw new admin.auth.AuthError('unauthenticated', 'User must be authenticated');
+  }
+
+  const profileId = request.data.id;
+  if (!profileId) {
+    throw new admin.auth.AuthError('invalid-argument', 'ID ausente');
+  }
+
   const result = await fetchVercelData(profileId);
-  if (result && result.isError) return res.status(result.status || 500).json({ success: false, error: result.message });
-  res.json({ success: !!result, data: result });
+  if (result && result.isError) {
+    throw new admin.auth.AuthError('internal', result.message);
+  }
+  return result;
+});
+
+/**
+ * Verifica o token do Discord e retorna um custom token do Firebase.
+ * Isso garante que o UID do Firebase seja o próprio Discord ID do usuário.
+ */
+exports.verifydiscordtoken = onCall({ secrets: [DISCORD_CLIENT_SECRET, DISCORD_CLIENT_ID] }, async (request) => {
+  const { code, redirectUri } = request.data;
+  if (!code) throw new Error("Code ausente");
+
+  try {
+    // 1. Trocar o CODE pelo ACCESS TOKEN (Server-side para segurança)
+    const params = new URLSearchParams();
+    params.append('client_id', DISCORD_CLIENT_ID.value());
+    params.append('client_secret', DISCORD_CLIENT_SECRET.value());
+    params.append('grant_type', 'authorization_code');
+    params.append('code', code);
+    params.append('redirect_uri', redirectUri);
+
+    const tokenRes = await axios.post('https://discord.com/api/oauth2/token', params, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    });
+
+    const accessToken = tokenRes.data.access_token;
+
+    // 2. Buscar o usuário no Discord
+    const userRes = await axios.get('https://discord.com/api/users/@me', {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    const discordUser = userRes.data;
+
+    // 3. Criar Custom Token no Firebase usando o Discord ID como UID
+    const customToken = await admin.auth().createCustomToken(discordUser.id, {
+      discord_id: discordUser.id,
+      username: discordUser.username,
+      avatar: discordUser.avatar
+    });
+
+    return {
+      customToken,
+      discordUser: {
+        id: discordUser.id,
+        username: discordUser.username,
+        avatar: discordUser.avatar,
+        accessToken // Opcional, se precisar de outras APIs do Discord
+      }
+    };
+  } catch (error) {
+    console.error("Erro na verificação do Discord:", error.response?.data || error.message);
+    throw new Error("Falha na autenticação com Discord");
+  }
 });

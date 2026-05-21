@@ -16,7 +16,7 @@ import { LobbyConfig, Lobby } from '../../../types';
 import { lobbyService, generateId } from '../../../services/lobbyService';
 import { MAJOR_GODS } from '../../../data/gods';
 import { db } from '../../../firebase';
-import { collection, query, where, getDocs, orderBy, doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, doc, setDoc, serverTimestamp, updateDoc, onSnapshot } from 'firebase/firestore';
 import { cn } from '../../../lib/utils';
 
 // ─── Tipos locais ─────────────────────────────────────────────────────────────

@@ -231,8 +231,8 @@ describe('synthesizer.ts > synthesizeTechDebt', () => {
     mockExistsSync.mockReturnValue(false);
 
     await importSynthesizer();
-    // Aguarda um tick para a async function completar
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Aguarda até que ambas as chamadas execSync sejam concluídas
+    await vi.waitFor(() => expect(mockExecSync).toHaveBeenCalledTimes(2), { timeout: 3000 });
 
     expect(mockGenerateContent).not.toHaveBeenCalled();
     expect(mockWriteFileSync).not.toHaveBeenCalled();

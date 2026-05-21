@@ -1115,7 +1115,7 @@ export const lobbyService = {
         firestoreUpdates[`config.${key}`] = val;
       });
       await updateDoc(doc(db, 'lobbies', id), cleanData(firestoreUpdates));
-      await refreshLobbyIndex();
+      await this.refreshLobbyIndex();
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
     }
@@ -1140,7 +1140,7 @@ export const lobbyService = {
       if (updates.captain2Name) firestoreUpdates.captain2Name = updates.captain2Name;
 
       await updateDoc(doc(db, 'lobbies', id), cleanData(firestoreUpdates));
-      await refreshLobbyIndex();
+      await this.refreshLobbyIndex();
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
     }
@@ -1167,7 +1167,7 @@ export const lobbyService = {
       if (updates.streamerHudSize !== undefined) firestoreUpdates['config.streamerHudSize'] = updates.streamerHudSize;
 
       await updateDoc(doc(db, 'lobbies', id), cleanData(firestoreUpdates));
-      await refreshLobbyIndex();
+      await this.refreshLobbyIndex();
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
     }

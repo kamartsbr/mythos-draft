@@ -17,6 +17,21 @@ interface PlayerSlotProps {
   timerDuration?: number;
 }
 
+/**
+ * Render a fixed-layout player slot card that displays a pick (player identity and optional god),
+ * visual state (hover/current turn/highlight), and an optional turn progress bar.
+ *
+ * @param pick - Pick entry containing `godId`, `playerId`, `playerName`, `position`, `team`, `color`, and `isRandom`
+ * @param isCurrentTurn - Whether this slot is the active turn (affects highlighting and hover behaviour)
+ * @param t - Translation/text object with keys like `player`, `corner`, `middle`, `teamA`, `teamB`, `picking`, and `selecting`
+ * @param isHidden - When true, hides player identity and shows team label instead
+ * @param preset - Optional preset (`'MCL' | 'FORJA' | undefined`) that influences labeling and color display
+ * @param index - Optional player index used for preset-based labeling
+ * @param hoveredGodId - Optional god id currently hovered (used to preview a god during the current turn)
+ * @param timeLeft - Remaining time for the current turn (used to compute progress bar width); may be null
+ * @param timerDuration - Total timer duration used to compute progress; if null or <= 0 the bar is not shown
+ * @returns The React element representing the player slot UI
+ */
 export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, hoveredGodId, timeLeft, timerDuration }: PlayerSlotProps) {
   const god = MAJOR_GODS.find(g => g.id === pick.godId) || (isCurrentTurn && hoveredGodId ? MAJOR_GODS.find(g => g.id === hoveredGodId) : undefined);
   const isHovered = !pick.godId && god && isCurrentTurn;

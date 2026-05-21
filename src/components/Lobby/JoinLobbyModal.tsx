@@ -26,6 +26,29 @@ interface JoinLobbyModalProps {
   guestId: string | null;
 }
 
+/**
+ * Modal UI for joining a lobby as Host (A), Guest (B), or Spectator, with optional Forja preset integration.
+ *
+ * Renders role selection, nickname/team name inputs, roster editing (text inputs or Forja dropdown), invite link and confirm flow;
+ * pre-fills and validates roster/team data when a Forja preset is active, enforces captain authorization and lineup uniqueness,
+ * and calls provided callbacks to perform join, solo-join (admin), close, and share actions.
+ *
+ * @param props.lobby - Lobby data and configuration used to derive available slots, preset, captains and existing players.
+ * @param props.t - Localized text strings used by the component.
+ * @param props.lang - Current UI language code.
+ * @param props.setLang - Setter to change the UI language.
+ * @param props.nickname - Initial nickname value.
+ * @param props.setNickname - Setter to update the nickname upstream.
+ * @param props.onJoin - Called when the user confirms joining; receives (role, captainPosition, namesRecord, nickname).
+ * @param props.onSoloJoin - Optional admin-only callback invoked for solo test joins.
+ * @param props.onClose - Callback invoked to close the modal.
+ * @param props.copyUrl - Function that copies the invite URL to the clipboard.
+ * @param props.getShareableUrl - Function that returns the current shareable invite URL string.
+ * @param props.isAdmin - Whether the current user has admin privileges (enables solo-join button).
+ * @param props.guestId - Guest identifier used to detect re-join permissions for host/guest slots.
+ *
+ * @returns The React element for the join lobby modal.
+ */
 export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname, onJoin, onSoloJoin, onClose, copyUrl, getShareableUrl, isAdmin, guestId }: JoinLobbyModalProps) {
   const isFinished = lobby.status === 'finished';
   const [role, setRole] = useState<'A' | 'B' | 'SPECTATOR' | null>(isFinished ? 'SPECTATOR' : null);

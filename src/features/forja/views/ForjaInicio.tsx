@@ -71,6 +71,14 @@ function TierSeparator({ tier }: { tier: 'A' | 'B' | 'C' }) {
 const normalizeId = (s: string) =>
   s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
+/**
+ * Render an inline god icon for a given god name or god object.
+ *
+ * Accepts either a string (god name) or an object with a `god` string property; if no valid name is provided the component renders `null`.
+ *
+ * @param god - A god identifier as a string or an object like `{ god: string }`
+ * @returns A JSX element containing the god image when available, a fallback icon otherwise, or `null` if no valid god was provided
+ */
 function GodIcon({ god }: { god: any }) {
   if (!god) return null;
 
@@ -98,7 +106,20 @@ function GodIcon({ god }: { god: any }) {
   );
 }
 
-// ─── PlayerCard ───────────────────────────────────────────────────────────────
+/**
+ * Render a player card showing avatar, flags, tier, ELOs, top gods, availability, and action controls.
+ *
+ * Renders visual badges (rank, reserve, esports), avatar with Discord fallback, tier badge, ELO blocks (1v1, average, TG),
+ * top gods icons, availability chips, and an optional catchphrase. When `isAdmin` is true an admin remove button is shown;
+ * removing asks for confirmation and invokes the removal flow. Clicking the card calls `onCardClick` when the current user
+ * is the card owner or `isAdmin` is true.
+ *
+ * @param player - RankedPlayer object used to populate all displayed fields (nick, discord_id, avatars, elos, top_gods, availability, etc.)
+ * @param isAdmin - When true, enables admin-only controls (remove button) and edit permissions
+ * @param currentUserId - Discord ID of the current user used to determine ownership and edit affordances
+ * @param onCardClick - Callback invoked with `player` when the card is clicked and the user is permitted to edit
+ * @returns A JSX element representing the player's card
+ */
 
 function PlayerCard({
   player, isAdmin, currentUserId, onCardClick,
@@ -325,7 +346,13 @@ function PlayerSkeleton() {
   );
 }
 
-// ─── PlayerTable ──────────────────────────────────────────────────────────────
+/**
+ * Render a responsive, sortable table of ranked players including tier separators and availability.
+ *
+ * @param players - An array of ranked players in their original tournament order; used as the default ordering when no custom sort is active.
+ * @param isAdmin - Flag for admin context (affects available controls elsewhere); does not change table sorting rules.
+ * @returns A table element showing player rows with clickable headers to sort by effective ELO, 1v1 ELO, or TG ELO; ties are resolved by original rank and tier separators are shown only when no custom sort is applied.
+ */
 
 function PlayerTable({ players, isAdmin }: { players: RankedPlayer[]; isAdmin: boolean }) {
   const [sortConfig, setSortConfig] = useState<{ key: 'effectiveElo' | 'elo_1v1' | 'elo_tg'; direction: 'asc' | 'desc' } | null>(null);
@@ -539,7 +566,17 @@ function PlayerTable({ players, isAdmin }: { players: RankedPlayer[]; isAdmin: b
 }
 
 
-// ─── PlayerCardsGrid ──────────────────────────────────────────────────────────
+/**
+ * Renders a grid of player cards, inserting tier separator rows when the tier changes.
+ *
+ * Renders a sequence of PlayerCard components for `players`. When a player's `computedTier`
+ * differs from the previous non-reserve player's tier and is set, a TierSeparator for that tier
+ * is inserted immediately before the player.
+ *
+ * @param players - Ordered list of ranked players to render (may include reserves)
+ * @param onCardClick - Callback invoked with a player when its card is activated
+ * @returns A React element containing the assembled grid of PlayerCard and TierSeparator nodes
+ */
 
 function PlayerCardsGrid({
   players, isAdmin, currentUserId, onCardClick,

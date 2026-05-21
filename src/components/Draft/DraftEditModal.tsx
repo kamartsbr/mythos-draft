@@ -12,6 +12,17 @@ interface DraftEditModalProps {
   t: any;
 }
 
+/**
+ * Renders a modal for editing a lobby draft's configurable fields and persisting updates.
+ *
+ * The modal allows editing the lobby name, two captain names, and the streamer HUD scale. When visible, it initializes its form from `lobby`, saves updates to the lobby on confirm, and calls `onClose` after a successful save.
+ *
+ * @param isOpen - Controls whether the modal is visible
+ * @param onClose - Callback invoked to close the modal
+ * @param lobby - Source lobby data used to populate and save the form values
+ * @param t - Translation/context prop (unused)
+ * @returns The component's rendered JSX element
+ */
 export function DraftEditModal({ isOpen, onClose, lobby, t }: DraftEditModalProps) {
   const [name, setName] = useState(lobby.config.name);
   const [captain1Name, setCaptain1Name] = useState(lobby.captain1Name || '');

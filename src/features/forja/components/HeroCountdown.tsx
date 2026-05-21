@@ -5,6 +5,18 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Timer, Trophy, ExternalLink, Play } from 'lucide-react';
 import { useForjaTeams } from '../hooks/useForjaTeams';
 
+/**
+ * Render a hero countdown card for the next scheduled FORJA lobby match.
+ *
+ * Fetches the next upcoming FORJA match from Firestore (with a short sessionStorage cache),
+ * starts a live days/hours/minutes/seconds countdown to the match's scheduled date, and
+ * displays match metadata, team images, and a CTA link to the match lobby.
+ *
+ * The component renders nothing while it is loading, when there is no upcoming match,
+ * or when the countdown reaches zero.
+ *
+ * @returns The React element containing the hero countdown UI, or `null` if loading, no match, or no time left.
+ */
 export function HeroCountdown() {
   const [nextMatch, setNextMatch] = useState<any>(null);
   const [timeLeft, setTimeLeft] = useState<{ d: number, h: number, m: number, s: number } | null>(null);

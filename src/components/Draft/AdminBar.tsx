@@ -18,6 +18,26 @@ interface AdminBarProps {
   lobby: Lobby;
 }
 
+/**
+ * Render an admin control bar with privileged actions and an edit-draft modal.
+ *
+ * Renders a visually prominent admin panel containing conditional action buttons
+ * (force start, unpause, finish), edit-draft, soft reset, and hard reset. Displays
+ * nothing when `isAdmin` is false.
+ *
+ * @param isAdmin - If `true`, show the admin bar; otherwise render `null`
+ * @param onResetGame - Callback invoked after confirming a soft reset (current game only)
+ * @param onResetSeries - Callback invoked after confirming a hard reset (wipes entire lobby)
+ * @param onForceFinish - Callback to immediately finish the current drafting phase
+ * @param onForceUnpause - Callback to forcibly unpause a paused draft
+ * @param onForceStart - Callback to force-start the draft when waiting or ready
+ * @param t - Translation/props passthrough forwarded to the DraftEditModal
+ * @param status - Lobby status used to determine which force actions are shown
+ * @param phase - Lobby phase used to determine which force actions are shown
+ * @param lobby - Lobby data forwarded to the DraftEditModal for editing
+ *
+ * @returns The admin bar element when `isAdmin` is `true`, otherwise `null`.
+ */
 export function AdminBar({ 
   isAdmin, onResetGame, onResetSeries, onForceFinish, onForceUnpause, onForceStart, t, status, phase, lobby 
 }: AdminBarProps) {

@@ -74,6 +74,14 @@ interface DraftUIProps {
   setShowBugModal: (val: boolean) => void;
 }
 
+/**
+ * Render the full draft and lobby user interface, including header, admin controls, series map bar, draft board or spectator summary, replay overlay, modals, and chat.
+ *
+ * The component manages local UI state (viewed game, replay visibility, summary toggle), integrates timer and sound notifications, and wires provided lobby control callbacks into the UI.
+ *
+ * @param props - Component props containing the lobby state, user role flags, localization, callbacks for lobby actions (join, leave, admin actions, score reporting, resets, roster updates, etc.), modal controls, and UI settings.
+ * @returns The rendered React element for the draft/lobby page.
+ */
 export function DraftUI(props: DraftUIProps) {
   const { lobby, isCaptain1, isCaptain2, handleAction, handlePickerAction, t, setLobbyId, onHome, error, setError, getShareableUrl, updateRoster, clearSubs, requestReset, respondReset, showBugModal, setShowBugModal, forceStartDraft } = props;
   const { timeLeft } = useTimer(lobby, isCaptain1, isCaptain2, handleAction, handlePickerAction);

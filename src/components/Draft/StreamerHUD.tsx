@@ -13,6 +13,14 @@ interface StreamerHUDProps {
   lobbyId: string;
 }
 
+/**
+ * Render a real-time streamer HUD for a game lobby with optional manual override, OBS-friendly controls, and modular visibility.
+ *
+ * Renders the full HUD (scoreboard, picks, timer/status, map visualizer, series map cards, streamer controls and warnings) based on live lobby updates, URL OBS parameters, and local UI state.
+ *
+ * @param lobbyId - The lobby identifier to subscribe to for live updates and to drive HUD content
+ * @returns The React element tree for the streamer HUD, or a loading indicator / "Lobby not found" placeholder when appropriate
+ */
 export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
   const [lobby, setLobby] = useState<Lobby | null>(null);
   const [loading, setLoading] = useState(true);

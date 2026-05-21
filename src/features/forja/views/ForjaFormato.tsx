@@ -35,12 +35,9 @@ const SNAKE_EXAMPLE = [
 const TIER_COLOR: Record<string, string> = { A: '#facc15', 'Pool Livre': '#60a5fa' };
 
 /**
- * Render a static visual example of the 16-team snake draft layout.
+ * Renders a read-only visual example of a 16-team snake draft.
  *
- * Renders the draft order (captains, rounds B and C) and a final team composition summary
- * as a read-only illustrative visualizer used in the "Formato" tab.
- *
- * @returns The rendered visualizer for the 16-team snake draft example.
+ * @returns A JSX element representing the illustrative draft visualizer for the 16-team example.
  */
 function SnakeVisualizer() {
   return (
@@ -143,7 +140,19 @@ function SnakeVisualizer() {
   );
 }
 
-// ─── Diagrama Visual de Fluxo ──────────────────────────────────────────────────
+/**
+ * Renders a responsive visual flow diagram showing the tournament phases and their current status.
+ *
+ * The component computes the number of teams as floor(maxParticipants / 3) and displays five fixed phases
+ * (Inscrições, Snake Draft, Fase de Grupos, Playoffs, Grande Final). Each phase shows an icon, title,
+ * short description, and contextual micro-data. The active phase is highlighted based on `currentPhase`;
+ * the Playoffs micro-data adapts to `playoffFormat`.
+ *
+ * @param currentPhase - Identifier of the current tournament phase (e.g., 'pre_tournament', 'group_stage', 'playoffs', 'finished')
+ * @param playoffFormat - Playoff format identifier that affects the playoffs label (e.g., 'single_elim' for single elimination)
+ * @param maxParticipants - Maximum number of players; used to derive team and group counts (assumes 3 players per team)
+ * @returns A JSX element rendering the tournament phase flow diagram with responsive connectors and active-phase styling
+ */
 function TournamentFlowDiagram({ currentPhase, playoffFormat, maxParticipants }: { currentPhase: string; playoffFormat: string; maxParticipants: number }) {
   const numTeams = Math.floor(maxParticipants / 3);
 
@@ -278,7 +287,15 @@ function TournamentFlowDiagram({ currentPhase, playoffFormat, maxParticipants }:
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+/**
+ * Render the "Formato do Torneio" page that presents the tournament flow, a static snake-draft visualizer, and an editable content area.
+ *
+ * Reads editable content with `useForjaContent('format')` and settings with `useForjaSettings()`, deriving `currentPhase`, `playoffFormat`, and `maxParticipants` with sensible defaults.
+ *
+ * @param discordUser - Optional Discord user object used to attribute edits in the content editor (falls back to `"admin"`).
+ * @param isAdmin - If `true`, renders the in-place content editor; otherwise renders read-only content for all visitors.
+ * @returns The React element for the tournament format view, including flow diagram, snake visualizer, and either a loader, content editor, or public content sections.
+ */
 export default function ForjaFormato({ discordUser, isAdmin }: ForjaViewProps) {
   const { data, loading } = useForjaContent('format');
   const { settings } = useForjaSettings();

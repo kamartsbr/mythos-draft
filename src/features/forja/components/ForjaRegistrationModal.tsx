@@ -41,7 +41,19 @@ function useCountdown(targetMs: number) {
   return { remaining, h, m, s, expired: remaining === 0 };
 }
 
-// ─── Profile Verification Hook (CONECTADO À CLOUD FUNCTION) ───────────────────
+/**
+ * Provides state and actions to verify an AoM profile by profile ID via a cloud callable function.
+ *
+ * The hook exposes loading/error/data state while performing a profile lookup and mapping the result
+ * into the shape expected by the registration form.
+ *
+ * @returns An object containing:
+ * - `loading` — `true` while a verification is in progress.
+ * - `error` — a user-facing error message or `null`.
+ * - `data` — the verified profile data shaped for the form (`profile_id`, `avatar_url`, `elo_1v1`, `elo_tg`, `elo_efetivo`, `top_gods`, `alias`, `verified`) or `null`.
+ * - `verify(profileId)` — triggers verification for the given profile ID and updates `loading`, `error`, and `data`.
+ * - `reset()` — clears `data` and `error`.
+ */
 function useAomProfileVerify() {
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
@@ -194,7 +206,16 @@ function RulesAccordion() {
   );
 }
 
-// ─── Profile Preview Card (ATUALIZADO PARA MOSTRAR ELOS) ───────────────────────
+/**
+ * Renders a profile preview card showing avatar, ELOs, and verification status.
+ *
+ * Displays the Steam avatar when available (falls back to the provided Discord avatar or a computed Discord default),
+ * shows 1v1 and TG ELO values, and indicates whether the Steam avatar was used.
+ *
+ * @param data - Profile data object; expected optional fields: `profile_id`, `avatar_url`, `elo_1v1`, `elo_tg`
+ * @param discordAvatar - URL of the user's Discord avatar to use as a fallback when `avatar_url` is missing or fails to load
+ * @returns A JSX element containing the profile preview card
+ */
 function ProfilePreview({ data, discordAvatar }: { data: any; discordAvatar: string }) {
   const [imgErr, setImgErr] = useState(false);
   const getAvatarFallback = () => {
@@ -251,6 +272,16 @@ interface FormStepProps {
   deadlineMs: number;
 }
 
+/**
+ * Renders the registration form for the Forja tournament and manages its local state, validation, AoMStats profile verification, and submission.
+ *
+ * @param discordUser - The authenticated Discord user (used to display avatar, username and id).
+ * @param onSubmit - Callback invoked with the validated form payload when the user confirms registration.
+ * @param onClose - Callback invoked when the user cancels the form.
+ * @param submitting - When true, disables inputs and shows saving state.
+ * @param deadlineMs - Optional registration deadline timestamp (used to show a countdown warning).
+ * @returns The registration form element that handles field state, AoMStats profile lookup/preview, availability selection, consent checkboxes, pitch input, and form submission.
+ */
 function RegistrationForm({ discordUser, onSubmit, onClose, submitting, deadlineMs }: FormStepProps) {
   // Field state
   const [nick, setNick]                   = useState('');
@@ -566,7 +597,21 @@ function RegistrationForm({ discordUser, onSubmit, onClose, submitting, deadline
   );
 }
 
-// ─── Main Modal ───────────────────────────────────────────────────────────────
+/**
+ * Modal that manages the Forja de Hefesto registration flow and renders the appropriate step UI.
+ *
+ * The component coordinates eligibility checks (registration and ban), presents screens for login,
+ * closed/already-registered/banned states, the registration form, submission progress, and success.
+ * On form submit it attempts to enrich the provided AoM profile data via a cloud function before
+ * sending the final payload to the registration API and surfaces submit errors for the user.
+ *
+ * @param isOpen - Whether the modal is visible
+ * @param onClose - Callback invoked to close the modal
+ * @param discordUser - Authenticated Discord user object; when absent the modal shows the login gate
+ * @param onLoginRequest - Callback invoked to initiate the login flow
+ * @param onSuccess - Callback invoked after a successful registration submission
+ * @returns The modal element when `isOpen` is true, otherwise `null`
+ */
 export default function ForjaRegistrationModal({ isOpen, onClose, discordUser, onLoginRequest, onSuccess }: Props) {
   const [step, setStep]               = useState<Step>('check'); // INICIA EM CHECK para evitar piscar o login
   const [submitError, setSubmitError] = useState<string | null>(null);

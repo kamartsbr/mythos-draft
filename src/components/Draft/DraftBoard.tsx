@@ -48,6 +48,15 @@ interface DraftBoardProps {
   myTeam?: 'A' | 'B' | 'BOTH' | null;
 }
 
+/**
+ * Renders the full draft board UI and controls for a lobby, switching layouts and actions based on lobby state.
+ *
+ * The component displays waiting/ready/reporting/god-picker/pick-ban and finished screens, handles readiness toggles,
+ * report voting (including admin force override), reset flow, roster editing, combo-ban warnings, copy invite, and timers/conflict auto-reset.
+ *
+ * @param props - Component props containing lobby state, identity flags, action callbacks, admin controls, localization, and UI helpers.
+ * @returns The rendered draft board React element representing the current lobby phase and interactive controls.
+ */
 export function DraftBoard(props: DraftBoardProps) {
   const { lobby, isCaptain1, isCaptain2, t, handleReady, isProcessing, optimisticReady, optimisticAction, reportScore, resetVotes, copyUrl, handlePickerAction, onHome, viewGameIndex, setViewGameIndex, error, setError, isAdmin, forceReset, resetCurrentGame, forceFinish, forceUnpause, updateRoster, clearSubs, requestReset, respondReset, forceStartDraft } = props;
   

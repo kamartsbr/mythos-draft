@@ -107,13 +107,13 @@ export interface RankedPlayer extends ForjaPlayer {
 }
 
 /**
- * Recebe um array de ForjaPlayer e retorna:
- * - Ordenado do maior para o menor effectiveElo
- * - Com rank (1-indexed) e computedTier atribuídos
- * - Players is_reserve === true são mantidos estritamente na reserva e ordenados à parte
+ * Compute a ranked list of players with active participants assigned contiguous ranks and reserves kept in a separate block.
  *
- * @param players - Array de jogadores
- * @param settings - Opções do torneio (para cortes dinâmicos de tier)
+ * Active (non-reserve) players are ordered by Esports ELO (when present), then effective ELO, then TG ELO, assigned ranks starting at 1 and given a `computedTier` based on rank. Players with `is_reserve === true` are kept in a separate reserve section (including any overflow active players converted to dynamic reserves when `settings.max_participants` is exceeded), are ordered using the same comparator, receive ranks after the active block, and have `computedTier` set to `null`.
+ *
+ * @param players - Array of players to rank (banished players are excluded)
+ * @param settings - Optional tournament settings used to compute tier cutoffs (e.g., `max_participants`, `tier_a_size`, `tier_b_size`)
+ * @returns An array of `RankedPlayer` where active players appear first with assigned `rank`, `computedTier`, and `effectiveElo`, followed by reserved players with `computedTier: null`
  */
 export function computeRankedPlayers(players: ForjaPlayer[], settings?: Pick<ForjaSettings, 'max_participants' | 'tier_a_size' | 'tier_b_size'>): RankedPlayer[] {
   // Filtra banidos

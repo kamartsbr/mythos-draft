@@ -1,7 +1,12 @@
 import { Lobby, ChatMessage } from '../types';
 
 /**
- * Sanitiza texto para evitar injeção de markdown e mentions indevidas no Discord.
+ * Escape Discord markdown characters and neutralize global mentions in a string.
+ *
+ * The function also truncates the result to Discord's 2000-character limit.
+ *
+ * @param text - The input string to sanitize
+ * @returns The sanitized string with markdown characters escaped, `@everyone`/`@here` converted to prevent mentions, and truncated to 2000 characters
  */
 function sanitizeForDiscord(text: string): string {
   if (!text) return '';

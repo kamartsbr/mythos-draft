@@ -25,6 +25,15 @@ interface FetchedProfile {
   top_gods:  any[];
 }
 
+/**
+ * Modal UI for administrators to manually add a player using a Discord ID and an AoMStats profile.
+ *
+ * @param discordUserId - Discord user ID of the admin opening the modal
+ * @param discordUsername - Admin's Discord username (used as `addedBy` and fallback for `pitchQuote`)
+ * @param onClose - Callback invoked to close the modal
+ * @param onSuccess - Optional callback invoked after a player is successfully added
+ * @returns The React element for the add-player modal
+ */
 export default function ForjaAddPlayerModal({ discordUserId, discordUsername, onClose, onSuccess }: Props) {
   // Dados básicos
   const [discordId,   setDiscordId]   = useState('');

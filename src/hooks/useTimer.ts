@@ -4,18 +4,17 @@ import { MAPS, MAJOR_GODS } from '../constants';
 import { getServerTime } from '../lib/serverTime';
 
 /**
- * Manage lobby countdown state and automatically trigger draft actions when the timer elapses.
+ * Manage and expose the lobby draft countdown and trigger automatic draft actions when the timer elapses.
  *
- * Tracks remaining seconds for the lobby draft timer, keeps the counter accurate across background tabs,
- * and dispatches automatic random picks/bans/reveals (including god-picker support) when the lobby timer ends
- * or when a delayed opponent window opens.
+ * When a drafting timer is active, keeps `timeLeft` synchronized (including across background tabs) and automatically
+ * submits picks, bans, reveals, or god-picker selections according to lobby state and turn rules.
  *
- * @param lobby - The current lobby object or `null`. When `null` or when the lobby is not in an active drafting state, no timer runs.
+ * @param lobby - Current lobby or `null`; no timer runs when the lobby is absent or not in an active drafting state.
  * @param isCaptain1 - True when the caller represents captain A.
  * @param isCaptain2 - True when the caller represents captain B.
- * @param handleAction - Required callback to perform draft actions (e.g. picks, bans, reveals). Called with an action id and optional player info; the `options.isRandom` flag is set when the action was selected automatically.
- * @param handlePickerAction - Optional callback used only during the `god_picker` phase to submit a god pick; receives the same arguments as `handleAction`.
- * @returns An object containing `timeLeft` — the countdown in seconds remaining, or `null` when no active timer is available.
+ * @param handleAction - Callback to submit non-god-picker draft actions. When invoked for automatic choices, `options.isRandom` is set.
+ * @param handlePickerAction - Optional callback used only during the `god_picker` phase; called similarly to `handleAction` when an automatic god pick is made.
+ * @returns `timeLeft` — seconds remaining on the active draft timer, or `null` when no valid timer is available.
  */
 export function useTimer(
   lobby: Lobby | null, 

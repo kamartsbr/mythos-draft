@@ -11,6 +11,11 @@ if (!process.env.GEMINI_API_KEY) {
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const LOG_PATH = resolve('TECH_DEBT_LOG.md');
 
+/**
+ * Extracts the most recent merge diff, synthesizes updates to the technical-debt Markdown log using Gemini, and writes the updated log to disk.
+ *
+ * Reads the Git diff between HEAD and its parent (falls back to `git diff --root HEAD` for shallow or single-commit repos). If no changes are detected, the function returns without modifying the log. Otherwise it loads or initializes the TECH_DEBT_LOG.md contents, sends the current log and the diff to the configured Gemini model with a strict system instruction to update the Markdown, and writes the model's response back to TECH_DEBT_LOG.md. On unrecoverable Git or synthesis errors the process exits with code 1.
+ */
 async function synthesizeTechDebt() {
     console.log('🔍 Extraindo o diff do último merge...');
     // Pega as diferenças entre o commit atual (HEAD) e o anterior (HEAD~1)

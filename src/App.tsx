@@ -43,11 +43,10 @@ export default function App() {
 }
 
 /**
- * Coordinates authentication, routing, lobby and draft state, global UI, and renders the main application content.
+ * Render the main application content while coordinating authentication, route selection, lobby and draft state, and global UI.
  *
- * Handles anonymous sign-in and connection testing, initializes and reacts to lobby/draft configuration and presets,
- * manages modal and UI state (language, nickname, admin, donation widget, patch notes, invite/spectator/join flows),
- * and selects the appropriate route views (Forja hub, overlay/streamer HUD, landing page, or draft UI).
+ * Manages anonymous sign-in and connection checks, applies draft presets, controls modal and nickname/admin state,
+ * and chooses between Forja, overlay/streamer HUD, landing menu, lobby not-found/loading screens, or the Draft UI.
  *
  * @returns The rendered application content as a React element
  */

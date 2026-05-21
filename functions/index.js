@@ -25,6 +25,16 @@ const DISCORD_CLIENT_ID = defineSecret('DISCORD_CLIENT_ID');
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Perform an HTTP GET and retry on HTTP 429 (Too Many Requests) using incremental backoff.
+ *
+ * @param {string} url - The request URL.
+ * @param {object} config - Axios request configuration (headers, timeout, etc.).
+ * @param {number} [retries=3] - Maximum number of attempts before giving up.
+ * @param {number} [backoff=1000] - Base delay in milliseconds used between retries (multiplied by attempt index).
+ * @returns {Promise<import('axios').AxiosResponse>} The Axios response object from a successful request.
+ * @throws {Error} The last encountered error when a non-429 response is received or all retries are exhausted.
+ */
 async function fetchWithRetry(url, config, retries = 3, backoff = 1000) {
   for (let i = 0; i < retries; i++) {
     try {

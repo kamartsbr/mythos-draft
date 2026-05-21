@@ -231,12 +231,16 @@ function CompactStandings({
 }
 
 /**
- * Renders a prize summary card showing the total prize pool and the placement distributions.
+ * Renders a match card showing the competing teams, phase/status pill, score (or "VS" when not finished),
+ * lobby/external draft links, and optional admin controls for editing or deleting the match.
  *
- * @param total - Total prize amount (numeric value in the provided currency)
- * @param currency - Currency code; when `'BRL'` values are prefixed with `R$`, otherwise with `$`
- * @param distribution - Array of placement entries where `percent` is the percentage share (0–100) for that place
- * @returns The JSX element representing the prize card with formatted currency values
+ * @param lobby - Match/lobby object containing config (team ids/names, tournamentStage, forjaGroupId, externalLink), status, scores, and id
+ * @param isAdmin - When `true`, shows admin action buttons for manual close/edit and deletion
+ * @param onEdit - Callback invoked with the `lobby` when the admin presses the edit/close button
+ * @param onDelete - Callback invoked with the `lobby.id` when the admin confirms deletion
+ * @param teams - Array of team records used to resolve team names and captain metadata
+ * @param players - Array of player records used to resolve captain nicknames
+ * @returns The JSX element for the confrontation card populated with names, status, score, links, and admin actions
  */
 
 function MatchConfrontationCard({ lobby, isAdmin, onEdit, onDelete, teams, players }: {
@@ -370,6 +374,20 @@ function MatchConfrontationCard({ lobby, isAdmin, onEdit, onDelete, teams, playe
   );
 }
 
+/**
+ * Renders a match countdown card showing stage, name, localized scheduled date/time, dynamic countdown or live/ongoing status, streamer and lobby links, and an optional admin edit control.
+ *
+ * Displays:
+ * - Stage badge ("Fase de Grupos" or "Playoffs") and a live pill when the match status is `drafting`.
+ * - Localized weekday and time label using the pt-BR locale.
+ * - A dynamic countdown in the form "Começa em: Xd Yh Zm" while the match is in the future, switches to "AO VIVO" when `status === 'drafting'` or to "Em andamento" when the scheduled time has passed.
+ * - Streamer link (prepends `https://` when the URL does not start with `http`) and a lobby link to `/lobby/{match.id}`.
+ *
+ * @param match - The upcoming match object containing id, name, stage, status, optional scheduledDate (string|Date|Firebase Timestamp), optional scheduledTime ("HH:MM"), and optional streamerUrl.
+ * @param isAdmin - When true, shows an edit button that invokes `onEdit`.
+ * @param onEdit - Callback invoked with the match when the admin edit button is clicked.
+ * @returns The rendered match card element.
+ */
 function MatchCountdownCard({ match, isAdmin, onEdit }: { match: UpcomingMatch; isAdmin?: boolean; onEdit?: (m: UpcomingMatch) => void }) {
   const [timeLeft, setTimeLeft] = useState<string>('');
 
@@ -496,6 +514,17 @@ function MatchCountdownCard({ match, isAdmin, onEdit }: { match: UpcomingMatch; 
   );
 }
 
+/**
+ * Render a prize summary card showing the total prize pool and the per-place distribution.
+ *
+ * @param total - Total prize pool amount (number)
+ * @param currency - Currency code; `'BRL'` formats with `R$`, otherwise `$`
+ * @param distribution - Array of distribution entries where each entry specifies:
+ *   - `place`: numeric rank (1 for first place, etc.)
+ *   - `label`: display label for the place (e.g., "1º Lugar")
+ *   - `percent`: percentage of `total` awarded to this place (0–100)
+ * @returns A React element displaying the formatted total prize and the calculated amount for each distribution entry
+ */
 function PrizeCard({ total, currency, distribution }: {
   total: number;
   currency: string;

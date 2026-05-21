@@ -15,6 +15,21 @@ interface LobbyListProps {
   hasMore?: boolean;
 }
 
+/**
+ * Render a searchable list of lobbies with optional admin controls (clear, delete) and load-more support.
+ *
+ * Renders a header banner, a search input that filters the provided lobbies by id, name, or captain names, a scrollable list of lobby rows (each row invokes `onJoin` when clicked), and an informational footer. When `isAdmin` and corresponding callbacks are provided, shows admin actions for clearing history and deleting individual lobbies.
+ *
+ * @param lobbies - Array of lobby summaries to display/search; assumed to be pre-sorted/limited when no search is active
+ * @param t - Translation/label object used for UI text and confirmations
+ * @param isAdmin - When true, enables admin-only UI controls
+ * @param onJoin - Called with a lobby id when a lobby row is clicked
+ * @param onDelete - Optional. Called with a lobby id after admin confirms deletion
+ * @param onClearAll - Optional. Called when admin clears all history
+ * @param onLoadMore - Optional. Called when the "load more" button is clicked
+ * @param hasMore - Controls visibility of the "load more" button when true
+ * @returns A JSX element representing the lobby list UI
+ */
 export function LobbyList({ lobbies, t, isAdmin, onJoin, onDelete, onClearAll, onLoadMore, hasMore }: LobbyListProps) {
   const [searchTerm, setSearchTerm] = useState('');
 

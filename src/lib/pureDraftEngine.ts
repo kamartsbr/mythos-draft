@@ -2,13 +2,16 @@ import { LobbyConfig, DraftTurn, Lobby, PickEntry } from '../types';
 import { getMCLPicks, getMCLTeamOrder } from '../data/draft';
 
 /**
- * Computes pure ordered lists of map draft turns and god draft turns.
- * Nontransitional, zero side-effects.
- * 
- * @param cfg - Lobby configurations (LobbyConfig)
+ * Compute deterministic, immutable map and god draft turn sequences for the specified game and configuration.
+ *
+ * The returned orders respect custom overrides in the configuration, preset-specific rules (e.g., MCL/FORJA),
+ * series type (BO1/BO3/BO5/…), ace-pick and hidden/blank pick modes, ban/pick counts, exclusive vs non-exclusive
+ * modifiers, and blind reveal behavior.
+ *
+ * @param cfg - Lobby configuration that controls drafting rules, presets, counts, and special modes
  * @param gameNumber - Current game number in the series (1-indexed)
- * @param lastWinner - Winner of the previous game ('A' | 'B' | null)
- * @returns An object containing the immutable arrays `mapOrder` and `godOrder`
+ * @param lastWinner - Winner of the previous game (`'A'` or `'B'`) or `null` when no previous winner exists
+ * @returns An object with `mapOrder` — the ordered list of map draft turns, and `godOrder` — the ordered list of god draft turns
  */
 export function calculateNextTurnOrder(
   cfg: LobbyConfig,
@@ -220,17 +223,17 @@ export function calculateNextTurnOrder(
 }
 
 /**
- * Mutates state purely for a Pick, Ban, or Snipe draft action.
- * Returns a new Lobby object with the applied updates.
- * Throws descritive errors on failure.
- * 
- * @param lobby - Immutable current Lobby state
- * @param actionId - Selected element ID (God or Map)
- * @param actingTeam - The team triggering the action ('A' | 'B')
- * @param targetPlayerId - Optional player slot ID
- * @param playerName - Optional custom name for the slot
- * @param options - Additional option flags
- * @param currentTimeMs - Current timestamp in milliseconds (zero-side-effect time)
+ * Apply a single draft turn (pick, ban, snipe, hidden action, or reveal) and return an updated Lobby state.
+ *
+ * @param lobby - Current immutable Lobby state
+ * @param actionId - Selected item ID (god or map). For timer-expired turns a null-like value may be used to trigger timeout handling
+ * @param actingTeam - Team performing the action (`'A'` or `'B'`)
+ * @param targetPlayerId - Optional player slot id used to target a specific roster slot for a pick
+ * @param playerName - Optional player name to record for the targeted pick slot
+ * @param options - Additional flags (e.g., `{ isRandom?: true }` to mark a random pick)
+ * @param currentTimeMs - Current timestamp in milliseconds used for deterministic timing and replay entries
+ * @returns A new Lobby object reflecting the applied action and any state transitions (turn, phase, timers, logs, hidden actions)
+ * @throws If the lobby is not in drafting, if no current turn exists, if the caller is not authorized for the turn, or if the action is invalid
  */
 export function processTurnAction(
   lobby: Lobby,
@@ -461,14 +464,16 @@ export function processTurnAction(
 }
 
 /**
- * Mutates score and series state purely based on a match report action.
- * Prepares the lobby for the next game or marks it as finished.
- * 
- * @param lobby - Immutable current Lobby state
- * @param winner - Reported winner ('A' | 'B' | null)
- * @param reportingTeam - The team submitting the report ('A' | 'B')
- * @param currentTimeMs - Current timestamp in milliseconds (zero-side-effect time)
- * @param options - Additional option flags
+ * Update lobby reporting state and either advance the series to the next game or mark the match finished based on a reported winner.
+ *
+ * This records the reporting team's vote (or mirrors votes when `isAdminOverride`), starts the report timer when voting begins, and when both sides agree appends a game entry to history, increments the winning team's score, and decides whether the series is complete. If the series continues, the function advances to the next game, resets draft/report fields, recomputes the next turn order, and applies preset-specific reinitialization (e.g., MCL/FORJA pick assignment); if the series finishes, it sets the lobby to the finished state.
+ *
+ * @param lobby - Current immutable Lobby state
+ * @param winner - Reported game winner (`'A'` or `'B'`); must be non-null when submitting a vote
+ * @param reportingTeam - Team submitting this report vote (`'A'` or `'B'`)
+ * @param currentTimeMs - Current timestamp in milliseconds used for time fields and history entries
+ * @param options.isAdminOverride - When true, apply the reported winner to both teams' votes immediately
+ * @returns The updated Lobby reflecting the report action
  */
 export function processReportAction(
   lobby: Lobby,

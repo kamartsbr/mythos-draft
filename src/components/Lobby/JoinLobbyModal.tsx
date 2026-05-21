@@ -50,13 +50,17 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
     if (!forjaTeam || !rankedPlayers.length) return [];
     
     // 🔥 SOLUÇÃO TOTAL: Buscar em RANKED PLAYERS para garantir que reservas DINÂMICOS (overflow) apareçam
-    const allPlayersInTeam = rankedPlayers.filter(p => 
+    const teamMembers = rankedPlayers.filter(p => 
       (p.team_id && p.team_id === forjaTeam.id) || 
       (forjaTeam.members && forjaTeam.members.includes(p.discord_id))
     );
 
+    // Include all tournament reserves so they can be selected for substitutions
+    const campReserves = rankedPlayers.filter(p => p.is_reserve);
+
     // Garantir unicidade por discord_id
-    const unique = Array.from(new Map(allPlayersInTeam.map(p => [p.discord_id, p])).values());
+    const combined = [...teamMembers, ...campReserves];
+    const unique = Array.from(new Map(combined.map(p => [p.discord_id, p])).values());
     
     // Ordenar: Titulares primeiro (is_reserve: false)
     return unique.sort((a, b) => {

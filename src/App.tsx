@@ -10,7 +10,6 @@ import { LobbyList } from './components/Lobby/LobbyList';
 import { DraftUI } from './components/Draft/DraftUI';
 import { StreamerHUD } from './components/Draft/StreamerHUD';
 import { ConfirmModal } from './components/UI/ConfirmModal';
-import { HeroCountdown } from './features/forja/components/HeroCountdown';
 import { BugReportModal } from './components/UI/BugReportModal';
 import { PatchNotesModal } from './components/UI/PatchNotesModal';
 import { TRANSLATIONS, PLAYER_COLORS, MCL_ROUND_MAPS, getMCLPicks } from './constants';
@@ -777,8 +776,6 @@ function AppContent() {
                     <div className="h-px w-12 bg-gradient-to-l from-transparent to-amber-500/50" />
                   </div>
                 </motion.div>
-
-                <HeroCountdown />
 
                 <div className="grid lg:grid-cols-12 gap-12">
                   <div className="lg:col-span-7 space-y-8">

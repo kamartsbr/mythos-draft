@@ -16,7 +16,7 @@ import { LobbyConfig, Lobby } from '../../../types';
 import { lobbyService, generateId } from '../../../services/lobbyService';
 import { MAJOR_GODS } from '../../../data/gods';
 import { db } from '../../../firebase';
-import { collection, query, where, getDocs, onSnapshot, orderBy, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { cn } from '../../../lib/utils';
 
 // ─── Tipos locais ─────────────────────────────────────────────────────────────
@@ -725,7 +725,7 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
       turn: 0,
       turnOrder: [],
       bans: [],
-      picks: getMCLPicks(1, null, null),
+      picks: getMCLPicks(1),
       scoreA: 0,
       scoreB: 0,
       reportVoteA: null,
@@ -755,20 +755,19 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
           const castersRef = collection(db, 'casters');
           const cleanUrl = streamerUrl.trim().toLowerCase();
           const castersQuery = query(castersRef, where('streamUrl', '==', cleanUrl));
-          
-          onSnapshot(castersQuery, async (snap) => {
-            if (snap.empty) {
-              const namePart = cleanUrl.includes('twitch.tv/') 
-                ? cleanUrl.split('twitch.tv/')[1]?.split('/')[0] 
-                : 'Caster Oficial';
-              await updateDoc(doc(db, 'casters', generateId()), {
-                name: namePart.toUpperCase(),
-                streamUrl: cleanUrl,
-                status: 'approved',
-                createdAt: serverTimestamp()
-              });
-            }
-          });
+
+          const snap = await getDocs(castersQuery);
+          if (snap.empty) {
+            const namePart = cleanUrl.includes('twitch.tv/')
+              ? cleanUrl.split('twitch.tv/')[1]?.split('/')[0]
+              : 'Caster Oficial';
+            await setDoc(doc(db, 'casters', generateId()), {
+              name: namePart.toUpperCase(),
+              streamUrl: cleanUrl,
+              status: 'approved',
+              createdAt: serverTimestamp()
+            });
+          }
         } catch (e) {
           console.error('[Caster Registration Error]', e);
         }
@@ -909,27 +908,28 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
     .filter(l => l.status !== 'completed' && l.status !== 'finished')
     .sort((a, b) => {
       const getMs = (l: any) => {
-        if (!l.scheduledDate) return 0;
+        if (!l.scheduledDate) return Number.MAX_SAFE_INTEGER;
         if (typeof l.scheduledDate === 'number') return l.scheduledDate;
         if (l.scheduledDate?.toMillis) return l.scheduledDate.toMillis();
-        
+
         if (typeof l.scheduledDate === 'string') {
           const [year, month, day] = l.scheduledDate.split('-').map(Number);
           const [hour, minute] = (l.scheduledTime || '00:00').split(':').map(Number);
-          return new Date(year, month - 1, day, hour, minute).getTime();
+          const parsed = new Date(year, month - 1, day, hour, minute).getTime();
+          return isNaN(parsed) ? Number.MAX_SAFE_INTEGER : parsed;
         }
-        return 0;
+        return Number.MAX_SAFE_INTEGER;
       };
-      
+
       const aMs = getMs(a);
       const bMs = getMs(b);
-      
+
       // Secondary sort: if dates are equal, LIVE matches should come first.
       if (aMs === bMs) {
         if (a.status === 'drafting' && b.status !== 'drafting') return -1;
         if (b.status === 'drafting' && a.status !== 'drafting') return 1;
       }
-      
+
       return aMs - bMs;
     })
     .slice(0, 3);

@@ -415,7 +415,7 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
             })}
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
             {sortedPicks.map((pick, idx) => {
               const turn = lobby.turnOrder[lobby.turn];
               const isGodTurn = turn?.target === 'GOD';

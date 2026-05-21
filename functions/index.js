@@ -2,7 +2,7 @@
 // Build Final Corrigido (Preservação de Dados + Elo Efetivo) - 07/05/2026
 // 🔥 CORREÇÃO DE CUSTOS: Remoção do loop de gravação de status e uso de Batch
 
-const { onCall, onRequest } = require("firebase-functions/v2/https");
+const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2");
 
 const { defineSecret } = require("firebase-functions/params");
@@ -180,17 +180,17 @@ exports.updateEloSnapshot = onCall({ timeoutSeconds: 540, memory: "256MiB", secr
 // --- FUNÇÃO 2: Busca Individual ---
 exports.fetchaomprofile = onCall({ secrets: [VERCEL_API_KEY] }, async (request) => {
   if (!request.auth) {
-    throw new admin.auth.AuthError('unauthenticated', 'User must be authenticated');
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
   }
 
   const profileId = request.data.id;
   if (!profileId) {
-    throw new admin.auth.AuthError('invalid-argument', 'ID ausente');
+    throw new HttpsError('invalid-argument', 'ID ausente');
   }
 
   const result = await fetchVercelData(profileId);
   if (result && result.isError) {
-    throw new admin.auth.AuthError('internal', result.message);
+    throw new HttpsError('internal', result.message);
   }
   return result;
 });
@@ -242,8 +242,7 @@ exports.verifydiscordtoken = onRequest({ cors: true, secrets: [DISCORD_CLIENT_SE
         discordUser: {
           id: discordUser.id,
           username: discordUser.username,
-          avatar: discordUser.avatar,
-          accessToken // Opcional, se precisar de outras APIs do Discord
+          avatar: discordUser.avatar
         }
       });
     } catch (error) {

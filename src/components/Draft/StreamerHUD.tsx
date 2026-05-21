@@ -36,6 +36,8 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
   const manualModeRef = useRef(manualMode);
   manualModeRef.current = manualMode;
 
+  const hasSyncedHudScale = useRef(false);
+
   const isObsMode = new URLSearchParams(window.location.search).get('view') === 'obs';
 
   const { timeLeft } = useTimer(lobby, false, false, () => {}, () => {});
@@ -88,9 +90,10 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
           setDisplayGameIdx(Math.max(0, autoIdx));
         }
 
-        // Sync HUD Scale from database if present
-        if (updatedLobby?.config.streamerHudSize) {
+        // Sync HUD Scale from database only once or when it changes
+        if (updatedLobby?.config.streamerHudSize && !hasSyncedHudScale.current) {
           setHudScale(updatedLobby.config.streamerHudSize);
+          hasSyncedHudScale.current = true;
         }
       },
       (err) => {

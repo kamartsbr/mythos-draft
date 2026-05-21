@@ -739,8 +739,6 @@ export const lobbyService = {
             mapBans: data.currentGame === 1 ? [] : data.mapBans,
             readyA: false,
             readyB: false,
-            ready1: false,
-            ready2: false,
             readyA_nextGame: false,
             readyB_nextGame: false,
             readyA_report: false,
@@ -862,8 +860,6 @@ export const lobbyService = {
           mapBans: data.currentGame === 1 ? [] : data.mapBans,
           readyA: false,
           readyB: false,
-          ready1: false,
-          ready2: false,
           readyA_nextGame: false,
           readyB_nextGame: false,
           readyA_report: false,
@@ -1053,7 +1049,8 @@ export const lobbyService = {
         }
         
         updates.teamAPlayers = Array.from({ length: data.config.teamSize }, (_, idx) => ({
-          name: playerNames[idx] || ''
+          name: playerNames[idx] || '',
+          position: idx
         }));
 
       } else if (role === 'B') {
@@ -1082,7 +1079,8 @@ export const lobbyService = {
         }
 
         updates.teamBPlayers = Array.from({ length: data.config.teamSize }, (_, idx) => ({
-          name: playerNames[idx] || ''
+          name: playerNames[idx] || '',
+          position: idx
         }));
       } else {
         const spectators = Array.isArray(data.spectators) ? data.spectators : Object.values(data.spectators || {});
@@ -1193,34 +1191,34 @@ export const lobbyService = {
         if (!data.teamAPlayers || data.teamAPlayers.length === 0) {
           if (data.config.preset === 'MCL' || data.config.teamSize === 3) {
             updates.teamAPlayers = [
-              { name: (data.captain1Name || 'Host') + ' (P1)' },
-              { name: (data.captain1Name || 'Host') + ' (P2)' },
-              { name: (data.captain1Name || 'Host') + ' (P3)' }
+              { name: (data.captain1Name || 'Host') + ' (P1)', position: 0 },
+              { name: (data.captain1Name || 'Host') + ' (P2)', position: 1 },
+              { name: (data.captain1Name || 'Host') + ' (P3)', position: 2 }
             ];
           } else if (data.config.teamSize === 2) {
             updates.teamAPlayers = [
-              { name: (data.captain1Name || 'Host') + ' (C)' },
-              { name: (data.captain1Name || 'Host') + ' (M)' }
+              { name: (data.captain1Name || 'Host') + ' (C)', position: 0 },
+              { name: (data.captain1Name || 'Host') + ' (M)', position: 1 }
             ];
           } else {
-            updates.teamAPlayers = [{ name: (data.captain1Name || 'Host') }];
+            updates.teamAPlayers = [{ name: (data.captain1Name || 'Host'), position: 0 }];
           }
         }
 
         if (!data.teamBPlayers || data.teamBPlayers.length === 0) {
           if (data.config.preset === 'MCL' || data.config.teamSize === 3) {
             updates.teamBPlayers = [
-              { name: 'Bot B (P1)' },
-              { name: 'Bot B (P2)' },
-              { name: 'Bot B (P3)' }
+              { name: 'Bot B (P1)', position: 0 },
+              { name: 'Bot B (P2)', position: 1 },
+              { name: 'Bot B (P3)', position: 2 }
             ];
           } else if (data.config.teamSize === 2) {
             updates.teamBPlayers = [
-              { name: 'Bot B (C)' },
-              { name: 'Bot B (M)' }
+              { name: 'Bot B (C)', position: 0 },
+              { name: 'Bot B (M)', position: 1 }
             ];
           } else {
-            updates.teamBPlayers = [{ name: 'Bot B' }];
+            updates.teamBPlayers = [{ name: 'Bot B', position: 0 }];
           }
         }
         
@@ -1341,7 +1339,7 @@ export const lobbyService = {
 
               // INITIALIZE PICKS
               if (data.config.preset === 'MCL' || data.config.preset === 'FORJA') {
-                updates.picks = getMCLPicks(data.currentGame || 1, data.selectedMap || null, data.lastWinner || null);
+                updates.picks = getMCLPicks(data.currentGame || 1);
               }
             } else if (data.phase === 'ready_picker') {
               updates.phase = 'god_picker';
@@ -1402,27 +1400,27 @@ export const lobbyService = {
 
         const mockPlayersA = lobby.teamAPlayers || (
           (lobby.config.preset === 'MCL' || lobby.config.teamSize === 3) ? [
-            { name: (lobby.captain1Name || 'Host') + ' (P1)' },
-            { name: (lobby.captain1Name || 'Host') + ' (P2)' },
-            { name: (lobby.captain1Name || 'Host') + ' (P3)' }
+            { name: (lobby.captain1Name || 'Host') + ' (P1)', position: 0 },
+            { name: (lobby.captain1Name || 'Host') + ' (P2)', position: 1 },
+            { name: (lobby.captain1Name || 'Host') + ' (P3)', position: 2 }
           ] : (lobby.config.teamSize === 2 ? [
-            { name: (lobby.captain1Name || 'Host') + ' (C)' },
-            { name: (lobby.captain1Name || 'Host') + ' (M)' }
-          ] : [{ name: (lobby.captain1Name || 'Host') }])
+            { name: (lobby.captain1Name || 'Host') + ' (C)', position: 0 },
+            { name: (lobby.captain1Name || 'Host') + ' (M)', position: 1 }
+          ] : [{ name: (lobby.captain1Name || 'Host'), position: 0 }])
         );
 
         const mockPlayersB = lobby.teamBPlayers || (
           (lobby.config.preset === 'MCL' || lobby.config.teamSize === 3) ? [
-            { name: 'Bot B (P1)' },
-            { name: 'Bot B (P2)' },
-            { name: 'Bot B (P3)' }
+            { name: 'Bot B (P1)', position: 0 },
+            { name: 'Bot B (P2)', position: 1 },
+            { name: 'Bot B (P3)', position: 2 }
           ] : (lobby.config.teamSize === 2 ? [
-            { name: 'Bot B (C)' },
-            { name: 'Bot B (M)' }
-          ] : [{ name: 'Bot B' }])
+            { name: 'Bot B (C)', position: 0 },
+            { name: 'Bot B (M)', position: 1 }
+          ] : [{ name: 'Bot B', position: 0 }])
         );
 
-        const updatedPicks = getMCLPicks(lobby.currentGame || 1, lobby.selectedMap || null, lobby.lastWinner || null);
+        const updatedPicks = getMCLPicks(lobby.currentGame || 1);
 
         setLocalLobby(id, { 
             ...lobby, 
@@ -1471,7 +1469,7 @@ export const lobbyService = {
 
         // 🔥 INITIALIZE PICKS WITH PLAYER NAMES (Anti-Generic Name Bug)
         if (data.config.preset === 'MCL' || data.config.preset === 'FORJA') {
-          const initialPicks = getMCLPicks(data.currentGame || 1, data.selectedMap || null, data.lastWinner || null);
+          const initialPicks = getMCLPicks(data.currentGame || 1);
           const teamAOrder = getMCLTeamOrder('A');
           const teamBOrder = getMCLTeamOrder('B');
 
@@ -1527,26 +1525,26 @@ export const lobbyService = {
 
         const mockPlayersA = lobby.teamAPlayers || (
           (lobby.config.preset === 'MCL' || lobby.config.teamSize === 3) ? [
-            { name: `${nickname} (A1)` },
-            { name: `${nickname} (A2)` },
-            { name: `${nickname} (A3)` }
+            { name: `${nickname} (A1)`, position: 0 },
+            { name: `${nickname} (A2)`, position: 1 },
+            { name: `${nickname} (A3)`, position: 2 }
           ] : (lobby.config.teamSize === 2 ? [
-            { name: `${nickname} (AC)` },
-            { name: `${nickname} (AM)` }
-          ] : [{ name: nickname }])
+            { name: `${nickname} (AC)`, position: 0 },
+            { name: `${nickname} (AM)`, position: 1 }
+          ] : [{ name: nickname, position: 0 }])
         );
         const mockPlayersB = lobby.teamBPlayers || (
           (lobby.config.preset === 'MCL' || lobby.config.teamSize === 3) ? [
-            { name: `${nickname} (B1)` },
-            { name: `${nickname} (B2)` },
-            { name: `${nickname} (B3)` }
+            { name: `${nickname} (B1)`, position: 0 },
+            { name: `${nickname} (B2)`, position: 1 },
+            { name: `${nickname} (B3)`, position: 2 }
           ] : (lobby.config.teamSize === 2 ? [
-            { name: `${nickname} (BC)` },
-            { name: `${nickname} (BM)` }
-          ] : [{ name: `${nickname} (B)` }])
+            { name: `${nickname} (BC)`, position: 0 },
+            { name: `${nickname} (BM)`, position: 1 }
+          ] : [{ name: `${nickname} (B)`, position: 0 }])
         );
 
-        const updatedPicks = getMCLPicks(lobby.currentGame || 1, lobby.selectedMap || null, lobby.lastWinner || null);
+        const updatedPicks = getMCLPicks(lobby.currentGame || 1);
 
         setLocalLobby(lobbyId, { 
           ...lobby, 

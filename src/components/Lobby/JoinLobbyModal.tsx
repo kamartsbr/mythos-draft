@@ -100,9 +100,9 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
 
   const teamSize = lobby.config.teamSize;
   const isMCL = lobby.config.preset?.includes('MCL');
-  
-  // FIXED: activeSlots are now simple roster indices (0, 1, 2)
-  const activeSlots = Array.from({ length: teamSize }, (_, i) => i);
+
+  // FIXED: activeSlots are now simple roster indices (0, 1, 2) - memoized to prevent re-creation
+  const activeSlots = useMemo(() => Array.from({ length: teamSize }, (_, i) => i), [teamSize]);
 
   // Initialize roster when role changes
   useEffect(() => {

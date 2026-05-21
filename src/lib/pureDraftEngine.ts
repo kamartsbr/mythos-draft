@@ -353,7 +353,7 @@ export function processTurnAction(
         nextLobby.selectedMap = id;
 
         if (nextLobby.config.preset === 'MCL' || nextLobby.config.preset === 'FORJA') {
-          nextLobby.picks = getMCLPicks(nextLobby.currentGame, id, nextLobby.lastWinner || null);
+          nextLobby.picks = getMCLPicks(nextLobby.currentGame);
         }
       } else {
         // God PICK
@@ -399,7 +399,7 @@ export function processTurnAction(
       target: turn.target,
       id,
       timestamp: new Date(currentTimeMs).toISOString(),
-      playerId: tPlayerId || null,
+      playerId: tPlayerId ?? null,
       isRandom: options?.isRandom || false,
     });
 
@@ -588,7 +588,7 @@ export function processReportAction(
         if (nextLobby.config.preset === 'MCL' || nextLobby.config.preset === 'FORJA') {
           const nextGameMap = (nextLobby.seriesMaps || [])[nextLobby.currentGame - 1];
           if (nextGameMap && nextGameMap !== '') {
-            const newMCLPicks = getMCLPicks(nextLobby.currentGame, nextGameMap, finalWinner);
+            const newMCLPicks = getMCLPicks(nextLobby.currentGame);
             const teamAPlayers = nextLobby.teamAPlayers || [];
             const teamBPlayers = nextLobby.teamBPlayers || [];
             const teamAOrder = getMCLTeamOrder('A', nextGameMap, nextLobby.currentGame % 2 === 0);
@@ -614,6 +614,7 @@ export function processReportAction(
       }
     } else {
       nextLobby.voteConflict = true;
+      nextLobby.voteConflictCount = (nextLobby.voteConflictCount || 0) + 1;
     }
   }
 

@@ -486,22 +486,26 @@ A inicialização dos elencos (`teamAPlayers` e `teamBPlayers`) difere brutalmen
 ## 19. ARQUITETURA DO MOTOR DE DRAFT E FLUXO DE TORNEIO
 
 ### Cenário 1: Separação Estrita de Domínio (Decoupling)
-1. **O Motor Matemático (Timeline) vs O Motor Visual (CSS):** Nunca embaralhe arrays de jogadores no banco de dados para forçar uma posição visual na tela. 
+
+1. **O Motor Matemático (Timeline) vs O Motor Visual (CSS):** Nunca embaralhe arrays de jogadores no banco de dados para forçar uma posição visual na tela.
 2. A injeção da `lineup` nos slots de draft DEVE ser sempre linear baseada na ordem cronológica de turnos.
 3. Se o "Último Pick" (P3) precisa aparecer no meio da tela (Pocket), isso deve ser resolvido **exclusivamente via CSS** (ex: usando `order-2` no Flexbox), mantendo os dados da array intactos.
 
 ### Cenário 2: A Regra das "Cadeiras" (Imutabilidade de Slots)
+
 1. O sistema utiliza um conceito de "Pool Dinâmico". O Roster lateral é apenas informativo e estático.
 2. Os Turnos de Pick (`picks`) são "cadeiras vazias" com IDs cronológicos fixos (ex: `playerId: 4`).
 3. Ao registrar a escolha de um deus, o estado DEVE atualizar apenas as propriedades dinâmicas (`playerName`, `godId`).
 4. **Mutação Proibida:** É estritamente proibido sobrescrever ou clonar o `playerId` (Slot ID) de um turno. A "cadeira 4" sempre será a cadeira 4, independente de qual jogador sente nela.
 
 ### Cenário 3: Adaptação Dinâmica de Timeline (Snake Draft G1 vs G2)
+
 1. A ordem em que os slots são chamados muda conforme o jogo (`gameNumber`), mas o ID fixo do slot no mapa não muda.
 2. **G1 (Host Starts):** O motor consome a timeline `[1, 2, 3, 4, 5, 6]`. (Host no slot 1 escolhe primeiro).
 3. **G2 (Guest Starts):** O motor consome a timeline `[3, 4, 1, 2, 6, 5]`. (Guest no slot 3 escolhe primeiro).
 4. O CSS do Mapa (`MapVisualizer`) inverte visualmente as coordenadas (Laranja/Vermelho e Azul/Rosa) mantendo a integridade matemática da engine.
 
 ### Cenário 4: Fluxo Seguro de Reset e Preservação de Mapa (Game 3)
+
 1. **Bloqueio de Auto-Start:** Qualquer ação de "Reset Current Game" DEVE obrigatoriamente forçar `ready1: false` e `ready2: false`, retornando o lobby para o status de espera. O draft nunca inicia sem a confirmação de ambos.
 2. **Imutabilidade do G3 (Random Map):** No preset FORJA, o Game 3 utiliza um mapa aleatório. Em caso de Reset, a função limpa os Picks e os Bans, mas o `mapId` original sorteado é salvo e **mantido**, evitando exploits de re-sorteio de mapa.

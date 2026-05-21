@@ -470,15 +470,16 @@ export const draftService = {
 
         // Update names from picks if they changed
         newPicks.filter(p => p.team === team && p.playerName).forEach(p => {
-          // If the player name in the pick isn't in the roster yet, we might have a problem
-          // but for now let's just ensure the roster has all names from confirmed picks
-          if (!updatedRosterNames.includes(p.playerName!.trim())) {
-            // This is a simple pool, so we just ensure the name exists
-            // In a real scenario, we might want more complex logic for subs
+          const trimmedName = p.playerName!.trim();
+          if (trimmedName && !updatedRosterNames.includes(trimmedName)) {
+            // Add new names from confirmed picks
+            updatedRosterNames.push(trimmedName);
           }
         });
 
-        (updates as any)[teamKey] = updatedRosterNames.map(name => ({ name }));
+        // Remove duplicates
+        const uniqueNames = Array.from(new Set(updatedRosterNames));
+        (updates as any)[teamKey] = uniqueNames.map((name, idx) => ({ name, position: idx }));
 
         transaction.update(lobbyRef, cleanData(updates));
         return { success: true };

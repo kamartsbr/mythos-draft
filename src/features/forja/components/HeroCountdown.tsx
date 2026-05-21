@@ -21,6 +21,10 @@ export function HeroCountdown() {
       if (cached) {
         const { match, timestamp } = JSON.parse(cached);
         if (Date.now() - timestamp < CACHE_TTL) {
+          // Restore Timestamp objects from cached plain objects
+          if (match?.config?.scheduledDate && typeof match.config.scheduledDate === 'object' && 'seconds' in match.config.scheduledDate) {
+            match.config.scheduledDate = new Timestamp(match.config.scheduledDate.seconds, match.config.scheduledDate.nanoseconds || 0);
+          }
           setNextMatch(match);
           setLoading(false);
           return;
@@ -84,7 +88,7 @@ export function HeroCountdown() {
         d: Math.floor(diff / (1000 * 60 * 60 * 24)),
         h: Math.floor((diff / (1000 * 60 * 60)) % 24),
         m: Math.floor((diff / (1000 * 60)) % 60),
-        s: Math.floor((diff / 100) % 60) // using 100ms for smoother feel if needed, but standard is 1000
+        s: Math.floor((diff / 1000) % 60)
       });
     }, 1000);
 

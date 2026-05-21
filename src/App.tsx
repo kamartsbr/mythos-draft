@@ -285,7 +285,7 @@ function AppContent() {
     const initialSeriesMaps: string[] = [];
 
     if (config.preset === 'MCL') {
-      const mclPicks = getMCLPicks(1, initialSeriesMaps[0] || null, null);
+      const mclPicks = getMCLPicks(1);
       picks.push(...mclPicks);
     } else {
       let picksPerTeam = teamSize;

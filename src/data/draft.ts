@@ -40,9 +40,9 @@ export const getDraftTimeline = (gameNumber: number): number[] => {
   return gameNumber % 2 !== 0 ? [1, 2, 3, 4, 5, 6] : [3, 4, 1, 2, 6, 5];
 };
 
-export const getMCLPicks = (gameNumber: number, mapId: string | null, lastWinner: 'A' | 'B' | null): PickEntry[] => {
+export const getMCLPicks = (gameNumber: number): PickEntry[] => {
   const timeline = getDraftTimeline(gameNumber);
-  
+
   return timeline.map(id => {
     const team = PLAYER_TEAM_MAP[id as keyof typeof PLAYER_TEAM_MAP] as 'A' | 'B';
     return {
@@ -50,7 +50,7 @@ export const getMCLPicks = (gameNumber: number, mapId: string | null, lastWinner
       godId: null,
       team,
       color: PLAYER_COLORS[id as keyof typeof PLAYER_COLORS],
-      position: PLAYER_POSITION_MAP[id as keyof typeof PLAYER_POSITION_MAP] as any,
+      position: PLAYER_POSITION_MAP[id as keyof typeof PLAYER_POSITION_MAP] as 'corner' | 'middle',
       playerName: ''
     };
   });

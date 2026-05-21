@@ -304,7 +304,7 @@ export default function ForjaHub() {
       </nav>
 
       {/* ── Tab Content ───────────────────────── */}
-      <main className={`forja-tab-content ${activeTab === 'times' || activeTab === 'inscritos' || activeTab === 'inicio' ? '!max-w-none w-[95vw] mx-auto' : ''}`} style={activeTab === 'times' || activeTab === 'inscritos' || activeTab === 'inicio' ? { maxWidth: '95vw', width: '95vw' } : undefined}>
+      <main className={`forja-tab-content ${activeTab === 'times' || activeTab === 'inscritos' || activeTab === 'inicio' ? '!max-w-none w-[95vw] mx-auto' : ''}`}>
         <Suspense fallback={<TabFallback />}>
           {activeTab === 'inicio'      && <ForjaHome {...sharedProps} onRegisterClick={() => setShowRegModal(true)} onTabChange={handleTabChange} />}
           {activeTab === 'inscritos'    && <ForjaInicio {...sharedProps} onRegisterClick={() => setShowRegModal(true)} />}

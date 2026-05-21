@@ -3,13 +3,32 @@ import { execSync } from 'child_process';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 
+if (!process.env.GEMINI_API_KEY) {
+    console.error('❌ GEMINI_API_KEY is not set. Please set it in your environment.');
+    process.exit(1);
+}
+
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const LOG_PATH = resolve('TECH_DEBT_LOG.md');
 
 async function synthesizeTechDebt() {
     console.log('🔍 Extraindo o diff do último merge...');
     // Pega as diferenças entre o commit atual (HEAD) e o anterior (HEAD~1)
-    const diff = execSync('git diff HEAD~1 HEAD').toString();
+    let diff = '';
+    try {
+        // Check if parent commit exists
+        execSync('git rev-parse --verify HEAD~1', { stdio: 'ignore' });
+        diff = execSync('git diff HEAD~1 HEAD').toString();
+    } catch (error) {
+        // Fallback for shallow clones or single-commit repos
+        console.log('⚠️  No parent commit found (shallow clone or first commit). Using --root diff...');
+        try {
+            diff = execSync('git diff --root HEAD').toString();
+        } catch (rootError) {
+            console.error('❌ Failed to extract diff:', rootError);
+            process.exit(1);
+        }
+    }
 
     if (!diff) {
         console.log('Nenhuma mudança detectada no código.');

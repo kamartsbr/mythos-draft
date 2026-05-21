@@ -208,7 +208,11 @@ export function useLobby(initialNickname: string) {
 
   // Lobby subscription (only when lobbyId exists)
   useEffect(() => {
-    if (!lobbyId || !guestId) return;
+    if (!lobbyId) return;
+    if (!guestId) {
+      setLobbyInitialLoading(false);
+      return;
+    }
 
     setPublicLobbies([]);
 

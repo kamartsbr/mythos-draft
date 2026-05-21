@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Save, User, Shield, Monitor, Layout } from 'lucide-react';
 import { Lobby } from '../../types';
@@ -18,6 +18,16 @@ export function DraftEditModal({ isOpen, onClose, lobby, t }: DraftEditModalProp
   const [captain2Name, setCaptain2Name] = useState(lobby.captain2Name || '');
   const [hudScale, setHudScale] = useState(lobby.config.streamerHudSize || 0.75);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Reset form state when modal opens or lobby changes
+  useEffect(() => {
+    if (isOpen) {
+      setName(lobby.config.name);
+      setCaptain1Name(lobby.captain1Name || '');
+      setCaptain2Name(lobby.captain2Name || '');
+      setHudScale(lobby.config.streamerHudSize || 0.75);
+    }
+  }, [isOpen, lobby.config.name, lobby.captain1Name, lobby.captain2Name, lobby.config.streamerHudSize]);
 
   const handleSave = async () => {
     setIsSaving(true);

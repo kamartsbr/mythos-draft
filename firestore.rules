@@ -85,7 +85,13 @@ service cloud.firestore {
                     && !('esports_elo_value' in request.resource.data)
                     && !('top_gods_admin' in request.resource.data)
                     && !('seed' in request.resource.data)
-                    && !('is_reserve' in request.resource.data);
+                    && !('is_reserve' in request.resource.data)
+                    && !('status' in request.resource.data)
+                    && !('team_id' in request.resource.data)
+                    && !('created_at' in request.resource.data)
+                    && !('updated_at' in request.resource.data)
+                    && !('banned' in request.resource.data)
+                    && !('admin_flags' in request.resource.data);
 
       // Update:
       allow update: if isSignedIn()

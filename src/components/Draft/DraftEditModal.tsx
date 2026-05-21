@@ -29,6 +29,7 @@ export function DraftEditModal({ isOpen, onClose, lobby, t }: DraftEditModalProp
   const [captain2Name, setCaptain2Name] = useState(lobby.captain2Name || '');
   const [hudScale, setHudScale] = useState(lobby.config.streamerHudSize || 0.75);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Reset form state when modal opens or lobby changes
   useEffect(() => {
@@ -37,11 +38,13 @@ export function DraftEditModal({ isOpen, onClose, lobby, t }: DraftEditModalProp
       setCaptain1Name(lobby.captain1Name || '');
       setCaptain2Name(lobby.captain2Name || '');
       setHudScale(lobby.config.streamerHudSize || 0.75);
+      setSaveError(null);
     }
   }, [isOpen, lobby.config.name, lobby.captain1Name, lobby.captain2Name, lobby.config.streamerHudSize]);
 
   const handleSave = async () => {
     setIsSaving(true);
+    setSaveError(null);
     try {
       await lobbyService.updateLobbyAtomically(lobby.id, {
         name,
@@ -52,6 +55,8 @@ export function DraftEditModal({ isOpen, onClose, lobby, t }: DraftEditModalProp
       onClose();
     } catch (err) {
       console.error("Failed to save lobby edits:", err);
+      setSaveError((err as any)?.message || String(err));
+      setIsSaving(false);
     } finally {
       setIsSaving(false);
     }
@@ -171,27 +176,34 @@ export function DraftEditModal({ isOpen, onClose, lobby, t }: DraftEditModalProp
             </div>
 
             {/* Footer */}
-            <div className="px-8 py-6 bg-slate-950/50 border-t border-slate-800 flex gap-3">
-              <button
-                onClick={onClose}
-                className="flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white hover:bg-slate-800 transition-all border border-transparent"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={isSaving}
-                className="flex-1 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(245,158,11,0.2)]"
-              >
-                {isSaving ? (
-                  <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <>
-                    <Save className="w-4 h-4" />
-                    Salvar Alterações
-                  </>
-                )}
-              </button>
+            <div className="px-8 py-6 bg-slate-950/50 border-t border-slate-800 flex flex-col gap-3">
+              {saveError && (
+                <div className="px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">
+                  Erro ao salvar: {saveError}
+                </div>
+              )}
+              <div className="flex gap-3">
+                <button
+                  onClick={onClose}
+                  className="flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white hover:bg-slate-800 transition-all border border-transparent"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="flex-1 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(245,158,11,0.2)]"
+                >
+                  {isSaving ? (
+                    <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Salvar Alterações
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </motion.div>
         </div>

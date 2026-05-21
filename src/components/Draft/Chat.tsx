@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MessageSquare, Send, User, Shield, MessageCircleOff, ChevronRight, ChevronLeft } from 'lucide-react';
 import { lobbyService, getMillis } from '../../services/lobbyService';
-import { ChatMessage, DraftTimestamp } from '../../types';
+import { ChatMessage, DraftTimestampRead } from '../../types';
 import { cn } from '../../lib/utils';
 
 interface ChatProps {

@@ -21,7 +21,7 @@ import {
   QueryDocumentSnapshot
 } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
-import { Lobby, LobbyConfig, PickEntry, ChatMessage, LobbySummary, LobbyIndex } from '../types';
+import { Lobby, LobbyConfig, PickEntry, ChatMessage, LobbySummary, LobbyIndex, DraftTimestampRead } from '../types';
 import { PLAYER_COLORS, MCL_ROUND_MAPS } from '../constants';
 import { getMCLPicks, getMCLTeamOrder } from '../data/draft';
 
@@ -56,7 +56,7 @@ export function lobbyDocToSummary(id: string, normalized: Lobby): LobbySummary {
     status: normalized.status || 'waiting',
     phase: normalized.phase || 'waiting',
     preset: normalized.config?.preset ?? null,
-    lastActivityAt: normalized.lastActivityAt ?? null,
+    lastActivityAt: (normalized.lastActivityAt as DraftTimestampRead | null | undefined) ?? null,
     createdAt: normalized.createdAt ?? null
   };
 }
@@ -1345,17 +1345,19 @@ export const lobbyService = {
               const timerStartNow = now();
               updates.timerStart = timerStartNow;
 
-              // 🔥 Timer Absoluto - Derive turnEndsAt from the same timerStart source
+              // 🔥 Timer Absoluto - Use consistent clock source
               const duration = data.config.timerDuration || 60;
-              const timerStartMs = typeof timerStartNow === 'number'
-                ? (timerStartNow < 10000000000 ? timerStartNow * 1000 : timerStartNow)
-                : Date.now();
-              const turnEndsAtMs = timerStartMs + (duration * 1000);
 
               if (IS_DEV) {
-                updates.turnEndsAt = turnEndsAtMs as any;
+                // In dev mode, timerStartNow is a number (Date.now())
+                const timerStartMs = typeof timerStartNow === 'number'
+                  ? (timerStartNow < 10000000000 ? timerStartNow * 1000 : timerStartNow)
+                  : Date.now();
+                updates.turnEndsAt = timerStartMs + (duration * 1000);
               } else {
-                updates.turnEndsAt = Timestamp.fromMillis(turnEndsAtMs);
+                // In production, timerStartNow is serverTimestamp sentinel
+                // Use the same sentinel + offset instead of mixing with Date.now()
+                updates.turnEndsAt = serverTimestamp();
               }
               
               let finalTurnOrder = data.turnOrder;

@@ -1,6 +1,7 @@
 import { Timestamp, FieldValue } from 'firebase/firestore';
 
-export type DraftTimestamp = Timestamp | FieldValue | Date | number | string | null;
+export type DraftTimestampWrite = Timestamp | FieldValue | Date | number | string | null;
+export type DraftTimestampRead = Timestamp | Date | number | string;
 
 export type God = {
   id: string;
@@ -88,7 +89,7 @@ export type LobbyConfig = {
   captainA_discordId?: string;
   captainB_discordId?: string;
   /** Agendamento */
-  scheduledDate?: DraftTimestamp;
+  scheduledDate?: DraftTimestampWrite;
   scheduledTime?: string;
   streamerUrl?: string;
   /** Link para draft externo (caso não tenha sido feito no Mythos) */
@@ -146,7 +147,7 @@ export type Substitution = {
 export type ResetRequest = {
   requestedBy: 'A' | 'B';
   status: 'pending' | 'accepted' | 'declined';
-  timestamp: DraftTimestamp;
+  timestamp: DraftTimestampWrite;
 };
 
 export type LobbySummary = {
@@ -156,20 +157,20 @@ export type LobbySummary = {
   name: string;
   teamSize: number;
   /** Present when summary is built from Firestore; both required for public list visibility */
-  captain1Name: string;
-  captain2Name: string;
+  captain1Name?: string;
+  captain2Name?: string;
   status: LobbyStatus;
   phase: DraftPhase;
-  preset?: string;
+  preset?: string | null;
   mclRound?: number;
   tournamentStage?: 'GROUP' | 'PLAYOFFS';
-  lastActivityAt: DraftTimestamp;
-  createdAt: DraftTimestamp;
+  lastActivityAt: DraftTimestampRead | null;
+  createdAt: DraftTimestampRead | null;
 };
 
 export type LobbyIndex = {
   activeLobbies: LobbySummary[];
-  lastUpdate: DraftTimestamp;
+  lastUpdate: DraftTimestampRead;
 };
 
 export type Lobby = {
@@ -216,26 +217,26 @@ export type Lobby = {
   rosterB?: Record<number, PickEntry>;
   lastWinner: 'A' | 'B' | null;
   mapPool?: string[];
-  timerStart: DraftTimestamp;
-  createdAt: DraftTimestamp;
+  timerStart: DraftTimestampWrite;
+  createdAt: DraftTimestampRead;
   turnOrder: DraftTurn[];
   hiddenActions: { turnIndex: number; actionId: string; targetPlayerId?: number; playerName?: string }[];
   spectators: { id: string; name: string }[];
   adminId?: string;
   isPaused?: boolean;
-  timerPausedAt?: DraftTimestamp;
+  timerPausedAt?: DraftTimestampWrite;
   captain1Active?: boolean;
   captain2Active?: boolean;
   isPermanent?: boolean;
   discordWebhookUrl?: string | null;
   discordMessageId?: string | null;
-  lastActivityAt?: DraftTimestamp;
+  lastActivityAt?: DraftTimestampWrite;
   pausedTimeLeft?: number;
-  reportStartAt?: DraftTimestamp;
+  reportStartAt?: DraftTimestampWrite;
   isHidden?: boolean;
   hoveredGodIdA?: string | null;
   hoveredGodIdB?: string | null;
-  turnEndsAt?: DraftTimestamp;
+  turnEndsAt?: DraftTimestampWrite;
 };
 
 export type ChatMessage = {
@@ -245,5 +246,5 @@ export type ChatMessage = {
   senderName: string;
   senderRole: 'Host' | 'Guest' | 'ADMIN' | 'Spectator';
   text: string;
-  timestamp: DraftTimestamp;
+  timestamp: DraftTimestampRead;
 };

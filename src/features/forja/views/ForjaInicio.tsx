@@ -650,10 +650,10 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
     ? 'Inscrições encerradas pelo organizador.'
     : deadlinePassed && !isReservesOpen
       ? 'O prazo de inscrições encerrou.'
-      : (limitReached || !isRegistrationOpen || deadlinePassed) && isReservesOpen
-        ? `Inscrições principais encerradas. Novos jogadores entram como reserva.`
-        : limitReached
-          ? `Limite de ${maxParticipants} participantes atingido. Novos jogadores entram como reserva.`
+      : limitReached && !isReservesOpen
+        ? `Limite de ${maxParticipants} participantes atingido.`
+        : (limitReached || !isRegistrationOpen || deadlinePassed) && isReservesOpen
+          ? `Inscrições principais encerradas. Novos jogadores entram como reserva.`
           : null;
 
   const isRegistered = useMemo(() =>

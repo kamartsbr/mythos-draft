@@ -210,9 +210,34 @@ exports.fetchaomprofile = onCall({ secrets: [VERCEL_API_KEY] }, async (request) 
  * Isso garante que o UID do Firebase seja o próprio Discord ID do usuário.
  */
 exports.verifydiscordtoken = onRequest({ cors: true, secrets: [DISCORD_CLIENT_SECRET, DISCORD_CLIENT_ID] }, async (req, res) => {
+    // Validate request structure and method
+    if (!req || typeof req.body !== 'object' || req.body === null) {
+      res.status(400).json({ error: "Invalid request structure" });
+      return;
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: "Method not allowed" });
+      return;
+    }
+
     const { code, redirectUri } = req.body;
-    if (!code) {
+
+    // Validate code is a non-empty string
+    if (!code || typeof code !== 'string' || code.trim() === '') {
       res.status(400).json({ error: "Code ausente" });
+      return;
+    }
+
+    // Validate redirectUri against allowlist
+    const allowedRedirectUris = [
+      'https://mythosdraft.com/auth/discord/callback',
+      'http://localhost:5173/auth/discord/callback',
+      'http://localhost:4173/auth/discord/callback'
+    ];
+
+    if (!redirectUri || typeof redirectUri !== 'string' || !allowedRedirectUris.includes(redirectUri)) {
+      res.status(400).json({ error: "Invalid redirect URI" });
       return;
     }
 

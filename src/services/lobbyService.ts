@@ -1115,6 +1115,7 @@ export const lobbyService = {
         firestoreUpdates[`config.${key}`] = val;
       });
       await updateDoc(doc(db, 'lobbies', id), cleanData(firestoreUpdates));
+      await refreshLobbyIndex();
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
     }
@@ -1137,8 +1138,36 @@ export const lobbyService = {
       if (updates.name) firestoreUpdates['config.name'] = updates.name;
       if (updates.captain1Name) firestoreUpdates.captain1Name = updates.captain1Name;
       if (updates.captain2Name) firestoreUpdates.captain2Name = updates.captain2Name;
-      
+
       await updateDoc(doc(db, 'lobbies', id), cleanData(firestoreUpdates));
+      await refreshLobbyIndex();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
+    }
+  },
+
+  async updateLobbyAtomically(id: string, updates: { name?: string, captain1Name?: string, captain2Name?: string, streamerHudSize?: number }): Promise<void> {
+    if (IS_DEV) {
+      const lobby = getLocalLobby(id);
+      if (lobby) {
+        const newLobby = { ...lobby };
+        if (updates.name) newLobby.config.name = updates.name;
+        if (updates.captain1Name) newLobby.captain1Name = updates.captain1Name;
+        if (updates.captain2Name) newLobby.captain2Name = updates.captain2Name;
+        if (updates.streamerHudSize !== undefined) newLobby.config.streamerHudSize = updates.streamerHudSize;
+        setLocalLobby(id, newLobby as Lobby);
+      }
+      return;
+    }
+    try {
+      const firestoreUpdates: any = {};
+      if (updates.name) firestoreUpdates['config.name'] = updates.name;
+      if (updates.captain1Name) firestoreUpdates.captain1Name = updates.captain1Name;
+      if (updates.captain2Name) firestoreUpdates.captain2Name = updates.captain2Name;
+      if (updates.streamerHudSize !== undefined) firestoreUpdates['config.streamerHudSize'] = updates.streamerHudSize;
+
+      await updateDoc(doc(db, 'lobbies', id), cleanData(firestoreUpdates));
+      await refreshLobbyIndex();
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
     }
@@ -1313,14 +1342,20 @@ export const lobbyService = {
             if (data.status === 'waiting' || (data.status === 'drafting' && (data.phase === 'ready' || data.phase === 'waiting'))) {
               updates.status = 'drafting';
               updates.turn = 0;
-              updates.timerStart = now();
-              
-              // 🔥 Timer Absoluto
+              const timerStartNow = now();
+              updates.timerStart = timerStartNow;
+
+              // 🔥 Timer Absoluto - Derive turnEndsAt from the same timerStart source
               const duration = data.config.timerDuration || 60;
+              const timerStartMs = typeof timerStartNow === 'number'
+                ? (timerStartNow < 10000000000 ? timerStartNow * 1000 : timerStartNow)
+                : Date.now();
+              const turnEndsAtMs = timerStartMs + (duration * 1000);
+
               if (IS_DEV) {
-                updates.turnEndsAt = (Date.now() + (duration * 1000)) as any;
+                updates.turnEndsAt = turnEndsAtMs as any;
               } else {
-                updates.turnEndsAt = Timestamp.fromMillis(Date.now() + (duration * 1000));
+                updates.turnEndsAt = Timestamp.fromMillis(turnEndsAtMs);
               }
               
               let finalTurnOrder = data.turnOrder;

@@ -32,12 +32,10 @@ export function DraftEditModal({ isOpen, onClose, lobby, t }: DraftEditModalProp
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await lobbyService.updateLobbyBasicInfo(lobby.id, {
+      await lobbyService.updateLobbyAtomically(lobby.id, {
         name,
         captain1Name,
-        captain2Name
-      });
-      await lobbyService.updateLobbyConfig(lobby.id, {
+        captain2Name,
         streamerHudSize: hudScale
       });
       onClose();

@@ -95,8 +95,8 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
   const isHostAuthorized  = !isForjaPreset || isForjaAdmin || !lobby.config.captainA_discordId || (discordUser && discordUser.discord_id === lobby.config.captainA_discordId);
   const isGuestAuthorized = !isForjaPreset || isForjaAdmin || !lobby.config.captainB_discordId || (discordUser && discordUser.discord_id === lobby.config.captainB_discordId);
 
-  const canJoinA = (!lobby.captain1 || lobby.captain1 === guestId) && isHostAuthorized;
-  const canJoinB = (!lobby.captain2 || lobby.captain2 === guestId) && isGuestAuthorized;
+  const canJoinA = (!lobby.captain1 || lobby.captain1 === guestId || (isForjaPreset && discordUser && discordUser.discord_id === lobby.config.captainA_discordId)) && isHostAuthorized;
+  const canJoinB = (!lobby.captain2 || lobby.captain2 === guestId || (isForjaPreset && discordUser && discordUser.discord_id === lobby.config.captainB_discordId)) && isGuestAuthorized;
 
   const teamSize = lobby.config.teamSize;
   const isMCL = lobby.config.preset?.includes('MCL');
@@ -116,8 +116,8 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
 
     // 🔥 SOLUÇÃO: Reset de Estado ao Trocar de Lado (Anti-Leak)
     setPlayerNames(prev => {
-      // Se não houve mudança de papel e já temos dados, mantemos (respeita edição manual)
-      if (!roleChanged && Object.keys(prev).length > 0) return prev;
+      // Se não houve mudança de papel e já temos dados válidos, mantemos (respeita edição manual)
+      if (!roleChanged && Object.keys(prev).length > 0 && captainPosition !== null && prev[captainPosition]) return prev;
 
       const next: Record<number, string> = {};
       const existingPlayers = role === 'A' ? lobby.teamAPlayers : lobby.teamBPlayers;

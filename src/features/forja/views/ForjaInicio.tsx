@@ -374,25 +374,41 @@ function PlayerTable({ players, isAdmin }: { players: RankedPlayer[]; isAdmin: b
 
             {/* ELO MÉDIO HEADER */}
             <th
-              onClick={() => handleSort('effectiveElo')}
+              aria-sort={sortConfig?.key === 'effectiveElo' ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
               style={{
                 padding: '1rem',
                 textAlign: 'center',
-                cursor: 'pointer',
-                userSelect: 'none',
-                color: sortConfig?.key === 'effectiveElo' ? '#f59e0b' : '#94a3b8',
-                transition: 'all 0.2s ease',
               }}
-              className="hover:text-slate-200"
             >
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', justifyContent: 'center', width: '100%' }}>
+              <button
+                onClick={() => handleSort('effectiveElo')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  color: sortConfig?.key === 'effectiveElo' ? '#f59e0b' : '#94a3b8',
+                  transition: 'all 0.2s ease',
+                  padding: '0.5rem',
+                  borderRadius: '0.25rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
+                  textTransform: 'uppercase',
+                  fontWeight: 'inherit',
+                  fontSize: 'inherit',
+                  letterSpacing: 'inherit',
+                }}
+                className="hover:text-slate-200"
+                aria-label={`Sort by ELO MÉDIO ${sortConfig?.key === 'effectiveElo' ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : ''}`}
+              >
                 <span>ELO MÉDIO</span>
                 {sortConfig?.key === 'effectiveElo' && (
-                  <span style={{ fontSize: '0.75rem', color: '#f59e0b' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#f59e0b' }} aria-hidden="true">
                     {sortConfig.direction === 'asc' ? '▲' : '▼'}
                   </span>
                 )}
-              </div>
+              </button>
             </th>
 
             <th style={{ padding: '1rem' }}>Tier</th>
@@ -742,10 +758,11 @@ export default function ForjaInicio({ discordUser, isAdmin, onRegisterClick }: F
         {/* Barra de Pesquisa */}
         <div style={{ display: 'flex', width: '100%' }}>
           <div style={{ position: 'relative', width: '100%', maxWidth: '400px' }}>
-            <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }}>🔍</span>
+            <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} aria-hidden="true">🔍</span>
             <input
               type="text"
               placeholder="Pesquisar por nick..."
+              aria-label="Pesquisar jogadores por nick"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{

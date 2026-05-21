@@ -50,21 +50,27 @@ function useAomProfileVerify() {
   const verify = useCallback(async (profileId: number) => {
     setLoading(true); setError(null); setData(null);
     try {
-      // Chama a Cloud Function que criamos
-      const url = `https://us-central1-boxwood-plating-368522.cloudfunctions.net/fetchaomprofile?id=${profileId}`;
-      const res = await fetch(url);
-      const json = await res.json();
-      
-      if (!res.ok || !json.success) throw new Error(json.error ?? 'Perfil não encontrado');
-      
+      // Use Firebase Functions httpsCallable
+      const { getFunctions, httpsCallable } = await import('firebase/functions');
+      const functions = getFunctions();
+      const fetchAomProfile = httpsCallable(functions, 'fetchaomprofile');
+
+      const result = await fetchAomProfile({ id: profileId });
+      const json = result.data as any;
+
+      if (!json || json.isError) throw new Error(json?.message ?? 'Perfil não encontrado');
+
+      // Calculate effective ELO
+      const elo_efetivo = Math.round((json.elo_1v1 + json.elo_tg) / 2) || 0;
+
       // Mapeia o retorno da API para o formato que o Form espera
       setData({
         profile_id: profileId,
-        avatar_url: json.data.avatar_url,
-        elo_1v1: json.data.elo_1v1,
-        elo_tg: json.data.elo_tg,
-        elo_efetivo: json.data.elo_efetivo,
-        top_gods: json.data.top_gods,
+        avatar_url: json.avatar_url,
+        elo_1v1: json.elo_1v1,
+        elo_tg: json.elo_tg,
+        elo_efetivo: elo_efetivo,
+        top_gods: json.top_gods,
         alias: null,
         verified: false
       });
@@ -608,23 +614,25 @@ export default function ForjaRegistrationModal({ isOpen, onClose, discordUser, o
       
       if (profileId) {
         try {
-          // Fallback obrigatório: timeout ou erro na Vercel/Cloud Function ignora silenciosamente
-          const url = `https://us-central1-boxwood-plating-368522.cloudfunctions.net/fetchaomprofile?id=${profileId}`;
-          const res = await fetch(url);
-          if (res.ok) {
-            const json = await res.json();
-            if (json.success && json.data) {
+          // Fallback obrigatório: timeout ou erro na Cloud Function ignora silenciosamente
+          const { getFunctions, httpsCallable } = await import('firebase/functions');
+          const functions = getFunctions();
+          const fetchAomProfile = httpsCallable(functions, 'fetchaomprofile');
+
+          const result = await fetchAomProfile({ id: profileId });
+          const json = result.data as any;
+          if (json && !json.isError) {
+              const elo_efetivo = Math.round((json.elo_1v1 + json.elo_tg) / 2) || 0;
               finalData = {
                 profile_id: profileId,
-                avatar_url: json.data.avatar_url,
-                elo_1v1: json.data.elo_1v1,
-                elo_tg: json.data.elo_tg,
-                elo_efetivo: json.data.elo_efetivo,
-                top_gods: json.data.top_gods,
+                avatar_url: json.avatar_url,
+                elo_1v1: json.elo_1v1,
+                elo_tg: json.elo_tg,
+                elo_efetivo: elo_efetivo,
+                top_gods: json.top_gods,
                 alias: null,
                 verified: false
               };
-            }
           }
         } catch (fetchError) {
           console.warn('[Forja] Erro silencioso ao buscar dados adicionais no cadastro:', fetchError);

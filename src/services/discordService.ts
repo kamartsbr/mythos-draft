@@ -80,8 +80,8 @@ export const discordService = {
       description: `**Status:** ${statusMap[lobby.status] || lobby.status}\n**Fase:** ${sanitizeForDiscord(lobby.phase || 'N/A')}`,
       color: lobby.status === 'drafting' ? 0x00ff00 : (lobby.status === 'finished' ? 0xff0000 : 0xffff00),
       fields: [
-        { name: 'Capitão A', value: sanitizeForDiscord(lobby.captain1 || 'Vago'), inline: true },
-        { name: 'Capitão B', value: sanitizeForDiscord(lobby.captain2 || 'Vago'), inline: true }
+        { name: 'Capitão A', value: sanitizeForDiscord(lobby.captain1Name || lobby.captain1 || 'Vago'), inline: true },
+        { name: 'Capitão B', value: sanitizeForDiscord(lobby.captain2Name || lobby.captain2 || 'Vago'), inline: true }
       ],
       timestamp: new Date().toISOString(),
       footer: { text: 'Mythos Draft System' }

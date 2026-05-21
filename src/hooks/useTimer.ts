@@ -60,7 +60,7 @@ export function useTimer(
 
   const tick = useCallback(async () => {
     const currentLobby = lobbyRef.current;
-    if (!currentLobby || !currentLobby.timerStart || currentLobby.status !== 'drafting' || currentLobby.phase === 'finished' || currentLobby.phase === 'post_draft') {
+    if (!currentLobby || (!currentLobby.timerStart && !currentLobby.turnEndsAt) || currentLobby.status !== 'drafting' || currentLobby.phase === 'finished' || currentLobby.phase === 'post_draft') {
       setTimeLeft(null);
       isProcessing.current = false;
       lastTriggeredTurn.current = null;

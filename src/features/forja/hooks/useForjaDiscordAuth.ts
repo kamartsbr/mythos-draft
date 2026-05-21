@@ -207,7 +207,13 @@ export function useForjaDiscordAuth(): UseForjaDiscordAuthResult {
     window.location.href = buildDiscordOAuthUrl();
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try {
+      const { signOut } = await import('firebase/auth');
+      await signOut(auth);
+    } catch (err) {
+      console.error('Error signing out from Firebase:', err);
+    }
     localStorage.removeItem(STORAGE_KEY);
     setDiscordUser(null);
   }, []);

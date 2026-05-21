@@ -216,14 +216,16 @@ exports.verifydiscordtoken = onRequest({ cors: true, secrets: [DISCORD_CLIENT_SE
       params.append('redirect_uri', redirectUri);
 
       const tokenRes = await axios.post('https://discord.com/api/oauth2/token', params, {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 10000
       });
 
       const accessToken = tokenRes.data.access_token;
 
       // 2. Buscar o usuário no Discord
       const userRes = await axios.get('https://discord.com/api/users/@me', {
-        headers: { Authorization: `Bearer ${accessToken}` }
+        headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: 10000
       });
 
       const discordUser = userRes.data;

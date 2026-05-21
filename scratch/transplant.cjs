@@ -20,7 +20,6 @@ const cardMatch = inicio.match(/\/\/ ─── MatchConfrontationCard ───[
 let matchCardCode = '';
 if (cardMatch) {
   matchCardCode = cardMatch[0];
-  inicio = inicio.replace(cardMatch[0], '');
 }
 
 // 3. Extract the Admin Accordion, Standings, and Match Center JSX from ForjaInicio.tsx
@@ -38,7 +37,6 @@ if (sIdx !== -1) {
   if (eIdx !== -1) {
     eIdx += adminAccordionEnd.length;
     adminAccordionCode = inicio.substring(sIdx, eIdx);
-    inicio = inicio.substring(0, sIdx) + inicio.substring(eIdx);
   }
 }
 
@@ -50,7 +48,6 @@ if (sIdx !== -1) {
   let eIdx = inicio.indexOf(matchCenterEnd, sIdx);
   if (eIdx !== -1) {
     matchCenterCode = inicio.substring(sIdx, eIdx);
-    inicio = inicio.substring(0, sIdx) + inicio.substring(eIdx);
   }
 }
 
@@ -64,22 +61,74 @@ if (sIdx !== -1) {
   if (eIdx !== -1) {
     eIdx += hooksEnd.length;
     hooksCode = inicio.substring(sIdx, eIdx);
+  }
+}
+
+// Validate all extractions before file writes
+const validations = [];
+if (!matchCardCode) validations.push('MatchConfrontationCard extraction failed');
+if (!adminAccordionCode) validations.push('Admin Accordion extraction failed');
+if (!matchCenterCode) validations.push('Match Center extraction failed');
+if (!hooksCode) validations.push('Hooks extraction failed');
+
+if (validations.length > 0) {
+  console.error('Extraction validation failed:');
+  validations.forEach(v => console.error(`  - ${v}`));
+  process.exit(1);
+}
+
+// Validate replacement points in home
+const homeOldStandingsStart = `{/* ── Tabela de Grupos Compacta ── */}`;
+const homeEnd = `</section>\n  );\n}`;
+const propsMarker = /\/\/ ─── Props ───/;
+const currentUserMarker = /const currentUserId = discordUser\?\.discord_id \?\? null;/;
+
+if (!home.match(propsMarker)) {
+  console.error('Props marker not found in ForjaHome.tsx');
+  process.exit(1);
+}
+if (!home.match(currentUserMarker)) {
+  console.error('currentUserId marker not found in ForjaHome.tsx');
+  process.exit(1);
+}
+if (home.indexOf(homeOldStandingsStart) === -1) {
+  console.error('Old standings marker not found in ForjaHome.tsx');
+  process.exit(1);
+}
+
+// 5. Apply mutations to inicio
+if (cardMatch) {
+  inicio = inicio.replace(cardMatch[0], '');
+}
+sIdx = inicio.indexOf(adminAccordionStart);
+if (sIdx !== -1) {
+  let eIdx = inicio.indexOf(adminAccordionEnd, sIdx);
+  if (eIdx !== -1) {
+    eIdx += adminAccordionEnd.length;
+    inicio = inicio.substring(0, sIdx) + inicio.substring(eIdx);
+  }
+}
+sIdx = inicio.indexOf(standingsStart);
+if (sIdx !== -1) {
+  let eIdx = inicio.indexOf(matchCenterEnd, sIdx);
+  if (eIdx !== -1) {
+    inicio = inicio.substring(0, sIdx) + inicio.substring(eIdx);
+  }
+}
+sIdx = inicio.indexOf(hooksStart);
+if (sIdx !== -1) {
+  let eIdx = inicio.indexOf(hooksEnd, sIdx);
+  if (eIdx !== -1) {
+    eIdx += hooksEnd.length;
     inicio = inicio.substring(0, sIdx) + inicio.substring(eIdx);
   }
 }
 
-// 5. Inject into ForjaHome.tsx
-if (matchCardCode) {
-  home = home.replace(/\/\/ ─── Props ───/, matchCardCode + '\n// ─── Props ───');
-}
-
-if (hooksCode) {
-  home = home.replace(/const currentUserId = discordUser\?\.discord_id \?\? null;/, `const currentUserId = discordUser?.discord_id ?? null;\n\n  ${hooksCode}`);
-}
+// 6. Inject into ForjaHome.tsx
+home = home.replace(propsMarker, matchCardCode + '\n// ─── Props ───');
+home = home.replace(currentUserMarker, `const currentUserId = discordUser?.discord_id ?? null;\n\n  ${hooksCode}`);
 
 // In ForjaHome.tsx, we replace the old standings with the new standings + match center + admin accordion
-const homeOldStandingsStart = `{/* ── Tabela de Grupos Compacta ── */}`;
-const homeEnd = `</section>\n  );\n}`;
 sIdx = home.indexOf(homeOldStandingsStart);
 if (sIdx !== -1) {
   let eIdx = home.indexOf(homeEnd, sIdx);

@@ -692,7 +692,8 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
     const populateTeam = (team: any) => {
       if (!team || !team.members) return [];
       return team.members.slice(0, 3).map((discordId: string, idx: number) => {
-        return { name: `Player ${idx + 1}` };
+        const player = rankedPlayers.find(p => p.discord_id === discordId);
+        return { name: player?.nick || `Player ${idx + 1}` };
       });
     };
 
@@ -1434,10 +1435,19 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
             <form onSubmit={handleUpdateMatch} className="space-y-4">
               <div>
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Data da Partida</label>
-                <input 
-                  name="date" 
-                  type="date" 
-                  defaultValue={typeof editingMatch.scheduledDate === 'string' ? editingMatch.scheduledDate : ''} 
+                <input
+                  name="date"
+                  type="date"
+                  defaultValue={(() => {
+                    const sd = editingMatch.scheduledDate;
+                    if (typeof sd === 'string') return sd;
+                    if (sd && typeof sd === 'object' && 'toDate' in sd) {
+                      const d = sd.toDate();
+                      return d.toISOString().split('T')[0];
+                    }
+                    if (sd instanceof Date) return sd.toISOString().split('T')[0];
+                    return '';
+                  })()}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-amber-500"
                   required
                 />

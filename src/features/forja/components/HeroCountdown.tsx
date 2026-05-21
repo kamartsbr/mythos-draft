@@ -32,25 +32,21 @@ export function HeroCountdown() {
       }
 
       try {
+        const now = Timestamp.fromMillis(Date.now());
         const q = query(
           collection(db, 'lobbies'),
           where('config.preset', '==', 'FORJA'),
           where('status', '==', 'waiting'),
+          where('config.scheduledDate', '>=', now),
           orderBy('config.scheduledDate', 'asc'),
           limit(3)
         );
-        
+
         const snap = await getDocs(q);
         const matches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        
-        // Find the first match that is in the future
-        const now = new Date().getTime();
-        const futureMatch = matches.find((m: any) => {
-          const date = m.config.scheduledDate;
-          if (!date) return false;
-          const targetMs = date instanceof Timestamp ? date.toMillis() : new Date(date).getTime();
-          return targetMs > now;
-        });
+
+        // Find the first match (already filtered by query)
+        const futureMatch = matches[0] || null;
 
         if (futureMatch) {
           setNextMatch(futureMatch);

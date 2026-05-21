@@ -143,49 +143,57 @@ export async function registerForjaPlayer(
     };
   } else {
     // Caso 2: Inscrição nova.
-    // 1. BUSCA AS CONFIGURAÇÕES TÉCNICAS (Deadline e Vagas)
-    const settingsRef = doc(db, CONTENT_COL, 'settings');
-    const settingsSnap = await getDoc(settingsRef);
-    const settings = settingsSnap.data() as ForjaSettings | undefined;
-    const maxParticipants = settings?.max_participants ?? 48;
+    // Use Firestore transaction to atomically check and allocate slot
+    const { runTransaction } = await import('firebase/firestore');
 
-    // 2. BUSCA A CONTAGEM DE TITULARES ATIVOS USANDO A FUNÇÃO DE AGREGAÇÃO OTIMIZADA getCountFromServer
-    const q = query(
-      collection(db, PLAYERS_COL),
-      where('is_reserve', '==', false),
-      where('status', '!=', 'banned')
-    );
-    const countSnapshot = await getCountFromServer(q);
-    const activeStartersCount = countSnapshot.data().count;
+    await runTransaction(db, async (transaction) => {
+      // 1. BUSCA AS CONFIGURAÇÕES TÉCNICAS (Deadline e Vagas)
+      const settingsRef = doc(db, CONTENT_COL, 'settings');
+      const settingsSnap = await transaction.get(settingsRef);
+      const settings = settingsSnap.data() as ForjaSettings | undefined;
+      const maxParticipants = settings?.max_participants ?? 48;
 
-    // 3. LÓGICA DE RESERVA DINÂMICA E TRAVA DE VAGAS
-    const now = Date.now();
-    const isLate = settings ? now > settings.registration_deadline_ms : true;
-    const isOverLimit = activeStartersCount >= maxParticipants;
-    const shouldBeReserve = isLate || isOverLimit;
+      // 2. BUSCA A CONTAGEM DE TITULARES ATIVOS DENTRO DA TRANSAÇÃO
+      const q = query(
+        collection(db, PLAYERS_COL),
+        where('is_reserve', '==', false),
+        where('status', '!=', 'banned')
+      );
+      const countSnapshot = await getCountFromServer(q);
+      const activeStartersCount = countSnapshot.data().count;
 
-    playerUpdate = {
-      aom_profile_id:     profileId,
-      aom_id:             String(profileId),
-      nick:               form.nick.trim() || discordUser.username,
-      avatar_url,
-      discord_avatar_url: discordUser.avatar_url,
-      is_brazilian:       form.is_brazilian,
-      pitch_quote:        form.pitch_quote.slice(0, 50),
-      availability:       form.availability,
-      elo_1v1:            pd?.elo_1v1 ?? 0,
-      elo_tg:             pd?.elo_tg ?? 0,
-      top_gods:           pd?.top_gods ?? [],
-      elo_snapshot:       pd?.elo_1v1 ?? 0,
-      ...(esportsElo !== undefined ? { esports_elo: esportsElo } : {}),
-      status:             'available',
-      tier:               null,
-      team_id:            null,
-      is_reserve:         shouldBeReserve,
-      registered_at:      serverTimestamp() as any,
-      consent_rules:      form.consent_rules,
-      consent_format:     form.consent_format,
-    };
+      // 3. LÓGICA DE RESERVA DINÂMICA E TRAVA DE VAGAS
+      const now = Date.now();
+      const isLate = settings ? now > settings.registration_deadline_ms : true;
+      const isOverLimit = activeStartersCount >= maxParticipants;
+      const shouldBeReserve = isLate || isOverLimit;
+
+      playerUpdate = {
+        aom_profile_id:     profileId,
+        aom_id:             String(profileId),
+        nick:               form.nick.trim() || discordUser.username,
+        avatar_url,
+        discord_avatar_url: discordUser.avatar_url,
+        is_brazilian:       form.is_brazilian,
+        pitch_quote:        form.pitch_quote.slice(0, 50),
+        availability:       form.availability,
+        elo_1v1:            pd?.elo_1v1 ?? 0,
+        elo_tg:             pd?.elo_tg ?? 0,
+        top_gods:           pd?.top_gods ?? [],
+        elo_snapshot:       pd?.elo_1v1 ?? 0,
+        ...(esportsElo !== undefined ? { esports_elo: esportsElo } : {}),
+        status:             'available',
+        tier:               null,
+        team_id:            null,
+        is_reserve:         shouldBeReserve,
+        registered_at:      serverTimestamp() as any,
+        consent_rules:      form.consent_rules,
+        consent_format:     form.consent_format,
+      };
+
+      transaction.set(playerRef, playerUpdate, { merge: true });
+    });
+    return;
   }
 
   await setDoc(playerRef, playerUpdate, { merge: true });

@@ -277,10 +277,13 @@ export function processTurnAction(
     (actingTeam === 'B' && currentTurn.player === 'B') ||
     currentTurn.player === 'BOTH';
 
-  const isOpponentTriggeringAutoPick = isTimerExpired && (actingTeam === 'A' || actingTeam === 'B');
-
-  if (!isMyTurn && currentTurn.player !== 'ADMIN' && !isOpponentTriggeringAutoPick) {
+  if (!isMyTurn && currentTurn.player !== 'ADMIN') {
     throw new Error("Not your turn");
+  }
+
+  // When timer expires, ignore supplied actionId and invoke deterministic timeout logic
+  if (isTimerExpired && currentTurn.player !== 'ADMIN') {
+    actionId = null as any; // Force timeout pick path
   }
 
   // Create immutable copy of state arrays
@@ -410,11 +413,11 @@ export function processTurnAction(
     nextLobby.hiddenActions.forEach(ha => {
       const turn = nextLobby.turnOrder[ha.turnIndex];
       const team = turn.player === 'A' ? 'A' : (turn.player === 'B' ? 'B' : executionTeam);
-      applyAction(ha.actionId, turn, team);
+      applyAction(ha.actionId, turn, team, ha.targetPlayerId, ha.playerName);
     });
     nextLobby.hiddenActions = [];
   } else if (currentTurn.execution === 'HIDDEN') {
-    nextLobby.hiddenActions.push({ turnIndex: nextLobby.turn, actionId });
+    nextLobby.hiddenActions.push({ turnIndex: nextLobby.turn, actionId, targetPlayerId, playerName });
   } else {
     const success = applyAction(actionId, currentTurn, executionTeam, targetPlayerId, playerName);
     if (!success) {

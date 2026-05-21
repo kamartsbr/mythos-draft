@@ -1,6 +1,6 @@
 # Especificação de Refatoração da Engine de Draft (Draft Engine Overhaul)
 
-Este documento estabelece o plano detalhado para a refatoração do motor de draft (Draft Engine) do Mythos Draft, seguindo o fluxo de **Spec-Driven Development**. 
+Este documento estabelece o plano detalhado para a refatoração do motor de draft (Draft Engine) do Mythos Draft, seguindo o fluxo de **Spec-Driven Development**.
 
 ---
 
@@ -22,7 +22,7 @@ Atualmente, a lógica de negócio do draft está distribuída e acoplada em trê
 
 O principal objetivo é aplicar a **Separação de Responsabilidades (Decoupling)** e isolar a lógica matemática/cronológica do draft das camadas de infraestrutura (Firestore, React).
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │                    Componentes UI                       │
 │        (PickBanPanel, DraftBoard, StreamerHUD)          │
@@ -46,6 +46,7 @@ O principal objetivo é aplicar a **Separação de Responsabilidades (Decoupling
 │    (Funções Puras, Validações, Sem Efeitos Colaterais)  │
 └────────────────────────────┴────────────────────────────┘
 ```
+
 
 ### Diretrizes de Design:
 1. **Motor de Estado Puro (`src/lib/pureDraftEngine.ts`)**:
@@ -95,13 +96,17 @@ O principal objetivo é aplicar a **Separação de Responsabilidades (Decoupling
 Qualquer alteração de código só será considerada concluída se passar nas seguintes validações locais, sem exceções:
 
 1. **Validação de Tipos (TypeScript)**:
+
    ```bash
    npm run check-types
    ```
+
    *Exigência: 0 erros de compilação.*
 
 2. **Validação da Suíte de Testes (Vitest)**:
+
    ```bash
    npm run test
    ```
+
    *Exigência: 100% de cobertura nos testes novos e aprovação de todos os testes anteriores.*

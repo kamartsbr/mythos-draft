@@ -59,17 +59,21 @@ export default function ForjaAddPlayerModal({ discordUserId, discordUsername, on
     setFetchError(null);
     setFetchedProfile(null);
     try {
-      const res = await fetch(`${FUNCTIONS_BASE_URL}/fetchaomprofile?id=${profileId}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      if (!json.success) throw new Error(json.error || 'Erro na API.');
-      const d = json.data;
+      const { getFunctions, httpsCallable } = await import('firebase/functions');
+      const functions = getFunctions();
+      const fetchAomProfile = httpsCallable(functions, 'fetchaomprofile');
+
+      const result = await fetchAomProfile({ id: profileId });
+      const json = result.data as any;
+      if (json.isError) throw new Error(json.message || 'Erro na API.');
+
+      const elo_efetivo = Math.round((json.elo_1v1 + json.elo_tg) / 2) || 0;
       setFetchedProfile({
-        elo_1v1:     d.elo_1v1     ?? 0,
-        elo_tg:      d.elo_tg      ?? 0,
-        elo_efetivo: d.elo_efetivo ?? 0,
-        avatar_url:  d.avatar_url  ?? null,
-        top_gods:    Array.isArray(d.top_gods) ? d.top_gods.slice(0, 5) : [],
+        elo_1v1:     json.elo_1v1  ?? 0,
+        elo_tg:      json.elo_tg   ?? 0,
+        elo_efetivo: elo_efetivo,
+        avatar_url:  json.avatar_url ?? null,
+        top_gods:    Array.isArray(json.top_gods) ? json.top_gods.slice(0, 5) : [],
       });
     } catch (e: any) {
       setFetchError(e?.message || 'Não foi possível buscar o perfil.');

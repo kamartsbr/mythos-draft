@@ -219,7 +219,7 @@ export type Lobby = {
   timerStart: DraftTimestamp;
   createdAt: DraftTimestamp;
   turnOrder: DraftTurn[];
-  hiddenActions: { turnIndex: number; actionId: string }[];
+  hiddenActions: { turnIndex: number; actionId: string; targetPlayerId?: number; playerName?: string }[];
   spectators: { id: string; name: string }[];
   adminId?: string;
   isPaused?: boolean;

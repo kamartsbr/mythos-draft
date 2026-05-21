@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MessageSquare, Send, User, Shield, MessageCircleOff, ChevronRight, ChevronLeft } from 'lucide-react';
-import { lobbyService } from '../../services/lobbyService';
-import { ChatMessage } from '../../types';
+import { lobbyService, getMillis } from '../../services/lobbyService';
+import { ChatMessage, DraftTimestamp } from '../../types';
 import { cn } from '../../lib/utils';
 
 interface ChatProps {
@@ -117,7 +117,7 @@ export function Chat({ lobbyId, guestId, nickname, isCaptain1, isCaptain2, isAdm
                         </span>
                       </div>
                       <span className="text-[8px] text-slate-600 font-mono">
-                        {msg.timestamp?.toDate ? new Date(msg.timestamp.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                        {getMillis(msg.timestamp) ? new Date(getMillis(msg.timestamp)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                       </span>
                     </div>
                     <p className="text-xs text-slate-300 bg-slate-800/50 p-2 rounded-lg border border-slate-800/50 break-words">

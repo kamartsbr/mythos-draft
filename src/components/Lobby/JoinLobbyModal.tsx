@@ -86,8 +86,10 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const isHostAuthorized = !isForjaPreset || isForjaAdmin || (discordUser && discordUser.discord_id === lobby.config.captainA_discordId);
-  const isGuestAuthorized = !isForjaPreset || isForjaAdmin || (discordUser && discordUser.discord_id === lobby.config.captainB_discordId);
+  // Se captainA/B_discordId não está definido (ex: custom game), qualquer um pode entrar nessa vaga.
+  // A restrição só se aplica quando um capitão específico foi pré-configurado (partidas oficiais da Forja).
+  const isHostAuthorized  = !isForjaPreset || isForjaAdmin || !lobby.config.captainA_discordId || (discordUser && discordUser.discord_id === lobby.config.captainA_discordId);
+  const isGuestAuthorized = !isForjaPreset || isForjaAdmin || !lobby.config.captainB_discordId || (discordUser && discordUser.discord_id === lobby.config.captainB_discordId);
 
   const canJoinA = (!lobby.captain1 || lobby.captain1 === guestId) && isHostAuthorized;
   const canJoinB = (!lobby.captain2 || lobby.captain2 === guestId) && isGuestAuthorized;

@@ -229,6 +229,8 @@ exports.verifydiscordtoken = onRequest({ cors: true, secrets: [DISCORD_CLIENT_SE
       const discordUser = userRes.data;
 
       // 3. Criar Custom Token no Firebase usando o Discord ID como UID
+      // O serviceAccountId configurado no initializeApp() garante que a
+      // App Engine SA (com permissão de signBlob) seja usada para assinar o JWT.
       const customToken = await admin.auth().createCustomToken(discordUser.id, {
         discord_id: discordUser.id,
         username: discordUser.username,

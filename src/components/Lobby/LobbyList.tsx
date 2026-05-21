@@ -2,6 +2,7 @@ import { Eye, Users, ChevronRight, Info, Trash2, Search } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { LobbySummary } from '../../types';
 import { cn } from '../../lib/utils';
+import { getMillis } from '../../services/lobbyService';
 
 interface LobbyListProps {
   lobbies: LobbySummary[];
@@ -42,7 +43,7 @@ export function LobbyList({ lobbies, t, isAdmin, onJoin, onDelete, onClearAll, o
       return <span className="text-green-500 font-bold uppercase tracking-widest text-xs">{t.draftComplete}</span>;
     }
     
-    const lastActivity = pub.lastActivityAt?.toMillis?.() || pub.createdAt?.toMillis?.() || Date.now();
+    const lastActivity = getMillis(pub.lastActivityAt) || getMillis(pub.createdAt) || Date.now();
     const isAbandoned = (Date.now() - lastActivity) > 2 * 60 * 60 * 1000;
     
     if (isAbandoned) {

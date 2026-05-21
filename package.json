@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "clean": "node -e \"const fs = require('fs'); if (fs.existsSync('dist')) fs.rmSync('dist', { recursive: true, force: true })\"",
     "lint": "tsc --noEmit",
+    "check-types": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
     "test:coverage": "vitest run --config vitest.config.ts --coverage"

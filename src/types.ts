@@ -1,3 +1,7 @@
+import { Timestamp, FieldValue } from 'firebase/firestore';
+
+export type DraftTimestamp = Timestamp | FieldValue | Date | number | string | null;
+
 export type God = {
   id: string;
   name: string;
@@ -84,7 +88,7 @@ export type LobbyConfig = {
   captainA_discordId?: string;
   captainB_discordId?: string;
   /** Agendamento */
-  scheduledDate?: any; // Firestore Timestamp
+  scheduledDate?: DraftTimestamp;
   scheduledTime?: string;
   streamerUrl?: string;
   /** Link para draft externo (caso não tenha sido feito no Mythos) */
@@ -142,7 +146,7 @@ export type Substitution = {
 export type ResetRequest = {
   requestedBy: 'A' | 'B';
   status: 'pending' | 'accepted' | 'declined';
-  timestamp: any;
+  timestamp: DraftTimestamp;
 };
 
 export type LobbySummary = {
@@ -159,13 +163,13 @@ export type LobbySummary = {
   preset?: string;
   mclRound?: number;
   tournamentStage?: 'GROUP' | 'PLAYOFFS';
-  lastActivityAt: any;
-  createdAt: any;
+  lastActivityAt: DraftTimestamp;
+  createdAt: DraftTimestamp;
 };
 
 export type LobbyIndex = {
   activeLobbies: LobbySummary[];
-  lastUpdate: any;
+  lastUpdate: DraftTimestamp;
 };
 
 export type Lobby = {
@@ -212,26 +216,26 @@ export type Lobby = {
   rosterB?: Record<number, PickEntry>;
   lastWinner: 'A' | 'B' | null;
   mapPool?: string[];
-  timerStart: any;
-  createdAt: any;
+  timerStart: DraftTimestamp;
+  createdAt: DraftTimestamp;
   turnOrder: DraftTurn[];
   hiddenActions: { turnIndex: number; actionId: string }[];
   spectators: { id: string; name: string }[];
   adminId?: string;
   isPaused?: boolean;
-  timerPausedAt?: any;
+  timerPausedAt?: DraftTimestamp;
   captain1Active?: boolean;
   captain2Active?: boolean;
   isPermanent?: boolean;
   discordWebhookUrl?: string | null;
   discordMessageId?: string | null;
-  lastActivityAt?: any;
+  lastActivityAt?: DraftTimestamp;
   pausedTimeLeft?: number;
-  reportStartAt?: any;
+  reportStartAt?: DraftTimestamp;
   isHidden?: boolean;
   hoveredGodIdA?: string | null;
   hoveredGodIdB?: string | null;
-  turnEndsAt?: any;
+  turnEndsAt?: DraftTimestamp;
 };
 
 export type ChatMessage = {
@@ -241,5 +245,5 @@ export type ChatMessage = {
   senderName: string;
   senderRole: 'Host' | 'Guest' | 'ADMIN' | 'Spectator';
   text: string;
-  timestamp: any;
+  timestamp: DraftTimestamp;
 };

@@ -175,7 +175,7 @@ const MOCK_LOBBY_TEMPLATE: Partial<Lobby> = {
 
 export const generateId = () => Math.random().toString(36).substring(2, 9);
 
-const getMillis = (val: any): number => {
+export const getMillis = (val: any): number => {
   if (!val) return 0;
   // Handle Firestore Timestamp
   if (typeof val.toMillis === 'function') return val.toMillis();
@@ -1295,8 +1295,9 @@ export const lobbyService = {
         if (team === 'B' && data.captain2 !== guestId) throw new Error("Not authorized for Team B");
 
         const updates: any = {};
-        const isWaitingStatus = data.status === 'waiting' || (data.status === 'drafting' && (data.phase === 'ready' || data.phase === 'waiting'));
-        const isReadyWaitPhase = isWaitingStatus || data.phase === 'ready_picker';
+        // Game 1 ready logic only. Se for game > 1 e phase='ready', deve cair no else if (data.phase === 'ready')
+        const isGame1Ready = data.currentGame === 1 && (data.status === 'waiting' || data.phase === 'ready' || data.phase === 'waiting');
+        const isReadyWaitPhase = isGame1Ready || data.phase === 'ready_picker';
         
         if (isReadyWaitPhase) {
           if (team === 'A') {

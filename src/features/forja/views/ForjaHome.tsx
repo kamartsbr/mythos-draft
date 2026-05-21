@@ -905,7 +905,34 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
   const isRegistered = rankedPlayers.some(p => p.discord_id === discordUser?.discord_id);
 
   // Upcoming lobbies (não finalizados, máx 3)
-  const upcoming = lobbies.filter(l => l.status !== 'completed' && l.status !== 'finished').slice(0, 3);
+  const upcoming = lobbies
+    .filter(l => l.status !== 'completed' && l.status !== 'finished')
+    .sort((a, b) => {
+      const getMs = (l: any) => {
+        if (!l.scheduledDate) return 0;
+        if (typeof l.scheduledDate === 'number') return l.scheduledDate;
+        if (l.scheduledDate?.toMillis) return l.scheduledDate.toMillis();
+        
+        if (typeof l.scheduledDate === 'string') {
+          const [year, month, day] = l.scheduledDate.split('-').map(Number);
+          const [hour, minute] = (l.scheduledTime || '00:00').split(':').map(Number);
+          return new Date(year, month - 1, day, hour, minute).getTime();
+        }
+        return 0;
+      };
+      
+      const aMs = getMs(a);
+      const bMs = getMs(b);
+      
+      // Secondary sort: if dates are equal, LIVE matches should come first.
+      if (aMs === bMs) {
+        if (a.status === 'drafting' && b.status !== 'drafting') return -1;
+        if (b.status === 'drafting' && a.status !== 'drafting') return 1;
+      }
+      
+      return aMs - bMs;
+    })
+    .slice(0, 3);
 
   return (
     <section className="forja-view forja-view--home">
@@ -1216,17 +1243,10 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
       {/* ── Próximas Partidas ──────────────────────────────────────────────── */}
       {upcoming.length > 0 && (
         <div style={{ marginBottom: '2rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+          <div style={{ marginBottom: '0.75rem' }}>
             <h3 style={{ color: '#f8fafc', fontSize: '0.95rem', fontWeight: 800, margin: 0 }}>
               🎮 Próximas Partidas
             </h3>
-            <button
-              className="forja-btn forja-btn--ghost"
-              style={{ fontSize: '0.72rem', padding: '0.3rem 0.75rem' }}
-              onClick={() => onTabChange?.('inscritos')}
-            >
-              Ver tabela completa →
-            </button>
           </div>
           <div className="grid gap-3">
             {upcoming.map(match => (

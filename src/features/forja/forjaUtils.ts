@@ -144,9 +144,21 @@ export function computeRankedPlayers(players: ForjaPlayer[], settings?: Pick<For
   };
 
   const sortedActive = [...active].sort(sortByElo);
-  const sortedReserve = [...reserve].sort(sortByElo);
+  let finalActive = sortedActive;
+  let dynamicReserves: ForjaPlayer[] = [];
 
-  const rankedActive: RankedPlayer[] = sortedActive.map((p, idx) => ({
+  const maxParticipants = settings?.max_participants;
+  if (maxParticipants !== undefined && sortedActive.length > maxParticipants) {
+    finalActive = sortedActive.slice(0, maxParticipants);
+    dynamicReserves = sortedActive.slice(maxParticipants).map(p => ({
+      ...p,
+      is_reserve: true,
+    }));
+  }
+
+  const sortedReserve = [...reserve, ...dynamicReserves].sort(sortByElo);
+
+  const rankedActive: RankedPlayer[] = finalActive.map((p, idx) => ({
     ...p,
     rank: idx + 1,
     computedTier: getTierByRank(idx + 1, settings),

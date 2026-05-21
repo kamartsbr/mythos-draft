@@ -378,7 +378,7 @@ export const draftService = {
 
       const newHistoryPicks = [...(freshLobby.picks || [])];
       newPicks.forEach(np => {
-        const index = newHistoryPicks.findIndex(hp => hp.playerId === np.playerId && hp.team === np.team);
+        const index = newHistoryPicks.findIndex(hp => Number(hp.playerId) === Number(np.playerId) && hp.team === np.team);
         if (index !== -1) {
           newHistoryPicks[index] = np;
         } else {
@@ -386,7 +386,7 @@ export const draftService = {
         }
       });
       const namesChanged = newPicks.some(np => {
-        const old = (freshLobby.picks || []).find(hp => hp.playerId === np.playerId && hp.team === np.team);
+        const old = (freshLobby.picks || []).find(hp => Number(hp.playerId) === Number(np.playerId) && hp.team === np.team);
         return !!old && (old.playerName || '').trim() !== (np.playerName || '').trim();
       });
       const notifyOpponent = subs.length > 0 || namesChanged;
@@ -399,7 +399,7 @@ export const draftService = {
       // Easiest way is to sort the team's picks by playerId ascending (which matches the roster array order 0, 1, 2)
       // Since teamAPlayers always has 3 elements matching the 3 playerIds.
       const getSortedTeamIds = (t: 'A' | 'B') => {
-         const ids = newHistoryPicks.filter(p => p.team === t).map(p => p.playerId).sort((a, b) => a - b);
+         const ids = newHistoryPicks.filter(p => p.team === t).map(p => Number(p.playerId)).sort((a, b) => a - b);
          return ids;
       };
       
@@ -409,10 +409,14 @@ export const draftService = {
       newHistoryPicks.forEach(p => {
         const targetArr = p.team === 'A' ? nextTeamAPlayers : nextTeamBPlayers;
         const ids = p.team === 'A' ? teamAIds : teamBIds;
-        const rosterIdx = ids.indexOf(p.playerId);
+        const rosterIdx = ids.indexOf(Number(p.playerId));
         
-        if (rosterIdx !== -1 && targetArr[rosterIdx]) {
-           targetArr[rosterIdx] = { ...targetArr[rosterIdx], name: p.playerName || targetArr[rosterIdx].name };
+        if (rosterIdx !== -1) {
+          if (!targetArr[rosterIdx]) {
+             targetArr[rosterIdx] = { name: p.playerName || '', position: rosterIdx };
+          } else {
+             targetArr[rosterIdx] = { ...targetArr[rosterIdx], name: p.playerName || targetArr[rosterIdx].name };
+          }
         }
       });
 
@@ -442,7 +446,7 @@ export const draftService = {
 
         const newHistoryPicks = [...(freshLobby.picks || [])];
         newPicks.forEach(np => {
-          const index = newHistoryPicks.findIndex(hp => hp.playerId === np.playerId && hp.team === np.team);
+          const index = newHistoryPicks.findIndex(hp => Number(hp.playerId) === Number(np.playerId) && hp.team === np.team);
           if (index !== -1) {
             newHistoryPicks[index] = np;
           } else {
@@ -455,7 +459,7 @@ export const draftService = {
         }
 
         const namesChanged = newPicks.some(np => {
-          const old = (freshLobby.picks || []).find(hp => hp.playerId === np.playerId && hp.team === np.team);
+          const old = (freshLobby.picks || []).find(hp => Number(hp.playerId) === Number(np.playerId) && hp.team === np.team);
           return !!old && (old.playerName || '').trim() !== (np.playerName || '').trim();
         });
         const notifyOpponent = subs.length > 0 || namesChanged;
@@ -464,22 +468,33 @@ export const draftService = {
           else updates.rosterChangedB = true;
         }
 
-        const teamKey = team === 'A' ? 'teamAPlayers' : 'teamBPlayers';
-        const currentRoster = (team === 'A' ? (freshLobby.teamAPlayers || []) : (freshLobby.teamBPlayers || []));
-        const updatedRosterNames = [...currentRoster.map(p => p.name)];
+        const nextTeamAPlayers = [...(freshLobby.teamAPlayers || [])];
+        const nextTeamBPlayers = [...(freshLobby.teamBPlayers || [])];
 
-        // Update names from picks if they changed
-        newPicks.filter(p => p.team === team && p.playerName).forEach(p => {
-          const trimmedName = p.playerName!.trim();
-          if (trimmedName && !updatedRosterNames.includes(trimmedName)) {
-            // Add new names from confirmed picks
-            updatedRosterNames.push(trimmedName);
+        const getSortedTeamIds = (t: 'A' | 'B') => {
+           const ids = newHistoryPicks.filter(p => p.team === t).map(p => Number(p.playerId)).sort((a, b) => a - b);
+           return ids;
+        };
+
+        const teamAIds = getSortedTeamIds('A');
+        const teamBIds = getSortedTeamIds('B');
+
+        newHistoryPicks.forEach(p => {
+          const targetArr = p.team === 'A' ? nextTeamAPlayers : nextTeamBPlayers;
+          const ids = p.team === 'A' ? teamAIds : teamBIds;
+          const rosterIdx = ids.indexOf(Number(p.playerId));
+
+          if (rosterIdx !== -1) {
+            if (!targetArr[rosterIdx]) {
+              targetArr[rosterIdx] = { name: p.playerName || '', position: rosterIdx };
+            } else {
+              targetArr[rosterIdx] = { ...targetArr[rosterIdx], name: p.playerName || targetArr[rosterIdx].name };
+            }
           }
         });
 
-        // Remove duplicates
-        const uniqueNames = Array.from(new Set(updatedRosterNames));
-        (updates as any)[teamKey] = uniqueNames.map((name, idx) => ({ name, position: idx }));
+        updates.teamAPlayers = nextTeamAPlayers;
+        updates.teamBPlayers = nextTeamBPlayers;
 
         transaction.update(lobbyRef, cleanData(updates));
         return { success: true };

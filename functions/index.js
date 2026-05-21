@@ -231,9 +231,10 @@ exports.verifydiscordtoken = onRequest({ cors: true, secrets: [DISCORD_CLIENT_SE
 
     // Validate redirectUri against allowlist
     const allowedRedirectUris = [
-      'https://mythosdraft.com/auth/discord/callback',
-      'http://localhost:5173/auth/discord/callback',
-      'http://localhost:4173/auth/discord/callback'
+      'https://mythosdraft.com/forja',
+      'http://localhost:8080/forja',
+      'http://localhost:5173/forja',
+      'http://localhost:4173/forja'
     ];
 
     if (!redirectUri || typeof redirectUri !== 'string' || !allowedRedirectUris.includes(redirectUri)) {

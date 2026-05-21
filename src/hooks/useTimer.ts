@@ -244,8 +244,8 @@ export function useTimer(
 
         const availableGods = MAJOR_GODS.filter(g => {
           const isAllowed = allowedPantheons.length === 0 || 
-                            allowedPantheons.includes(g.id) ||
-                            allowedPantheons.includes(g.culture);
+                            allowedPantheons.some(p => p.toLowerCase() === g.id.toLowerCase()) ||
+                            allowedPantheons.some(p => p.toLowerCase() === g.culture.toLowerCase());
           const isBanned = bans.includes(g.id);
           const isPicked = picks.some(p => p.godId === g.id);
           const actingTeam = currentTurn.player === 'A' ? 'A' : (currentTurn.player === 'B' ? 'B' : (isCaptain1 ? 'A' : 'B'));

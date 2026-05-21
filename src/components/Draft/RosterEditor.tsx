@@ -37,8 +37,11 @@ export function RosterEditor({ lobby, team, onClose, onSave, t }: RosterEditorPr
 
   // Reinicializa quando troca de game/time/fase — evita estado preso e subs fantasmas
   useEffect(() => {
+    const sortedPlayerIds = teamPicks.map(p => p.playerId).sort((a, b) => Number(a) - Number(b));
+
     const initialPicks = teamPicks.map(p => {
-      const playerInfo = teamPlayers?.find(tp => tp.position === p.playerId);
+      const rosterIdx = sortedPlayerIds.indexOf(p.playerId);
+      const playerInfo = teamPlayers?.find(tp => tp.position === rosterIdx);
       return {
         ...p,
         playerName: p.playerName || playerInfo?.name || ''

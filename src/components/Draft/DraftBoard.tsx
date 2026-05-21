@@ -247,7 +247,7 @@ export function DraftBoard(props: DraftBoardProps) {
               {copied ? t.linkCopied : t.copyInviteLink}
             </motion.button>
 
-            {import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT' && (
+            {(import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT' || window.location.hostname === 'localhost') && (
               <motion.button 
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}

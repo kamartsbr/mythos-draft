@@ -269,6 +269,63 @@ describe('pureDraftEngine > processTurnAction', () => {
     const lobby = createBaseLobby('drafting');
     expect(() => processTurnAction(lobby, 'zeus', 'B')).toThrow("Not your turn");
   });
+
+  // Scenario E: Auto-pick MAP on timeout or null actionId
+  it('Scenario E: Should auto-pick a random map when target is MAP and actionId is null', () => {
+    const lobby = createBaseLobby('drafting');
+    lobby.turnOrder = [
+      { player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' }
+    ];
+    lobby.config.allowedMaps = ['oasis', 'marsh'];
+    
+    const updated = processTurnAction(lobby, null as any, 'A', undefined, undefined, undefined, 1000);
+    
+    expect(updated.selectedMap).toBeDefined();
+    expect(['oasis', 'marsh']).toContain(updated.selectedMap);
+    expect(updated.replayLog).toHaveLength(1);
+    expect(updated.replayLog[0].isRandom).toBe(true);
+    expect(updated.replayLog[0].target).toBe('MAP');
+  });
+
+  // Scenario F: Auto-pick GOD on timeout or null actionId
+  it('Scenario F: Should auto-pick a random god when target is GOD and actionId is null, resolving targetPlayerId and playerName', () => {
+    const lobby = createBaseLobby('drafting');
+    lobby.config.allowedPantheons = ['greek'];
+    lobby.picks = [
+      { playerId: 10, godId: null, team: 'A', color: 'red', position: 'corner', playerName: 'PlayerOne' }
+    ];
+    
+    const updated = processTurnAction(lobby, null as any, 'A', undefined, undefined, undefined, 1000);
+    
+    expect(updated.picks[0].godId).toBeDefined();
+    expect(updated.picks[0].godId).not.toBeNull();
+    expect(updated.picks[0].isRandom).toBe(true);
+    expect(updated.picks[0].playerName).toBe('PlayerOne');
+    
+    expect(updated.replayLog).toHaveLength(1);
+    expect(updated.replayLog[0].isRandom).toBe(true);
+    expect(updated.replayLog[0].playerId).toBe(10);
+    expect(updated.replayLog[0].target).toBe('GOD');
+  });
+
+  // Scenario G: Auto-pick BAN on timeout or null actionId
+  it('Scenario G: Should auto-ban a random god when action is BAN and actionId is null', () => {
+    const lobby = createBaseLobby('drafting');
+    lobby.turnOrder = [
+      { player: 'A', action: 'BAN', target: 'GOD', modifier: 'EXCLUSIVE', execution: 'NORMAL' }
+    ];
+    lobby.config.allowedPantheons = ['greek'];
+    
+    const updated = processTurnAction(lobby, null as any, 'A', undefined, undefined, undefined, 1000);
+    
+    expect(updated.bans).toHaveLength(1);
+    expect(updated.bans[0]).toBeDefined();
+    expect(updated.bans[0]).not.toBeNull();
+    
+    expect(updated.replayLog).toHaveLength(1);
+    expect(updated.replayLog[0].isRandom).toBe(true);
+    expect(updated.replayLog[0].action).toBe('BAN');
+  });
 });
 
 describe('pureDraftEngine > processReportAction', () => {

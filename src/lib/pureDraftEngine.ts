@@ -1,5 +1,7 @@
 import { LobbyConfig, DraftTurn, Lobby, PickEntry } from '../types';
 import { getMCLPicks, getMCLTeamOrder } from '../data/draft';
+import { MAPS } from '../data/maps';
+import { MAJOR_GODS } from '../data/gods';
 
 /**
  * Compute deterministic, immutable map and god draft turn sequences for the specified game and configuration.
@@ -411,6 +413,88 @@ export function processTurnAction(
 
     return true;
   };
+
+  if (actionId === null || actionId === undefined) {
+    if (currentTurn.action !== 'REVEAL') {
+      if (currentTurn.target === 'MAP') {
+        const allowedMaps = Array.isArray(nextLobby.config.allowedMaps) && nextLobby.config.allowedMaps.length > 0 
+          ? nextLobby.config.allowedMaps 
+          : MAPS.map(m => m.id);
+          
+        const mapBans = Array.isArray(nextLobby.mapBans) ? nextLobby.mapBans : [];
+        const seriesMaps = Array.isArray(nextLobby.seriesMaps) ? nextLobby.seriesMaps : [];
+        
+        const availableMaps = MAPS.filter(m => 
+          allowedMaps.includes(m.id) && 
+          !mapBans.includes(m.id) && 
+          !seriesMaps.includes(m.id)
+        );
+        if (availableMaps.length > 0) {
+          actionId = availableMaps[Math.floor(Math.random() * availableMaps.length)].id;
+        } else {
+          throw new Error("No available maps for random selection");
+        }
+      } else if (currentTurn.target === 'GOD') {
+        const allowedPantheons = Array.isArray(nextLobby.config.allowedPantheons) ? nextLobby.config.allowedPantheons : [];
+        const bans = Array.isArray(nextLobby.bans) ? nextLobby.bans : [];
+        const picks = Array.isArray(nextLobby.picks) ? nextLobby.picks : [];
+        
+        if (currentTurn.action === 'SNIPE') {
+          const opponentTeam = executionTeam === 'A' ? 'B' : 'A';
+          const opponentPicks = picks.filter(p => p.team === opponentTeam && p.godId !== null).map(p => p.godId!);
+          if (opponentPicks.length > 0) {
+            actionId = opponentPicks[Math.floor(Math.random() * opponentPicks.length)];
+          } else {
+            const availableGods = MAJOR_GODS.filter(g => !bans.includes(g.id) && !picks.some(p => p.godId === g.id));
+            if (availableGods.length > 0) {
+              actionId = availableGods[Math.floor(Math.random() * availableGods.length)].id;
+            } else {
+              throw new Error("No available gods for random selection");
+            }
+          }
+        } else {
+          const availableGods = MAJOR_GODS.filter(g => {
+            const isAllowed = allowedPantheons.length === 0 || 
+                              allowedPantheons.some(p => p.toLowerCase() === g.id.toLowerCase()) ||
+                              allowedPantheons.some(p => p.toLowerCase() === g.culture.toLowerCase());
+            const isBanned = bans.includes(g.id);
+            const isPicked = picks.some(p => p.godId === g.id);
+            const isPickedByMyTeam = picks.some(p => p.team === executionTeam && p.godId === g.id);
+            
+            if (!isAllowed || isBanned) return false;
+            if (currentTurn.action === 'PICK') {
+              if (isPickedByMyTeam) return false;
+              if (nextLobby.config.isExclusive && isPicked) return false;
+            } else if (currentTurn.action === 'BAN') {
+              if (isPicked) return false;
+            }
+            return true;
+          });
+          if (availableGods.length > 0) {
+            actionId = availableGods[Math.floor(Math.random() * availableGods.length)].id;
+          } else {
+            throw new Error("No available gods for random selection");
+          }
+          
+          // Resolve targetPlayerId and playerName if they are undefined
+          const pickIndex = nextLobby.picks.findIndex(p => p.team === executionTeam && p.godId === null);
+          if (pickIndex !== -1) {
+            if (targetPlayerId === undefined) {
+              targetPlayerId = nextLobby.picks[pickIndex].playerId;
+            }
+            if (!playerName) {
+              playerName = nextLobby.picks[pickIndex].playerName;
+            }
+          }
+        }
+      }
+      
+      if (!options) {
+        options = {};
+      }
+      options.isRandom = true;
+    }
+  }
 
   if (currentTurn.action === 'REVEAL') {
     nextLobby.hiddenActions.forEach(ha => {

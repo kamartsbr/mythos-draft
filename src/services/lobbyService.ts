@@ -471,11 +471,34 @@ export const lobbyService = {
     if (IS_DEV) {
       const lobby = getLocalLobby(id);
       if (lobby) {
+        const duration = lobby.config.timerDuration || 60;
+        let newStart = Date.now();
+        let newEndsAt = Date.now() + (duration * 1000);
+        
+        if (lobby.isPaused) {
+          if (lobby.pausedTimeLeft !== undefined && lobby.pausedTimeLeft !== null) {
+            newStart = Date.now() - (duration - lobby.pausedTimeLeft) * 1000;
+            newEndsAt = newStart + (duration * 1000);
+          } else if (lobby.timerStart && lobby.timerPausedAt) {
+            const pausedAt = typeof lobby.timerPausedAt === 'number' ? lobby.timerPausedAt : new Date(lobby.timerPausedAt as any).getTime();
+            const pausedDuration = Date.now() - pausedAt;
+            const oldStart = typeof lobby.timerStart === 'number' ? lobby.timerStart : new Date(lobby.timerStart as any).getTime();
+            newStart = oldStart + pausedDuration;
+            
+            const oldEndsAt = lobby.turnEndsAt 
+              ? (typeof lobby.turnEndsAt === 'number' ? lobby.turnEndsAt : new Date(lobby.turnEndsAt as any).getTime()) 
+              : (oldStart + duration * 1000);
+            newEndsAt = oldEndsAt + pausedDuration;
+          }
+        }
+
         setLocalLobby(id, {
           ...lobby,
           isPaused: false,
-          timerStart: Date.now() as any,
+          timerStart: newStart as any,
+          turnEndsAt: newEndsAt as any,
           timerPausedAt: null,
+          pausedTimeLeft: null,
           lastActivityAt: Date.now() as any
         });
       }
@@ -490,12 +513,31 @@ export const lobbyService = {
         const data = normalizeLobbyData(lobbyDoc.data());
         if (!data.isPaused) return;
 
+        const duration = data.config.timerDuration || 60;
+        let newStartVal = Date.now();
+        let newEndsAtVal = Date.now() + (duration * 1000);
+
+        if (data.pausedTimeLeft !== undefined && data.pausedTimeLeft !== null) {
+          newStartVal = Date.now() - (duration - data.pausedTimeLeft) * 1000;
+          newEndsAtVal = newStartVal + (duration * 1000);
+        } else if (data.timerStart && data.timerPausedAt) {
+          const pausedAt = getMillis(data.timerPausedAt);
+          const pausedDuration = Date.now() - pausedAt;
+          const oldStart = getMillis(data.timerStart);
+          newStartVal = oldStart + pausedDuration;
+          
+          const oldEndsAt = data.turnEndsAt ? getMillis(data.turnEndsAt) : (oldStart + duration * 1000);
+          newEndsAtVal = oldEndsAt + pausedDuration;
+        }
+
         const updates: Partial<Lobby> = {
           captain1Active: true,
           captain2Active: true,
           isPaused: false,
-          timerStart: now(),
+          timerStart: Timestamp.fromMillis(newStartVal),
+          turnEndsAt: Timestamp.fromMillis(newEndsAtVal),
           timerPausedAt: null,
+          pausedTimeLeft: null,
           lastActivityAt: now()
         };
 
@@ -547,6 +589,7 @@ export const lobbyService = {
           const duration = data.config.timerDuration || 60;
           const newStartTimeMillis = nowVal - (duration - data.pausedTimeLeft) * 1000;
           updates.timerStart = Timestamp.fromMillis(newStartTimeMillis);
+          updates.turnEndsAt = Timestamp.fromMillis(newStartTimeMillis + (duration * 1000));
           updates.pausedTimeLeft = null;
           updates.timerPausedAt = null;
         }
@@ -765,6 +808,11 @@ export const lobbyService = {
              const pausedDuration = nowVal - pausedAt;
              const oldStart = getMillis(data.timerStart);
              updates.timerStart = Timestamp.fromMillis(oldStart + pausedDuration);
+             
+             const duration = data.config.timerDuration || 60;
+             const oldEndsAt = data.turnEndsAt ? getMillis(data.turnEndsAt) : (oldStart + duration * 1000);
+             updates.turnEndsAt = Timestamp.fromMillis(oldEndsAt + pausedDuration);
+             
              updates.timerPausedAt = null;
              updates.isPaused = false;
           }
@@ -1283,6 +1331,8 @@ export const lobbyService = {
           updates.status = 'drafting';
           let startingTurn = 0;
           updates.timerStart = Date.now() as any;
+          const duration = data.config.timerDuration || 60;
+          updates.turnEndsAt = Date.now() + (duration * 1000);
           
           let preSelectedMap = data.seriesMaps?.[data.currentGame - 1];
 
@@ -1355,9 +1405,8 @@ export const lobbyService = {
                   : Date.now();
                 updates.turnEndsAt = timerStartMs + (duration * 1000);
               } else {
-                // In production, timerStartNow is serverTimestamp sentinel
-                // Use the same sentinel + offset instead of mixing with Date.now()
-                updates.turnEndsAt = serverTimestamp();
+                // In production, use client-calculated future timestamp
+                updates.turnEndsAt = Timestamp.fromMillis(Date.now() + (duration * 1000));
               }
               
               let finalTurnOrder = data.turnOrder;
@@ -1397,9 +1446,23 @@ export const lobbyService = {
 
           if (isAReady && isBReady) {
             updates.status = 'drafting';
-            updates.turn = 0;
+            let startingTurn = 0;
             updates.timerStart = now();
-            const currentTurn = data.turnOrder[0];
+            const duration = data.config.timerDuration || 60;
+            updates.turnEndsAt = Timestamp.fromMillis(Date.now() + (duration * 1000));
+
+            let preSelectedMap = data.seriesMaps?.[data.currentGame - 1];
+
+            if (preSelectedMap && preSelectedMap !== "") {
+              updates.selectedMap = preSelectedMap;
+              
+              if (data.turnOrder?.[0]?.target === 'MAP' && data.turnOrder?.[0]?.action === 'PICK') {
+                startingTurn = 1;
+              }
+            }
+
+            updates.turn = startingTurn;
+            const currentTurn = data.turnOrder?.[startingTurn];
             if (currentTurn) {
               updates.phase = currentTurn.target === 'MAP' 
                 ? (currentTurn.action === 'BAN' ? 'map_ban' : 'map_pick') 

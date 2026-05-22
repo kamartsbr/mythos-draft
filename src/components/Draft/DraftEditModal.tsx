@@ -27,6 +27,8 @@ export function DraftEditModal({ isOpen, onClose, lobby, t }: DraftEditModalProp
   const [name, setName] = useState(lobby.config.name);
   const [captain1Name, setCaptain1Name] = useState(lobby.captain1Name || '');
   const [captain2Name, setCaptain2Name] = useState(lobby.captain2Name || '');
+  const [teamAName, setTeamAName] = useState(lobby.teamAName || '');
+  const [teamBName, setTeamBName] = useState(lobby.teamBName || '');
   const [hudScale, setHudScale] = useState(lobby.config.streamerHudSize || 0.75);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -37,10 +39,12 @@ export function DraftEditModal({ isOpen, onClose, lobby, t }: DraftEditModalProp
       setName(lobby.config.name);
       setCaptain1Name(lobby.captain1Name || '');
       setCaptain2Name(lobby.captain2Name || '');
+      setTeamAName(lobby.teamAName || '');
+      setTeamBName(lobby.teamBName || '');
       setHudScale(lobby.config.streamerHudSize || 0.75);
       setSaveError(null);
     }
-  }, [isOpen, lobby.config.name, lobby.captain1Name, lobby.captain2Name, lobby.config.streamerHudSize]);
+  }, [isOpen, lobby.config.name, lobby.captain1Name, lobby.captain2Name, lobby.teamAName, lobby.teamBName, lobby.config.streamerHudSize]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -50,6 +54,8 @@ export function DraftEditModal({ isOpen, onClose, lobby, t }: DraftEditModalProp
         name,
         captain1Name,
         captain2Name,
+        teamAName,
+        teamBName,
         streamerHudSize: hudScale
       });
       onClose();
@@ -115,10 +121,38 @@ export function DraftEditModal({ isOpen, onClose, lobby, t }: DraftEditModalProp
                 />
               </div>
 
-              {/* Captains Grid */}
+              {/* Teams Grid */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-blue-500 uppercase tracking-widest flex items-center gap-2">
+                    <Layout className="w-3 h-3" />
+                    Nome do Time A (Host)
+                  </label>
+                  <input 
+                    type="text"
+                    value={teamAName}
+                    onChange={(e) => setTeamAName(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500/50 transition-all text-white"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-red-500 uppercase tracking-widest flex items-center gap-2">
+                    <Layout className="w-3 h-3" />
+                    Nome do Time B (Guest)
+                  </label>
+                  <input 
+                    type="text"
+                    value={teamBName}
+                    onChange={(e) => setTeamBName(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-500/50 transition-all text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Captains Grid */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-blue-500/70 uppercase tracking-widest flex items-center gap-2">
                     <User className="w-3 h-3" />
                     Capitão 1 (Host)
                   </label>
@@ -126,11 +160,11 @@ export function DraftEditModal({ isOpen, onClose, lobby, t }: DraftEditModalProp
                     type="text"
                     value={captain1Name}
                     onChange={(e) => setCaptain1Name(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500/50 transition-all text-white"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-blue-500/50 transition-all text-slate-300"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-red-500 uppercase tracking-widest flex items-center gap-2">
+                  <label className="text-[10px] font-black text-red-500/70 uppercase tracking-widest flex items-center gap-2">
                     <User className="w-3 h-3" />
                     Capitão 2 (Guest)
                   </label>
@@ -138,7 +172,7 @@ export function DraftEditModal({ isOpen, onClose, lobby, t }: DraftEditModalProp
                     type="text"
                     value={captain2Name}
                     onChange={(e) => setCaptain2Name(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-500/50 transition-all text-white"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-red-500/50 transition-all text-slate-300"
                   />
                 </div>
               </div>

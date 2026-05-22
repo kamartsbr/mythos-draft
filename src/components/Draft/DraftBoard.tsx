@@ -380,7 +380,7 @@ export function DraftBoard(props: DraftBoardProps) {
 
               <div className="flex gap-8">
                 <div className="flex flex-col items-center gap-2">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{lobby.captain1Name || t.teamA}</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{(lobby.teamAName || lobby.captain1Name) || t.teamA}</span>
                   <div className={cn(
                     "px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
                     displayReadyA ? "bg-green-500/20 text-green-500" : "bg-slate-800 text-slate-600"
@@ -390,7 +390,7 @@ export function DraftBoard(props: DraftBoardProps) {
                 </div>
                 <div className="h-8 w-px bg-slate-800" />
                 <div className="flex flex-col items-center gap-2">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{lobby.captain2Name || t.teamB}</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{(lobby.teamBName || lobby.captain2Name) || t.teamB}</span>
                   <div className={cn(
                     "px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
                     displayReadyB ? "bg-green-500/20 text-green-500" : "bg-slate-800 text-slate-600"
@@ -451,7 +451,7 @@ export function DraftBoard(props: DraftBoardProps) {
 
               <div className="flex gap-8">
                 <div className="flex flex-col items-center gap-2">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{lobby.captain1Name || t.teamA}</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{(lobby.teamAName || lobby.captain1Name) || t.teamA}</span>
                   <div className={cn(
                     "px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
                     displayReadyA ? "bg-green-500/20 text-green-500" : "bg-slate-800 text-slate-600"
@@ -461,7 +461,7 @@ export function DraftBoard(props: DraftBoardProps) {
                 </div>
                 <div className="h-8 w-px bg-slate-800" />
                 <div className="flex flex-col items-center gap-2">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{lobby.captain2Name || t.teamB}</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{(lobby.teamBName || lobby.captain2Name) || t.teamB}</span>
                   <div className={cn(
                     "px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
                     displayReadyB ? "bg-green-500/20 text-green-500" : "bg-slate-800 text-slate-600"
@@ -542,13 +542,13 @@ export function DraftBoard(props: DraftBoardProps) {
                   onClick={() => reportScore('A', true)}
                   className="flex-1 py-3 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-500 font-black rounded-xl uppercase tracking-widest transition-all text-xs"
                 >
-                  FORCE WIN {(lobby.captain1Name || t.teamA)}
+                  FORCE WIN {((lobby.teamAName || lobby.captain1Name) || t.teamA)}
                 </button>
                 <button
                   onClick={() => reportScore('B', true)}
                   className="flex-1 py-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-500 font-black rounded-xl uppercase tracking-widest transition-all text-xs"
                 >
-                  FORCE WIN {(lobby.captain2Name || t.teamB)}
+                  FORCE WIN {((lobby.teamBName || lobby.captain2Name) || t.teamB)}
                 </button>
               </div>
             </div>
@@ -570,7 +570,7 @@ export function DraftBoard(props: DraftBoardProps) {
                     "w-12 h-12 transition-colors",
                     confirmWinner === 'A' ? "text-blue-500" : "text-slate-700 group-hover:text-blue-400"
                   )} />
-                  <span className="font-black text-xl uppercase tracking-tight">{(lobby.captain1Name || t.teamA)} {t.won}</span>
+                  <span className="font-black text-xl uppercase tracking-tight">{((lobby.teamAName || lobby.captain1Name) || t.teamA)} {t.won}</span>
                 </button>
                 <button
                   onClick={() => setConfirmWinner('B')}
@@ -585,7 +585,7 @@ export function DraftBoard(props: DraftBoardProps) {
                     "w-12 h-12 transition-colors",
                     confirmWinner === 'B' ? "text-red-500" : "text-slate-700 group-hover:text-red-400"
                   )} />
-                  <span className="font-black text-xl uppercase tracking-tight">{(lobby.captain2Name || t.teamB)} {t.won}</span>
+                  <span className="font-black text-xl uppercase tracking-tight">{((lobby.teamBName || lobby.captain2Name) || t.teamB)} {t.won}</span>
                 </button>
               </div>
 
@@ -662,7 +662,7 @@ export function DraftBoard(props: DraftBoardProps) {
 
           <div className="mt-12 flex items-center justify-center gap-8">
             <div className="flex flex-col items-center gap-2">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{lobby.captain1Name || t.teamA}</span>
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{(lobby.teamAName || lobby.captain1Name) || t.teamA}</span>
               <div className={cn(
                 "px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
                 lobby.reportVoteA ? "bg-green-500/20 text-green-500" : "bg-slate-800 text-slate-600"
@@ -672,7 +672,7 @@ export function DraftBoard(props: DraftBoardProps) {
             </div>
             <div className="h-8 w-px bg-slate-800" />
             <div className="flex flex-col items-center gap-2">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{lobby.captain2Name || t.teamB}</span>
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{(lobby.teamBName || lobby.captain2Name) || t.teamB}</span>
               <div className={cn(
                 "px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
                 lobby.reportVoteB ? "bg-green-500/20 text-green-500" : "bg-slate-800 text-slate-600"
@@ -883,7 +883,7 @@ export function DraftBoard(props: DraftBoardProps) {
                 </h3>
                 
                 <p className="text-slate-300 mb-8 leading-relaxed">
-                  {lobby.resetRequest.requestedBy === 'A' ? (lobby.captain1Name || t.teamA) : (lobby.captain2Name || t.teamB)} {t.requestedResetDesc || "has requested to reset the current game draft due to a mistake."}
+                  {lobby.resetRequest.requestedBy === 'A' ? ((lobby.teamAName || lobby.captain1Name) || t.teamA) : ((lobby.teamBName || lobby.captain2Name) || t.teamB)} {t.requestedResetDesc || "has requested to reset the current game draft due to a mistake."}
                 </p>
 
                 {((isCaptain1 && lobby.resetRequest.requestedBy === 'B') || (isCaptain2 && lobby.resetRequest.requestedBy === 'A')) ? (
@@ -938,8 +938,8 @@ export function DraftBoard(props: DraftBoardProps) {
                   {!lobby.captain1Active && !lobby.captain2Active 
                     ? t.bothLeft
                     : !lobby.captain1Active 
-                      ? `${lobby.captain1Name || 'Host'} ${t.leftDraft}`
-                      : `${lobby.captain2Name || 'Guest'} ${t.leftDraft}`
+                      ? `${(lobby.teamAName || lobby.captain1Name) || 'Host'} ${t.leftDraft}`
+                      : `${(lobby.teamBName || lobby.captain2Name) || 'Guest'} ${t.leftDraft}`
                   }
                   <br />
                   {t.waitingForReturn}
@@ -1085,7 +1085,7 @@ function ReadyPhase(props: {
 
           <div className="flex gap-8">
             <div className="flex flex-col items-center gap-2">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{lobby.captain1Name || t.teamA}</span>
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{(lobby.teamAName || lobby.captain1Name) || t.teamA}</span>
               <div className={cn(
                 "px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
                 readyA_next ? "bg-green-500/20 text-green-500" : "bg-slate-800 text-slate-600"
@@ -1095,7 +1095,7 @@ function ReadyPhase(props: {
             </div>
             <div className="h-8 w-px bg-slate-800" />
             <div className="flex flex-col items-center gap-2">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{lobby.captain2Name || t.teamB}</span>
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{(lobby.teamBName || lobby.captain2Name) || t.teamB}</span>
               <div className={cn(
                 "px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
                 readyB_next ? "bg-green-500/20 text-green-500" : "bg-slate-800 text-slate-600"

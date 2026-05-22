@@ -121,6 +121,7 @@ function AppContent() {
     forceReset,
     resetCurrentGame,
     forceFinish,
+    forceWO,
     forceUnpause,
     forceStartDraft,
     isAuthReady,
@@ -283,7 +284,7 @@ function AppContent() {
 
     const initialSeriesMaps: string[] = [];
 
-    if (config.preset === 'MCL') {
+    if (config.preset === 'MCL' || config.preset === 'MCL_PLAYOFFS') {
       const mclPicks = getMCLPicks(1);
       picks.push(...mclPicks);
     } else {
@@ -350,6 +351,14 @@ function AppContent() {
         initialSeriesMaps[0] = "";
         initialSeriesMaps[1] = "";
         initialSeriesMaps[2] = roundMap;
+      }
+    } else if (config.preset === 'MCL_PLAYOFFS') {
+      const totalGames = config.seriesType === 'BO7' ? 7 : 5;
+      const lastMapId = config.playoffsLastMap || '';
+
+      // Preencher todos os slots como vazio, exceto o último (placeholder)
+      for (let i = 0; i < totalGames; i++) {
+        initialSeriesMaps[i] = i === totalGames - 1 ? lastMapId : '';
       }
     }
 
@@ -919,6 +928,7 @@ function AppContent() {
               forceReset={forceReset}
               resetCurrentGame={resetCurrentGame}
               forceFinish={forceFinish}
+              forceWO={forceWO}
               forceUnpause={forceUnpause}
               forceStartDraft={forceStartDraft}
               leaveSlot={leaveSlot}

@@ -116,7 +116,7 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ lobby, isVisible, 
             const roster = team === 'A' ? game.rosterA : game.rosterB;
             const safeRoster = Array.isArray(roster) ? roster : [];
             const playerInRoster = safeRoster.find(p => p.playerId === pos.playerId);
-            playerName = playerInRoster?.playerName || (team === 'A' ? (lobby.captain1Name || 'Team A') : (lobby.captain2Name || 'Team B'));
+            playerName = playerInRoster?.playerName || (team === 'A' ? ((lobby.teamAName || lobby.captain1Name) || 'Team A') : ((lobby.teamBName || lobby.captain2Name) || 'Team B'));
           } else {
             // Logic for current draft visualization
             const pick = picks.find(p => p.playerId === pos.playerId);

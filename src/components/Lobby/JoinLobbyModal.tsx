@@ -189,7 +189,7 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
         setLocalNickname(forjaTeam.team_name);
       }
     } else if (teamSize === 1) {
-      const existingTeamName = role === 'A' ? lobby.captain1Name : lobby.captain2Name;
+      const existingTeamName = role === 'A' ? (lobby.teamAName || lobby.captain1Name) : (lobby.teamBName || lobby.captain2Name);
       setTeamName(prev => {
         if (!roleChanged && prev) return prev;
         return existingTeamName || prev || (role === 'A' ? t.teamA : t.teamB);

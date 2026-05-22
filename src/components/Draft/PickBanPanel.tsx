@@ -438,7 +438,7 @@ export function PickBanPanel({
             "px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest",
             historyGame.winner === 'A' ? "bg-blue-500/20 text-blue-500" : "bg-red-500/20 text-red-500"
           )}>
-            {historyGame.winner === 'A' ? (lobby.captain1Name || (lobby.config.teamSize === 1 ? t.roleHost : t.teamA)) : (lobby.captain2Name || (lobby.config.teamSize === 1 ? t.roleGuest : t.teamB))} {t.won}
+            {historyGame.winner === 'A' ? ((lobby.teamAName || lobby.captain1Name) || (lobby.config.teamSize === 1 ? t.roleHost : t.teamA)) : ((lobby.teamBName || lobby.captain2Name) || (lobby.config.teamSize === 1 ? t.roleGuest : t.teamB))} {t.won}
           </div>
         </div>
 
@@ -563,13 +563,13 @@ export function PickBanPanel({
                   <div className="flex items-center gap-2">
                     <div className={cn("w-2 h-2 rounded-full", lobby.readyA_report ? "bg-green-500" : "bg-slate-700")} />
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                      {lobby.captain1Name || (lobby.config.teamSize === 1 ? t.roleHost : t.teamA)}
+                      {(lobby.teamAName || lobby.captain1Name) || (lobby.config.teamSize === 1 ? t.roleHost : t.teamA)}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className={cn("w-2 h-2 rounded-full", lobby.readyB_report ? "bg-green-500" : "bg-slate-700")} />
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                      {lobby.captain2Name || (lobby.config.teamSize === 1 ? t.roleGuest : t.teamB)}
+                      {(lobby.teamBName || lobby.captain2Name) || (lobby.config.teamSize === 1 ? t.roleGuest : t.teamB)}
                     </span>
                   </div>
                 </div>
@@ -863,13 +863,13 @@ export function PickBanPanel({
             <span className="text-xs font-black text-slate-500 uppercase tracking-[0.2em]">{t.seriesScore}</span>
             <div className="flex items-center gap-8">
               <div className="flex items-center gap-4">
-                <span className="text-sm font-black text-slate-400 uppercase tracking-widest">{lobby.captain1Name || (lobby.config.teamSize === 1 ? t.roleHost : t.teamA)}</span>
+                <span className="text-sm font-black text-slate-400 uppercase tracking-widest">{(lobby.teamAName || lobby.captain1Name) || (lobby.config.teamSize === 1 ? t.roleHost : t.teamA)}</span>
                 <span className="text-2xl font-black text-blue-500">{lobby.scoreA}</span>
               </div>
               <div className="text-xl font-black text-slate-700 italic uppercase tracking-tighter">VS</div>
               <div className="flex items-center gap-4">
                 <span className="text-2xl font-black text-red-500">{lobby.scoreB}</span>
-                <span className="text-sm font-black text-slate-400 uppercase tracking-widest">{lobby.captain2Name || (lobby.config.teamSize === 1 ? t.roleGuest : t.teamB)}</span>
+                <span className="text-sm font-black text-slate-400 uppercase tracking-widest">{(lobby.teamBName || lobby.captain2Name) || (lobby.config.teamSize === 1 ? t.roleGuest : t.teamB)}</span>
               </div>
             </div>
           </div>

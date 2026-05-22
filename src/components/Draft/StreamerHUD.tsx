@@ -172,13 +172,13 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
   const displayPicksA = isViewingHistory && historyGame
     ? (historyGame.rosterA || historyGame.picksA.map((godId, i) => ({ godId, team: 'A', playerName: `Player ${i+1}`, playerId: i+1 })))
     : (is1v1 && isGodPickerPhase 
-        ? [{ godId: lobby.pickerVoteA, team: 'A', playerName: lobby.captain1Name || 'Host', playerId: 1 }]
+        ? [{ godId: lobby.pickerVoteA, team: 'A', playerName: (lobby.teamAName || lobby.captain1Name) || 'Host', playerId: 1 }]
         : teamAPicks);
   
   const displayPicksB = isViewingHistory && historyGame
     ? (historyGame.rosterB || historyGame.picksB.map((godId, i) => ({ godId, team: 'B', playerName: `Player ${i+1}`, playerId: i+1 })))
     : (is1v1 && isGodPickerPhase
-        ? [{ godId: lobby.pickerVoteB, team: 'B', playerName: lobby.captain2Name || 'Guest', playerId: 1 }]
+        ? [{ godId: lobby.pickerVoteB, team: 'B', playerName: (lobby.teamBName || lobby.captain2Name) || 'Guest', playerId: 1 }]
         : teamBPicks);
 
   const getGod = (godId: string | null) => MAJOR_GODS.find(g => g.id === godId);
@@ -203,7 +203,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
 
     if (isViewingHistory) {
       if (displayedGameWinner) {
-        messages.push(`${t.victory} - ${displayedGameWinner === 'A' ? (lobby.captain1Name || t.teamA) : (lobby.captain2Name || t.teamB)}`);
+        messages.push(`${t.victory} - ${displayedGameWinner === 'A' ? ((lobby.teamAName || lobby.captain1Name) || t.teamA) : ((lobby.teamBName || lobby.captain2Name) || t.teamB)}`);
       } else {
         messages.push(`${t.game} ${displayGameIdx + 1}`);
       }
@@ -470,7 +470,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                       "text-5xl font-black uppercase tracking-tighter drop-shadow-[0_0_20px_rgba(255,255,255,0.3)] whitespace-nowrap",
                       displayedGameWinner === 'A' ? "text-cyan-400" : "text-white"
                     )}>
-                      {lobby.captain1Name || 'TEAM A'}
+                      {(lobby.teamAName || lobby.captain1Name) || 'TEAM A'}
                     </span>
                   </div>
                   <div className="h-1.5 w-full bg-gradient-to-l from-cyan-500 to-transparent mt-2 shadow-[0_0_15px_rgba(6,182,212,0.5)]" />
@@ -509,7 +509,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                       "text-5xl font-black uppercase tracking-tighter drop-shadow-[0_0_20px_rgba(255,255,255,0.3)] whitespace-nowrap",
                       displayedGameWinner === 'B' ? "text-red-400" : "text-white"
                     )}>
-                      {lobby.captain2Name || 'TEAM B'}
+                      {(lobby.teamBName || lobby.captain2Name) || 'TEAM B'}
                     </span>
                     {((lobby.status === 'finished' && lobby.scoreB > lobby.scoreA) || (lobby.status !== 'finished' && isViewingHistory && displayedGameWinner === 'B')) && (
                       <Trophy className={cn(
@@ -595,7 +595,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: playerColor, boxShadow: `0 0 10px ${playerColor}` }} />
                           <span className="text-[12px] font-black uppercase tracking-[0.2em]" style={{ color: playerColor }}>
-                            {is1v1 ? (lobby.captain1Name || 'HOST') : (pick.playerName || `PLAYER ${pick.playerId}`)}
+                            {is1v1 ? ((lobby.teamAName || lobby.captain1Name) || 'HOST') : (pick.playerName || `PLAYER ${pick.playerId}`)}
                           </span>
                         </div>
                         <span className={cn("text-3xl font-black uppercase text-white tracking-tight drop-shadow-xl", isHovered && "text-slate-400")}>
@@ -706,7 +706,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                         <div className="flex items-center gap-2 flex-row-reverse">
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: playerColor, boxShadow: `0 0 10px ${playerColor}` }} />
                           <span className="text-[12px] font-black uppercase tracking-[0.2em]" style={{ color: playerColor }}>
-                            {is1v1 ? (lobby.captain2Name || 'GUEST') : (pick.playerName || `PLAYER ${pick.playerId}`)}
+                            {is1v1 ? ((lobby.teamBName || lobby.captain2Name) || 'GUEST') : (pick.playerName || `PLAYER ${pick.playerId}`)}
                           </span>
                         </div>
                         <span className={cn("text-3xl font-black uppercase text-white tracking-tight drop-shadow-xl", isHovered && "text-slate-400")}>
@@ -762,7 +762,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                         )}>
                           <Trophy className="w-8 h-8" />
                           <span className="text-[10px] font-black uppercase tracking-widest">
-                            {winner === 'A' ? (lobby.captain1Name || t.teamA) : (lobby.captain2Name || t.teamB)} {t.won || 'WON'}
+                            {winner === 'A' ? ((lobby.teamAName || lobby.captain1Name) || t.teamA) : ((lobby.teamBName || lobby.captain2Name) || t.teamB)} {t.won || 'WON'}
                           </span>
                         </div>
                       </div>

@@ -403,5 +403,6 @@
     "email": "goldpentakill@gmail.com",
     "pixCopied": "PIX Key copied!",
     "pixCopyFailed": "Failed to copy PIX key to clipboard"
-  }
+  },
+  "playoffsProvisionalWarning": "⚠️ Attention: Official final maps have not yet been approved by the organization. The current selection serves as a provisional setup for the draft."
 }

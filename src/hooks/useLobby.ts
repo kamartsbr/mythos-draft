@@ -295,6 +295,11 @@ export function useLobby(initialNickname: string) {
     await lobbyService.forceFinish(lobbyId);
   }, [lobbyId]);
 
+  const forceWO = useCallback(async (winner: 'A' | 'B', fillMaxScore: boolean = false) => {
+    if (!lobbyId) return;
+    await lobbyService.forceWO(lobbyId, winner, fillMaxScore);
+  }, [lobbyId]);
+
   const forceUnpause = useCallback(async () => {
     if (!lobbyId) return;
     await lobbyService.forceUnpause(lobbyId);
@@ -338,6 +343,7 @@ export function useLobby(initialNickname: string) {
     forceReset,
     resetCurrentGame,
     forceFinish,
+    forceWO,
     forceUnpause,
     forceStartDraft,
     isAuthReady,

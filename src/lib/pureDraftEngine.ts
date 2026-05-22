@@ -41,6 +41,21 @@ export function calculateNextTurnOrder(
       // FORJA or preset with hasMap3RandomRoll: Map 3 is system-rolled (ADMIN turn)
       mapOrder.push({ player: 'ADMIN', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
     }
+  } else if (cfg.preset === 'MCL_PLAYOFFS') {
+    const totalGames = cfg.seriesType === 'BO7' ? 7 : 5;
+    const isLastGame = gameNumber === totalGames;
+
+    if (!isLastGame) {
+      if (gameNumber === 1) {
+        // G1: Host (Team A) always picks map
+        mapOrder.push({ player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
+      } else {
+        // G2+: Loser of previous game picks map
+        const mapPicker: 'A' | 'B' = lastWinner === 'A' ? 'B' : 'A';
+        mapOrder.push({ player: mapPicker, action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
+      }
+    }
+    // Last game: no map turn — slot is pre-filled in seriesMaps at lobby creation
   } else if (cfg.seriesType !== 'BO1') {
     // Standard Series Logic (BO3, BO5, etc.) for non-MCL/non-FORJA presets
     if (gameNumber === 1) {
@@ -112,8 +127,8 @@ export function calculateNextTurnOrder(
   // MCL / FORJA: Game 2 starts with B.
   // Game 3+: starts with B if lastWinner was A (the loser of previous game picks first).
   const startsWithB =
-    ((cfg.preset === 'MCL' || cfg.preset === 'FORJA') && gameNumber === 2) ||
-    ((cfg.preset === 'MCL' || cfg.preset === 'FORJA') && gameNumber > 2 && lastWinner === 'A');
+    ((cfg.preset === 'MCL' || cfg.preset === 'FORJA' || cfg.preset === 'MCL_PLAYOFFS') && gameNumber === 2) ||
+    ((cfg.preset === 'MCL' || cfg.preset === 'FORJA' || cfg.preset === 'MCL_PLAYOFFS') && gameNumber > 2 && lastWinner === 'A');
 
   // God Ban Phase
   if (cfg.hasBans) {
@@ -677,7 +692,7 @@ export function processReportAction(
         nextLobby.readyA_report = false;
         nextLobby.readyB_report = false;
 
-        if (nextLobby.config.preset === 'MCL' || nextLobby.config.preset === 'FORJA') {
+        if (nextLobby.config.preset === 'MCL' || nextLobby.config.preset === 'FORJA' || nextLobby.config.preset === 'MCL_PLAYOFFS') {
           const nextGameMap = (nextLobby.seriesMaps || [])[nextLobby.currentGame - 1];
           if (nextGameMap && nextGameMap !== '') {
             const newMCLPicks = getMCLPicks(nextLobby.currentGame);

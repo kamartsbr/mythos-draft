@@ -116,7 +116,7 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
   
   const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT' || (lobby.captain1 && lobby.captain1 === lobby.captain2);
   const isMyTeam = IS_DEV || (team === 'A' && isCaptain1) || (team === 'B' && isCaptain2);
-  const captainName = team === 'A' ? lobby.captain1Name : lobby.captain2Name;
+  const captainName = team === 'A' ? (lobby.teamAName || lobby.captain1Name) : (lobby.teamBName || lobby.captain2Name);
   const teamName = captainName || (team === 'A' ? 'Host' : 'Guest');
 
   return (

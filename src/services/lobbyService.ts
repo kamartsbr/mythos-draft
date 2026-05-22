@@ -53,6 +53,8 @@ export function lobbyDocToSummary(id: string, normalized: Lobby): LobbySummary {
     teamSize: (typeof normalized.config?.teamSize === 'number' && !isNaN(normalized.config.teamSize)) ? normalized.config.teamSize : 2,
     captain1Name: normalized.captain1Name || 'Captain 1',
     captain2Name: normalized.captain2Name || 'Captain 2',
+    teamAName: normalized.teamAName || normalized.captain1Name || 'Team A',
+    teamBName: normalized.teamBName || normalized.captain2Name || 'Team B',
     status: normalized.status || 'waiting',
     phase: normalized.phase || 'waiting',
     preset: normalized.config?.preset ?? null,
@@ -106,6 +108,8 @@ const getLocalIndex = (): LobbySummary[] => {
                 teamSize: lobby.config.teamSize ?? 2,
                 captain1Name: lobby.captain1Name || 'Captain 1',
                 captain2Name: lobby.captain2Name || 'Captain 2',
+                teamAName: lobby.teamAName || lobby.captain1Name || 'Team A',
+                teamBName: lobby.teamBName || lobby.captain2Name || 'Team B',
                 status: lobby.status || 'waiting',
                 phase: lobby.phase || 'waiting',
                 preset: lobby.config.preset ?? null,
@@ -288,6 +292,8 @@ export const lobbyService = {
           teamSize: lobby.config.teamSize,
           captain1Name: lobby.captain1Name,
           captain2Name: lobby.captain2Name,
+          teamAName: lobby.teamAName,
+          teamBName: lobby.teamBName,
           status: lobby.status,
           phase: lobby.phase,
           preset: lobby.config.preset,
@@ -340,6 +346,8 @@ export const lobbyService = {
             teamSize: (typeof normalized.config?.teamSize === 'number' && !isNaN(normalized.config.teamSize)) ? normalized.config.teamSize : 2,
             captain1Name: normalized.captain1Name || 'Captain 1',
             captain2Name: normalized.captain2Name || 'Captain 2',
+            teamAName: normalized.teamAName || normalized.captain1Name || 'Team A',
+            teamBName: normalized.teamBName || normalized.captain2Name || 'Team B',
             status: normalized.status || 'waiting',
             phase: normalized.phase || 'waiting',
             preset: normalized.config?.preset ?? null,
@@ -377,6 +385,8 @@ export const lobbyService = {
             teamSize: (typeof data.config.teamSize === 'number' && !isNaN(data.config.teamSize)) ? data.config.teamSize : 2,
             captain1Name: data.captain1Name || 'Captain 1',
             captain2Name: data.captain2Name || 'Captain 2',
+            teamAName: data.teamAName || data.captain1Name || 'Team A',
+            teamBName: data.teamBName || data.captain2Name || 'Team B',
             status: data.status || 'waiting',
             phase: data.phase || 'waiting',
             preset: data.config.preset ?? null,
@@ -927,6 +937,60 @@ export const lobbyService = {
     }
   },
 
+  async forceWO(id: string, winner: 'A' | 'B', fillMaxScore: boolean = false): Promise<void> {
+    if (IS_DEV) return;
+    try {
+      const docRef = doc(db, 'lobbies', id);
+      await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(docRef);
+        if (!snap.exists()) return;
+        const data = snap.data() as any;
+        const updates: any = {};
+        
+        const winThreshold = data.config.seriesType === 'BO7' ? 4 
+          : data.config.seriesType === 'BO5' ? 3 
+          : data.config.seriesType === 'BO3' ? 2 
+          : data.config.seriesType === 'BO2' ? 2
+          : 1;
+
+        const currentWins = winner === 'A' ? (data.scoreA || 0) : (data.scoreB || 0);
+        const missingWins = Math.max(0, winThreshold - currentWins);
+        
+        updates.status = 'finished';
+        updates.phase = 'finished';
+        updates.lastWinner = winner;
+        updates.lastActivityAt = now();
+        updates.reportVoteA = null;
+        updates.reportVoteB = null;
+
+        if (fillMaxScore) {
+          if (winner === 'A') updates.scoreA = winThreshold;
+          if (winner === 'B') updates.scoreB = winThreshold;
+        }
+
+        if (missingWins > 0) {
+          const gameResults = data.gameResults || [];
+          let nextGameNum = gameResults.length > 0 ? gameResults[gameResults.length - 1].gameNumber + 1 : 1;
+          for (let i = 0; i < missingWins; i++) {
+            gameResults.push({
+              gameNumber: nextGameNum++,
+              scoreA: 0,
+              scoreB: 0,
+              winner: winner,
+              isWO: true
+            });
+          }
+          updates.gameResults = gameResults;
+        }
+
+        transaction.update(docRef, cleanData(updates));
+      });
+      this.refreshLobbyIndex();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
+    }
+  },
+
   async forceFinish(id: string): Promise<void> {
     if (IS_DEV) {
       const lobby = getLocalLobby(id);
@@ -1194,7 +1258,7 @@ export const lobbyService = {
     }
   },
 
-  async updateLobbyAtomically(id: string, updates: { name?: string, captain1Name?: string, captain2Name?: string, streamerHudSize?: number }): Promise<void> {
+  async updateLobbyAtomically(id: string, updates: { name?: string, captain1Name?: string, captain2Name?: string, teamAName?: string, teamBName?: string, streamerHudSize?: number }): Promise<void> {
     if (IS_DEV) {
       const lobby = getLocalLobby(id);
       if (lobby) {
@@ -1202,6 +1266,8 @@ export const lobbyService = {
         if (updates.name) newLobby.config.name = updates.name;
         if (updates.captain1Name) newLobby.captain1Name = updates.captain1Name;
         if (updates.captain2Name) newLobby.captain2Name = updates.captain2Name;
+        if (updates.teamAName) newLobby.teamAName = updates.teamAName;
+        if (updates.teamBName) newLobby.teamBName = updates.teamBName;
         if (updates.streamerHudSize !== undefined) newLobby.config.streamerHudSize = updates.streamerHudSize;
         setLocalLobby(id, newLobby as Lobby);
       }
@@ -1210,8 +1276,10 @@ export const lobbyService = {
     try {
       const firestoreUpdates: any = {};
       if (updates.name) firestoreUpdates['config.name'] = updates.name;
-      if (updates.captain1Name) firestoreUpdates.captain1Name = updates.captain1Name;
-      if (updates.captain2Name) firestoreUpdates.captain2Name = updates.captain2Name;
+      if (updates.captain1Name !== undefined) firestoreUpdates.captain1Name = updates.captain1Name;
+      if (updates.captain2Name !== undefined) firestoreUpdates.captain2Name = updates.captain2Name;
+      if (updates.teamAName !== undefined) firestoreUpdates.teamAName = updates.teamAName;
+      if (updates.teamBName !== undefined) firestoreUpdates.teamBName = updates.teamBName;
       if (updates.streamerHudSize !== undefined) firestoreUpdates['config.streamerHudSize'] = updates.streamerHudSize;
 
       await updateDoc(doc(db, 'lobbies', id), cleanData(firestoreUpdates));

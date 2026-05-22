@@ -154,7 +154,7 @@ export function DraftReplay({ lobby, onClose, t, lang }: DraftReplayProps) {
         <div className="md:col-span-3 space-y-4 order-2 md:order-1">
           <h3 className="text-lg md:text-xl font-bold text-blue-500 flex items-center gap-2 mb-2 md:mb-4">
             <Shield className="w-4 h-4 md:w-5 md:h-5" />
-            {lobby.captain1Name || 'Team A'}
+            {(lobby.teamAName || lobby.captain1Name) || 'Team A'}
           </h3>
           <div className="grid grid-cols-3 md:grid-cols-1 gap-2 md:gap-3">
             {Array.from({ length: lobby.config.teamSize }).map((_, i) => {
@@ -165,7 +165,7 @@ export function DraftReplay({ lobby, onClose, t, lang }: DraftReplayProps) {
               const gameNum = currentAction?.gameNumber || 1;
               const gameHistory = lobby.history.find(h => h.gameNumber === gameNum);
               const player = gameHistory?.rosterA?.[i];
-              const playerName = player?.playerName || (lobby.config.teamSize === 1 ? (lobby.captain1Name || 'Team A') : `Player ${i + 1}`);
+              const playerName = player?.playerName || (lobby.config.teamSize === 1 ? ((lobby.teamAName || lobby.captain1Name) || 'Team A') : `Player ${i + 1}`);
 
               return (
                 <div key={i} className="h-20 md:h-24 bg-slate-900/50 border border-slate-800 rounded-xl md:rounded-2xl overflow-hidden flex items-center gap-2 md:gap-4 p-2 md:p-4">
@@ -216,7 +216,7 @@ export function DraftReplay({ lobby, onClose, t, lang }: DraftReplayProps) {
                           "text-[10px] md:text-xs font-black uppercase tracking-[0.3em] mb-1 md:mb-2",
                           currentAction.player === 'A' ? "text-blue-500" : currentAction.player === 'B' ? "text-red-500" : "text-amber-500"
                         )}>
-                          {currentAction.player === 'A' ? lobby.captain1Name : currentAction.player === 'B' ? lobby.captain2Name : 'ADMIN'} {currentAction.action}
+                          {currentAction.player === 'A' ? (lobby.teamAName || lobby.captain1Name) : currentAction.player === 'B' ? (lobby.teamBName || lobby.captain2Name) : 'ADMIN'} {currentAction.action}
                         </div>
                         <div className="text-2xl md:text-4xl font-black text-white uppercase tracking-tighter mb-2 md:mb-4">
                           {currentAction.target === 'MAP' 
@@ -307,7 +307,7 @@ export function DraftReplay({ lobby, onClose, t, lang }: DraftReplayProps) {
         {/* Right: Team B Picks */}
         <div className="md:col-span-3 space-y-4 order-3">
           <h3 className="text-lg md:text-xl font-bold text-red-500 flex items-center gap-2 mb-2 md:mb-4 justify-end">
-            {lobby.captain2Name || 'Team B'}
+            {(lobby.teamBName || lobby.captain2Name) || 'Team B'}
             <Sword className="w-4 h-4 md:w-5 md:h-5" />
           </h3>
           <div className="grid grid-cols-3 md:grid-cols-1 gap-2 md:gap-3">
@@ -319,7 +319,7 @@ export function DraftReplay({ lobby, onClose, t, lang }: DraftReplayProps) {
               const gameNum = currentAction?.gameNumber || 1;
               const gameHistory = lobby.history.find(h => h.gameNumber === gameNum);
               const player = gameHistory?.rosterB?.[i];
-              const playerName = player?.playerName || (lobby.config.teamSize === 1 ? (lobby.captain2Name || 'Team B') : `Player ${i + 1}`);
+              const playerName = player?.playerName || (lobby.config.teamSize === 1 ? ((lobby.teamBName || lobby.captain2Name) || 'Team B') : `Player ${i + 1}`);
 
               return (
                 <div key={i} className="h-20 md:h-24 bg-slate-900/50 border border-slate-800 rounded-xl md:rounded-2xl overflow-hidden flex items-center justify-end gap-2 md:gap-4 p-2 md:p-4">

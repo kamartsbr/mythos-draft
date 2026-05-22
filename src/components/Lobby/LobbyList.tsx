@@ -42,8 +42,8 @@ export function LobbyList({ lobbies, t, isAdmin, onJoin, onDelete, onClearAll, o
       return visibleLobbies.filter(lobby => {
         const matchesId = lobby.id.toLowerCase().includes(search);
         const matchesName = (lobby.name || '').toLowerCase().includes(search);
-        const matchesCaptain1 = (lobby.captain1Name || '').toLowerCase().includes(search);
-        const matchesCaptain2 = (lobby.captain2Name || '').toLowerCase().includes(search);
+        const matchesCaptain1 = ((lobby.teamAName || lobby.captain1Name) || '').toLowerCase().includes(search);
+        const matchesCaptain2 = ((lobby.teamBName || lobby.captain2Name) || '').toLowerCase().includes(search);
         
         return matchesId || matchesName || matchesCaptain1 || matchesCaptain2;
       });

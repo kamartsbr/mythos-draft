@@ -94,6 +94,8 @@ export type LobbyConfig = {
   streamerUrl?: string;
   /** Link para draft externo (caso não tenha sido feito no Mythos) */
   externalDraftLink?: string;
+  /** MCL Playoffs: mapa placeholder do último jogo (G5 em MD5, G7 em MD7). Injetado em seriesMaps[N-1] ao criar o lobby. */
+  playoffsLastMap?: string;
 };
 
 export type PickEntry = {
@@ -110,14 +112,17 @@ export type PickEntry = {
 
 export type GameResult = {
   gameNumber: number;
-  mapId: string;
+  mapId?: string;
   winner: 'A' | 'B';
-  picksA: string[];
-  picksB: string[];
+  scoreA?: number;
+  scoreB?: number;
+  picksA?: string[];
+  picksB?: string[];
   colorsA?: string[];
   colorsB?: string[];
   rosterA?: PickEntry[];
   rosterB?: PickEntry[];
+  isWO?: boolean;
 };
 
 export type ReplayStep = {
@@ -159,6 +164,8 @@ export type LobbySummary = {
   /** Present when summary is built from Firestore; both required for public list visibility */
   captain1Name?: string;
   captain2Name?: string;
+  teamAName?: string;
+  teamBName?: string;
   status: LobbyStatus;
   phase: DraftPhase;
   preset?: string | null;
@@ -180,6 +187,8 @@ export type Lobby = {
   captain2: string | null;
   captain1Name?: string;
   captain2Name?: string | null;
+  teamAName?: string;
+  teamBName?: string;
   teamAPlayers?: TeamPlayer[];
   teamBPlayers?: TeamPlayer[];
   readyA: boolean;
@@ -212,6 +221,7 @@ export type Lobby = {
   pickerPlayerA?: number | null;
   pickerPlayerB?: number | null;
   history: GameResult[];
+  gameResults?: GameResult[];
   replayLog: ReplayStep[];
   rosterA?: Record<number, PickEntry>;
   rosterB?: Record<number, PickEntry>;

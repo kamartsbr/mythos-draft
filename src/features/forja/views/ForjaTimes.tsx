@@ -78,205 +78,99 @@ function TeamCard({ team, members, colorIdx, isAdmin, isCaptain }: {
   : 0;
 
   return (
-    <div className="forja-team-card" style={{ '--team-color': color, borderTopColor: color } as any}>
-      {/* Team Image Block */}
-      <div style={{ position: 'relative', marginBottom: '1.25rem' }}>
-        {team.image_url ? (
-          <div style={{ 
-            width: '100%', 
-            aspectRatio: '16/9', 
-            borderRadius: '0.75rem', 
-            overflow: 'hidden', 
-            border: '1px solid rgba(255,255,255,0.05)',
-            background: '#020617',
-            boxShadow: '0 8px 25px rgba(0,0,0,0.5)',
-            position: 'relative'
-          }}>
-            {/* Background Borrado */}
-            <img 
-              src={team.image_url} 
-              alt=""
-              style={{ 
-                position: 'absolute',
-                inset: 0,
-                width: '100%', 
-                height: '100%', 
-                objectFit: 'cover',
-                filter: 'blur(12px) brightness(0.4)',
-                opacity: 0.6,
-                transform: 'scale(1.1)'
-              }}
-            />
-            {/* Imagem Real (Inteira) */}
-            <img 
-              src={team.image_url} 
-              alt={team.team_name} 
-              style={{ 
-                position: 'relative',
-                width: '100%', 
-                height: '100%', 
-                objectFit: 'contain',
-                zIndex: 1
-              }}
-            />
-          </div>
-        ) : (
-          <div style={{ 
-            width: '100%', 
-            aspectRatio: '16/9', 
-            borderRadius: '0.75rem', 
-            background: 'rgba(2,6,23,0.4)', 
-            border: '2px dashed rgba(51,65,85,0.3)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '0.5rem',
-            color: '#475569',
-            fontSize: '0.7rem'
-          }}>
-            <span style={{ fontSize: '1.5rem', opacity: 0.3 }}>🛡️</span>
-            Sem imagem do time
-          </div>
-        )}
-        
-        {canEdit && (
-          <button 
-            onClick={() => setShowImageEdit(!showImageEdit)}
-            style={{ 
-              position: 'absolute', 
-              top: '0.5rem', 
-              right: '0.5rem', 
-              background: 'rgba(15,23,42,0.85)', 
-              backdropFilter: 'blur(4px)',
-              border: '1px solid rgba(51,65,85,0.5)',
-              borderRadius: '0.5rem',
-              padding: '0.3rem 0.6rem',
-              fontSize: '0.65rem',
-              fontWeight: 700,
-              color: '#facc15',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.3rem',
-              transition: 'all 0.2s',
-              zIndex: 5
-            }}
-          >
-            📷 {team.image_url ? 'Alterar' : 'Adicionar'}
-          </button>
-        )}
-        
-        {showImageEdit && (
-          <div style={{ 
-            position: 'absolute', 
-            inset: 0, 
-            background: 'rgba(15,23,42,0.96)', 
-            backdropFilter: 'blur(8px)',
-            borderRadius: '0.75rem', 
-            display: 'flex', 
-            flexDirection: 'column', 
-            padding: '1.25rem',
-            justifyContent: 'center',
-            gap: '0.75rem',
-            zIndex: 10,
-            border: '1px solid rgba(250,204,21,0.2)'
-          }}>
-            <label style={{ fontSize: '0.75rem', color: '#facc15', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>URL da Imagem</label>
-            <input 
-              className="forja-reg-input"
-              style={{ fontSize: '0.8rem', padding: '0.5rem 0.75rem' }}
-              placeholder="Ex: https://i.imgur.com/..."
-              value={imageUrl}
-              onChange={e => setImageUrl(e.target.value)}
-            />
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button 
-                className="forja-btn forja-btn--primary" 
-                style={{ flex: 1, fontSize: '0.75rem', padding: '0.5rem' }}
-                onClick={handleSaveImage}
-                disabled={savingImage}
-              >
-                {savingImage ? 'Salvando...' : 'Confirmar'}
-              </button>
-              <button 
-                className="forja-btn forja-btn--ghost" 
-                style={{ flex: 1, fontSize: '0.75rem', padding: '0.5rem' }}
-                onClick={() => setShowImageEdit(false)}
-              >
-                Cancelar
-              </button>
+    <div className="forja-team-card-compact relative" style={{ borderTopColor: color, '--team-color': color } as any}>
+      {/* Header: badge + nome + pick order */}
+      <div className="flex items-center gap-2 relative">
+        <div 
+          className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center bg-slate-800 border border-slate-700 relative group cursor-pointer" 
+          onClick={() => { if(canEdit) setShowImageEdit(!showImageEdit); }}
+        >
+          {team.image_url ? (
+            <img src={team.image_url} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <span className="text-lg font-bold text-slate-500 uppercase">{team.team_name[0]}</span>
+          )}
+          {canEdit && (
+            <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <span className="text-[10px] font-bold text-white">IMG</span>
             </div>
-          </div>
-        )}
-      </div>
-
-      {/* Team Name */}
-      <div className="forja-team-card__header">
-        {editing ? (
-          <div style={{ display: 'flex', gap: '0.5rem', flex: 1 }}>
-            <input
-              className="forja-reg-input"
-              style={{ flex: 1, padding: '0.4rem 0.75rem', fontSize: '0.9rem' }}
-              value={name}
-              onChange={e => setName(e.target.value)}
-              autoFocus
-              onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditing(false); }}
-            />
-            <button className="forja-btn forja-btn--primary" style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}
-              onClick={handleSave} disabled={saving}>{saving ? '...' : '✓'}</button>
-            <button className="forja-btn forja-btn--ghost" style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}
-              onClick={() => { setEditing(false); setName(team.team_name); }}>✕</button>
-          </div>
-        ) : (
-          <>
-            <h3 className="forja-team-name" style={{ color }}>
-              {team.team_name}
-            </h3>
-            {canEdit && (
-              <button
-                className="forja-btn forja-btn--ghost"
-                style={{ padding: '0.25rem 0.6rem', fontSize: '0.68rem' }}
-                onClick={() => setEditing(true)}
-              >
-                ✏️ Renomear
-              </button>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* Stats */}
-      <div className="forja-team-stats">
-        <span>ELO médio TG: <strong style={{ color }}>{avgElo || '—'}</strong></span>
-        <span>Pick #{team.pick_order}</span>
-      </div>
-
-      {/* Members */}
-      <div className="forja-team-members">
-        {members.map(member => {
-          const isCap = member.discord_id === team.captain_id;
-          return (
-            <div key={member.discord_id} className={`forja-team-member ${isCap ? 'forja-team-member--captain' : ''}`}>
-              <div style={{ position: 'relative' }}>
-                <img
-                  src={member.avatar_url}
-                  alt={member.nick}
-                  className="forja-team-member__avatar"
-                  referrerPolicy="no-referrer"
-                  onError={e => {
-                    const idx = parseInt(member.discord_id.slice(-1)) % 6;
-                    (e.target as HTMLImageElement).src = `https://cdn.discordapp.com/embed/avatars/${idx}.png`;
-                  }}
-                />
-                {isCap && <span className="forja-team-captain-crown">👑</span>}
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          {editing ? (
+            <div className="flex gap-1">
+              <input
+                className="forja-reg-input text-sm font-black text-white px-1 py-0.5 w-full bg-slate-900 border border-slate-700"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                autoFocus
+                onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditing(false); }}
+              />
+              <button className="text-[10px] text-green-400 font-bold" onClick={handleSave} disabled={saving}>✓</button>
+              <button className="text-[10px] text-red-400 font-bold" onClick={() => { setEditing(false); setName(team.team_name); }}>✕</button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 group">
+              <div className="text-sm font-black text-white truncate cursor-pointer" onClick={() => { if(canEdit) setEditing(true); }}>
+                {team.team_name}
               </div>
-              <div className="forja-team-member__info">
-                <span className="forja-team-member__nick">{member.nick}</span>
-                <span className="forja-team-member__elo">
-                  {member.tier && <span style={{ color: member.tier === 'A' ? '#facc15' : member.tier === 'B' ? '#60a5fa' : '#94a3b8', marginRight: '0.3rem' }}>T{member.tier}</span>}
-                  {member.elo_tg > 0 && `TG ${member.elo_tg}`}
-                </span>
+              {canEdit && (
+                <button className="text-[10px] opacity-0 group-hover:opacity-100 text-slate-400" onClick={() => setEditing(true)}>✏️</button>
+              )}
+            </div>
+          )}
+          <div className="text-[9px] text-slate-500 font-bold uppercase">
+            ELO médio TG: <span className="text-amber-500">{avgElo || '—'}</span>
+          </div>
+        </div>
+        <div className="text-[10px] font-black text-slate-600 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+          #{team.pick_order}
+        </div>
+      </div>
+
+      {showImageEdit && (
+        <div className="absolute z-20 top-12 left-0 w-full bg-slate-900 border border-amber-500/30 p-2 rounded-lg shadow-xl shadow-black/50 flex flex-col gap-2">
+          <input 
+            className="forja-reg-input text-[10px] p-1.5"
+            placeholder="URL da Imagem..."
+            value={imageUrl}
+            onChange={e => setImageUrl(e.target.value)}
+          />
+          <div className="flex gap-1">
+            <button className="flex-1 forja-btn forja-btn--primary text-[9px] py-1" onClick={handleSaveImage} disabled={savingImage}>Salvar</button>
+            <button className="flex-1 forja-btn forja-btn--ghost text-[9px] py-1" onClick={() => setShowImageEdit(false)}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {/* Members: compact list */}
+      <div className="mt-3 flex flex-col gap-1.5 border-t border-slate-800/50 pt-2">
+        {members.map(m => {
+          const isCap = m.discord_id === team.captain_id;
+          return (
+            <div key={m.discord_id} className="flex items-center gap-2">
+              <div className="relative flex-shrink-0">
+                <img 
+                  src={m.avatar_url} 
+                  className="w-5 h-5 rounded object-cover" 
+                  alt="" 
+                  onError={e => {
+                    const idx = parseInt(m.discord_id.slice(-1)) % 6;
+                    (e.target as HTMLImageElement).src = `https://cdn.discordapp.com/embed/avatars/${idx}.png`;
+                  }} 
+                />
+                {isCap && <span className="absolute -top-1 -right-1 text-[8px] leading-none drop-shadow">👑</span>}
+              </div>
+              <span className={["text-[10px] font-bold truncate flex-1", isCap ? "text-white" : "text-slate-400"].filter(Boolean).join(" ")}>
+                {m.nick}
+              </span>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {m.tier && (
+                  <span className={["text-[8px] font-black uppercase px-1 rounded", m.tier === 'A' ? "bg-amber-500/20 text-amber-500" : m.tier === 'B' ? "bg-blue-500/20 text-blue-400" : "bg-slate-500/20 text-slate-400"].filter(Boolean).join(" ")}>
+                    T{m.tier}
+                  </span>
+                )}
+                {m.elo_tg > 0 && <span className="text-[9px] font-bold text-slate-500">TG {m.elo_tg}</span>}
               </div>
             </div>
           );

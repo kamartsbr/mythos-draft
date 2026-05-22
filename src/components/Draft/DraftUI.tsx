@@ -55,6 +55,7 @@ interface DraftUIProps {
   forceReset: () => void;
   resetCurrentGame: () => void;
   forceFinish: () => void;
+  forceWO: (winner: 'A'|'B', fillMaxScore?: boolean) => void;
   forceUnpause: () => void;
   forceStartDraft: () => void;
   leaveSlot: () => void;
@@ -205,6 +206,8 @@ export function DraftUI(props: DraftUIProps) {
         onResetGame={props.resetCurrentGame}
         onResetSeries={props.forceReset}
         onForceFinish={props.forceFinish}
+        onForceWO={props.forceWO}
+        onReportScore={props.reportScore}
         onForceUnpause={props.forceUnpause}
         onForceStart={props.forceStartDraft}
         t={t}
@@ -249,6 +252,16 @@ export function DraftUI(props: DraftUIProps) {
               >
                 {showSummary ? t.viewDraftBoard || 'VIEW DRAFT BOARD' : t.viewSummary || 'VIEW SUMMARY'}
               </button>
+            </div>
+          </div>
+        )}
+
+        {lobby.status === 'finished' && lobby.gameResults?.some(g => g.isWO) && (
+          <div className="mx-6 mt-6 mb-2 p-4 bg-red-950/40 border border-red-500/30 rounded-xl flex items-center justify-center gap-3 shadow-[0_0_20px_rgba(239,68,68,0.1)]">
+            <span className="text-2xl">🛑</span>
+            <div>
+              <div className="text-sm font-black text-red-500 uppercase tracking-widest">Partida Encerrada por Decisão Administrativa (W.O.)</div>
+              <div className="text-xs text-slate-400">A equipe <strong className="text-slate-200">{lobby.lastWinner === 'A' ? (lobby.teamAName || lobby.captain1Name) || 'Team 1' : (lobby.teamBName || lobby.captain2Name) || 'Team 2'}</strong> foi declarada vencedora por W.O.</div>
             </div>
           </div>
         )}

@@ -23,7 +23,7 @@ export function EndScreen({ lobby, t, onHome, onShowReplay }: EndScreenProps) {
   const isTie = lobby.scoreA === lobby.scoreB;
   const isFinished = lobby.status === 'finished';
   const winner = lobby.scoreA > lobby.scoreB ? 'A' : 'B';
-  const winnerName = isTie ? t.draw : (winner === 'A' ? (lobby.captain1Name || t.teamA) : (lobby.captain2Name || t.teamB));
+  const winnerName = isTie ? t.draw : (winner === 'A' ? ((lobby.teamAName || lobby.captain1Name) || t.teamA) : ((lobby.teamBName || lobby.captain2Name) || t.teamB));
 
   const exportImage = async () => {
     if (!cardRef.current) return;
@@ -109,12 +109,12 @@ export function EndScreen({ lobby, t, onHome, onShowReplay }: EndScreenProps) {
         {/* Final Score */}
         <div className="flex items-center justify-center gap-8 md:gap-16">
           <div className="text-center">
-            <div className="text-sm font-black text-blue-500 uppercase tracking-widest mb-2">{lobby.captain1Name || t.teamA}</div>
+            <div className="text-sm font-black text-blue-500 uppercase tracking-widest mb-2">{(lobby.teamAName || lobby.captain1Name) || t.teamA}</div>
             <div className="text-7xl md:text-9xl font-black text-white italic tracking-tighter">{lobby.scoreA}</div>
           </div>
           <div className="text-4xl md:text-6xl font-black text-slate-800 italic">VS</div>
           <div className="text-center">
-            <div className="text-sm font-black text-red-500 uppercase tracking-widest mb-2">{lobby.captain2Name || t.teamB}</div>
+            <div className="text-sm font-black text-red-500 uppercase tracking-widest mb-2">{(lobby.teamBName || lobby.captain2Name) || t.teamB}</div>
             <div className="text-7xl md:text-9xl font-black text-white italic tracking-tighter">{lobby.scoreB}</div>
           </div>
         </div>
@@ -179,7 +179,7 @@ export function EndScreen({ lobby, t, onHome, onShowReplay }: EndScreenProps) {
                     "absolute top-2 right-2 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest",
                     game.winner === 'A' ? "bg-blue-500 text-white" : "bg-red-500 text-white"
                   )}>
-                    {game.winner === 'A' ? (lobby.captain1Name || t.teamA) : (lobby.captain2Name || t.teamB)} {t.win}
+                    {game.winner === 'A' ? ((lobby.teamAName || lobby.captain1Name) || t.teamA) : ((lobby.teamBName || lobby.captain2Name) || t.teamB)} {t.win}
                   </div>
                 </div>
                 <div className="p-4 flex items-center justify-between gap-4">

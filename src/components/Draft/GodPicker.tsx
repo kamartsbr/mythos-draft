@@ -129,7 +129,7 @@ export function GodPicker({ lobby, isCaptain1, isCaptain2, handlePickerAction, t
                   className="flex flex-col items-center gap-4"
                 >
                   <div className="px-3 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded-full">
-                    <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest">{lobby.captain1Name || (lobby.config.teamSize === 1 ? t.roleHost : t.teamA)}</span>
+                    <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest">{(lobby.teamAName || lobby.captain1Name) || (lobby.config.teamSize === 1 ? t.roleHost : t.teamA)}</span>
                   </div>
                   <div className="w-24 h-24 md:w-32 md:h-32 rounded-3xl overflow-hidden border-4 border-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.3)]">
                     {MAJOR_GODS.find(g => g.id === lobby.pickerVoteA || (isCaptain1 && effectiveVote === g.id))?.image && (
@@ -154,7 +154,7 @@ export function GodPicker({ lobby, isCaptain1, isCaptain2, handlePickerAction, t
                   className="flex flex-col items-center gap-4"
                 >
                   <div className="px-3 py-0.5 bg-red-500/10 border border-red-500/20 rounded-full">
-                    <span className="text-[8px] font-black text-red-500 uppercase tracking-widest">{lobby.captain2Name || (lobby.config.teamSize === 1 ? t.roleGuest : t.teamB)}</span>
+                    <span className="text-[8px] font-black text-red-500 uppercase tracking-widest">{(lobby.teamBName || lobby.captain2Name) || (lobby.config.teamSize === 1 ? t.roleGuest : t.teamB)}</span>
                   </div>
                   <div className="w-24 h-24 md:w-32 md:h-32 rounded-3xl overflow-hidden border-4 border-red-500 shadow-[0_0_30px_rgba(239,68,68,0.3)]">
                     {MAJOR_GODS.find(g => g.id === lobby.pickerVoteB || (isCaptain2 && effectiveVote === g.id))?.image && (

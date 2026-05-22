@@ -19,7 +19,7 @@ interface PickBanPanelProps {
   handleAction: (id: string, playerId?: number, playerName?: string) => void;
   t: any;
   lang: string;
-  reportScore: (winner: 'A' | 'B') => void;
+  reportScore: (winner: 'A' | 'B' | null, isAdminOverride?: boolean) => void;
   viewGameIndex: number | null;
   setViewGameIndex: (val: number | null) => void;
   isAdmin: boolean;
@@ -33,13 +33,9 @@ interface PickBanPanelProps {
 }
 
 /**
- * Render the pick/ban and map-draft panel for a lobby, managing local UI state, interactions, and export/confirmation flows.
+ * Render the lobby pick/ban and map-draft UI, managing local UI state, user interactions, export, and confirmation flows.
  *
- * @param lobby - Lobby state and configuration that drives phase, turn order, picks/bans, maps, history, and scores
- * @param handleAction - Callback invoked when the user performs a draft action (pick/ban/map selection); arguments depend on phase
- * @param t - Translation strings and localized labels used by the component
- * @param lang - Current language code (used for language-specific messages)
- * @returns The rendered pick/ban panel UI as a React element
+ * @returns A React element representing the pick/ban panel for the given lobby state
  */
 export function PickBanPanel({ 
   lobby, isCaptain1, isCaptain2, handleAction, t, lang, reportScore, 
@@ -442,7 +438,7 @@ export function PickBanPanel({
             "px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest",
             historyGame.winner === 'A' ? "bg-blue-500/20 text-blue-500" : "bg-red-500/20 text-red-500"
           )}>
-            {historyGame.winner === 'A' ? (lobby.captain1Name || (lobby.config.teamSize === 1 ? t.roleHost : t.teamA)) : (lobby.captain2Name || (lobby.config.teamSize === 1 ? t.roleGuest : t.teamB))} {t.won}
+            {historyGame.winner === 'A' ? ((lobby.teamAName || lobby.captain1Name) || (lobby.config.teamSize === 1 ? t.roleHost : t.teamA)) : ((lobby.teamBName || lobby.captain2Name) || (lobby.config.teamSize === 1 ? t.roleGuest : t.teamB))} {t.won}
           </div>
         </div>
 
@@ -567,13 +563,13 @@ export function PickBanPanel({
                   <div className="flex items-center gap-2">
                     <div className={cn("w-2 h-2 rounded-full", lobby.readyA_report ? "bg-green-500" : "bg-slate-700")} />
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                      {lobby.captain1Name || (lobby.config.teamSize === 1 ? t.roleHost : t.teamA)}
+                      {(lobby.teamAName || lobby.captain1Name) || (lobby.config.teamSize === 1 ? t.roleHost : t.teamA)}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className={cn("w-2 h-2 rounded-full", lobby.readyB_report ? "bg-green-500" : "bg-slate-700")} />
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                      {lobby.captain2Name || (lobby.config.teamSize === 1 ? t.roleGuest : t.teamB)}
+                      {(lobby.teamBName || lobby.captain2Name) || (lobby.config.teamSize === 1 ? t.roleGuest : t.teamB)}
                     </span>
                   </div>
                 </div>
@@ -601,21 +597,23 @@ export function PickBanPanel({
             </p>
           </div>
 
-          {timeLeft !== null && !isNaN(timeLeft) && (
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className={cn(
-                "px-10 py-3 md:py-4 rounded-2xl border-2 flex items-center gap-6 transition-all duration-300 bg-slate-900/40 backdrop-blur-md shadow-xl",
-                timeLeft <= 5 ? "border-red-500 shadow-[0_0_30px_rgba(239,68,68,0.3)]" : "border-slate-800"
-              )}
-            >
-              <Clock className={cn("w-6 h-6 md:w-8 md:h-8", timeLeft <= 5 ? "text-red-500 animate-pulse" : "text-amber-500")} />
-              <span className={cn("text-4xl md:text-6xl font-black tabular-nums tracking-tight", (timeLeft || 0) <= 5 ? "text-red-500" : "text-white")}>
-                {typeof timeLeft === 'number' && !isNaN(timeLeft) ? timeLeft : '--'}
-              </span>
-            </motion.div>
-          )}
+          <div className="h-[72px] md:h-[88px] flex items-center justify-center w-full transition-all">
+            {timeLeft !== null && !isNaN(timeLeft) && (
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className={cn(
+                  "px-10 py-3 md:py-4 rounded-2xl border-2 flex items-center gap-6 transition-all duration-300 bg-slate-900/40 backdrop-blur-md shadow-xl",
+                  timeLeft <= 5 ? "border-red-500 shadow-[0_0_30px_rgba(239,68,68,0.3)]" : "border-slate-800"
+                )}
+              >
+                <Clock className={cn("w-6 h-6 md:w-8 md:h-8", timeLeft <= 5 ? "text-red-500 animate-pulse" : "text-amber-500")} />
+                <span className={cn("text-4xl md:text-6xl font-black tabular-nums tracking-tight", (timeLeft || 0) <= 5 ? "text-red-500" : "text-white")}>
+                  {typeof timeLeft === 'number' && !isNaN(timeLeft) ? timeLeft : '--'}
+                </span>
+              </motion.div>
+            )}
+          </div>
 
           <div className="w-full flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -865,13 +863,13 @@ export function PickBanPanel({
             <span className="text-xs font-black text-slate-500 uppercase tracking-[0.2em]">{t.seriesScore}</span>
             <div className="flex items-center gap-8">
               <div className="flex items-center gap-4">
-                <span className="text-sm font-black text-slate-400 uppercase tracking-widest">{lobby.captain1Name || (lobby.config.teamSize === 1 ? t.roleHost : t.teamA)}</span>
+                <span className="text-sm font-black text-slate-400 uppercase tracking-widest">{(lobby.teamAName || lobby.captain1Name) || (lobby.config.teamSize === 1 ? t.roleHost : t.teamA)}</span>
                 <span className="text-2xl font-black text-blue-500">{lobby.scoreA}</span>
               </div>
               <div className="text-xl font-black text-slate-700 italic uppercase tracking-tighter">VS</div>
               <div className="flex items-center gap-4">
                 <span className="text-2xl font-black text-red-500">{lobby.scoreB}</span>
-                <span className="text-sm font-black text-slate-400 uppercase tracking-widest">{lobby.captain2Name || (lobby.config.teamSize === 1 ? t.roleGuest : t.teamB)}</span>
+                <span className="text-sm font-black text-slate-400 uppercase tracking-widest">{(lobby.teamBName || lobby.captain2Name) || (lobby.config.teamSize === 1 ? t.roleGuest : t.teamB)}</span>
               </div>
             </div>
           </div>

@@ -32,16 +32,21 @@ function getRedirectUri(): string {
   return `${origin}/forja`;
 }
 
+/**
+ * Constructs the Discord OAuth2 authorization URL used to start the Authorization Code flow.
+ *
+ * @returns The full Discord authorization URL (includes client ID, encoded redirect URI, `response_type=code`, and `scope=identify`)
+ */
 function buildDiscordOAuthUrl(): string {
   const clientId = import.meta.env.VITE_DISCORD_CLIENT_ID ?? '';
   const redirectUri = encodeURIComponent(getRedirectUri());
   const scopes = encodeURIComponent('identify');
-  // Implicit grant → response_type=token (sem backend necessário)
+  // Authorization Code Grant → response_type=code (mais seguro, requer backend)
   return (
     `https://discord.com/api/oauth2/authorize` +
     `?client_id=${clientId}` +
     `&redirect_uri=${redirectUri}` +
-    `&response_type=token` +
+    `&response_type=code` +
     `&scope=${scopes}`
   );
 }
@@ -59,6 +64,12 @@ const HARDCODED_ADMIN_IDS = [
   '272372054526001152', // omoradin — owner
 ];
 
+/**
+ * Determines whether the given Discord user ID has Forja admin privileges.
+ *
+ * @param discordId - The Discord user ID to check
+ * @returns `true` if the ID is recognized as an admin via the hardcoded list, the `VITE_FORJA_ADMIN_IDS` environment variable, or the `mythos_admin` session flag; `false` otherwise
+ */
 function isForjaAdmin(discordId: string): boolean {
   // 1. Hardcoded permanente (owner sempre tem acesso)
   if (HARDCODED_ADMIN_IDS.includes(discordId)) return true;
@@ -70,30 +81,58 @@ function isForjaAdmin(discordId: string): boolean {
   return sessionStorage.getItem('mythos_admin') === 'true';
 }
 
-/** Lê o access_token do fragment hash (ex: #access_token=xxx&token_type=Bearer) */
-function parseHashToken(): string | null {
-  const hash = window.location.hash.slice(1);
-  if (!hash) return null;
-  const params = new URLSearchParams(hash);
-  return params.get('access_token');
+/**
+ * Extracts the OAuth authorization code from the current page's URL query string.
+ *
+ * @returns The value of the `code` query parameter if present, `null` otherwise.
+ */
+function parseAuthCode(): string | null {
+  // O Discord redireciona com ?code=xxx
+  const params = new URLSearchParams(window.location.search);
+  return params.get('code');
 }
 
-/** Busca os dados do usuário na API do Discord com o access_token */
-async function fetchDiscordUser(accessToken: string): Promise<ForjaDiscordUser | null> {
+import { getApp } from 'firebase/app';
+import { signInWithCustomToken } from 'firebase/auth';
+import { auth } from '../../../firebase';
+import firebaseConfig from '../../../../firebase-applet-config.json';
+
+/**
+ * Exchange a Discord OAuth authorization code for a Firebase Custom Token, sign in to Firebase, and return a normalized ForjaDiscordUser.
+ *
+ * @param code - The authorization code received from Discord after user consent.
+ * @returns `ForjaDiscordUser` with `discord_id`, `username`, `discriminator`, and `avatar_url` when authentication succeeds, `null` otherwise.
+ */
+async function authenticateDiscordWithFirebase(code: string): Promise<ForjaDiscordUser | null> {
   try {
-    const res = await fetch('https://discord.com/api/users/@me', {
-      headers: { Authorization: `Bearer ${accessToken}` },
+    const projectId = firebaseConfig.projectId || getApp().options.projectId; 
+    const FUNCTIONS_URL = `https://us-central1-${projectId}.cloudfunctions.net/verifydiscordtoken`;
+    
+    const response = await fetch(FUNCTIONS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, redirectUri: getRedirectUri() })
     });
-    if (!res.ok) return null;
-    const data = await res.json();
+    
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error || 'Falha na autenticação');
+    }
+    
+    const { customToken, discordUser } = await response.json();
+
+    // 1. Autenticar no Firebase com o Custom Token
+    await signInWithCustomToken(auth, customToken);
+
+    // 2. Retornar dados para o hook
     return {
-      discord_id:    data.id,
-      username:      data.global_name ?? data.username,
-      discriminator: data.discriminator ?? '0',
-      avatar_url:    getAvatarUrl(data),
-      access_token:  accessToken,
+      discord_id:    discordUser.id,
+      username:      discordUser.username,
+      discriminator: '0', // Discord migrou para Pomelo (sem discriminator)
+      avatar_url:    getAvatarUrl(discordUser),
     };
-  } catch {
+  } catch (error) {
+    console.error("Erro na autenticação Discord -> Firebase:", error);
     return null;
   }
 }
@@ -108,6 +147,20 @@ interface UseForjaDiscordAuthResult {
   logout: () => void;
 }
 
+/**
+ * Exposes Discord authentication state and actions wired to Firebase and Firestore.
+ *
+ * Restores a cached session or processes an OAuth callback code to authenticate via a Firebase
+ * custom token, persists the resulting Discord identity in localStorage, and subscribes to the
+ * player's Firestore document to determine the authoritative role.
+ *
+ * @returns An object containing:
+ *  - `discordUser` — the cached Discord identity (`ForjaDiscordUser`) or `null` when unauthenticated;
+ *  - `isAdmin` — `true` when the user has an admin role (Firestore) or is included in configured admin lists, `false` otherwise;
+ *  - `isLoading` — `true` while initialization/auth state is being resolved, `false` afterwards;
+ *  - `loginWithDiscord` — function that initiates the Discord OAuth redirect;
+ *  - `logout` — function that signs out from Firebase, clears the cached user, and resets state.
+ */
 export function useForjaDiscordAuth(): UseForjaDiscordAuthResult {
   const [discordUser, setDiscordUser] = useState<ForjaDiscordUser | null>(null);
   const [isLoading,   setIsLoading]   = useState(true);
@@ -119,13 +172,13 @@ export function useForjaDiscordAuth(): UseForjaDiscordAuthResult {
     const init = async () => {
       setIsLoading(true);
 
-      // 1. Verificar se há token no hash (retorno do OAuth)
-      const accessToken = parseHashToken();
-      if (accessToken) {
-        // Limpar o hash da URL sem recarregar
-        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      // 1. Verificar se há CODE na URL (retorno do OAuth)
+      const code = parseAuthCode();
+      if (code) {
+        // Limpar a URL sem recarregar
+        window.history.replaceState(null, '', window.location.pathname);
 
-        const user = await fetchDiscordUser(accessToken);
+        const user = await authenticateDiscordWithFirebase(code);
         if (user) {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
           setDiscordUser(user);
@@ -185,7 +238,13 @@ export function useForjaDiscordAuth(): UseForjaDiscordAuthResult {
     window.location.href = buildDiscordOAuthUrl();
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try {
+      const { signOut } = await import('firebase/auth');
+      await signOut(auth);
+    } catch (err) {
+      console.error('Error signing out from Firebase:', err);
+    }
     localStorage.removeItem(STORAGE_KEY);
     setDiscordUser(null);
   }, []);

@@ -8,6 +8,7 @@ import {
   collection, doc, setDoc, addDoc, updateDoc, deleteDoc,
   onSnapshot, query, orderBy, serverTimestamp, Unsubscribe,
   getDoc, getDocs, writeBatch, arrayUnion, arrayRemove,
+  where, getCountFromServer,
 } from 'firebase/firestore';
 import { db } from '../../../firebase';
 import {
@@ -102,6 +103,15 @@ export const ESPORTS_ELO_OVERRIDES: Record<string, number> = {
   'shaolim':   1019,
 };
 
+/**
+ * Register or update a player's Forja profile in Firestore.
+ *
+ * If a document for the given Discord user already exists, merges profile fields from the form and API data without changing `is_reserve` or `registered_at`. If the user is new, runs a transaction that reads tournament settings and the current active-starters count to decide whether the player should be marked as a reserve, then creates the player document with the appropriate metadata.
+ *
+ * @param discordUser - Discord user information (used for `discord_id`, fallback username and avatar)
+ * @param form - Registration form data and optional AOM profile data
+ * @throws Error - If `form.aomstats_url` cannot be parsed into a valid profile id ("URL do aomstats inválida.")
+ */
 export async function registerForjaPlayer(
   discordUser: ForjaDiscordUser,
   form: ForjaRegistrationForm,
@@ -109,15 +119,8 @@ export async function registerForjaPlayer(
   const profileId = parseAomProfileId(form.aomstats_url);
   if (!profileId) throw new Error('URL do aomstats inválida.');
 
-  // 1. BUSCA AS CONFIGURAÇÕES TÉCNICAS (Deadline)
-  const settingsRef = doc(db, CONTENT_COL, 'settings');
-  const settingsSnap = await getDoc(settingsRef);
-  const settings = settingsSnap.data() as ForjaSettings | undefined;
-
-  // 2. LÓGICA DE RESERVA DINÂMICA
-  // Se não houver settings, ou se o tempo atual passou da deadline, vira reserva.
-  const now = Date.now();
-  const isLate = settings ? now > settings.registration_deadline_ms : true;
+  const playerRef = doc(db, PLAYERS_COL, discordUser.discord_id);
+  const existingDoc = await getDoc(playerRef);
 
   const pd = form.aom_profile_data;
   const avatar_url = pd?.avatar_url ?? discordUser.avatar_url;
@@ -125,34 +128,93 @@ export async function registerForjaPlayer(
   const normalizedNick = form.nick.trim().toLowerCase();
   const esportsElo = ESPORTS_ELO_OVERRIDES[normalizedNick] ?? ESPORTS_ELO_OVERRIDES[String(profileId)] ?? undefined;
 
-  const player: Omit<ForjaPlayer, 'discord_id'> = {
-    aom_profile_id:     profileId,
-    aom_id:             String(profileId),
-    nick:               form.nick.trim() || discordUser.username,
-    avatar_url,
-    discord_avatar_url: discordUser.avatar_url,
-    is_brazilian:       form.is_brazilian,
-    pitch_quote:        form.pitch_quote.slice(0, 50),
-    availability:       form.availability,
-    elo_1v1:            pd?.elo_1v1 ?? 0,
-    elo_tg:             pd?.elo_tg ?? 0,
-    top_gods:           pd?.top_gods ?? [],
-    elo_snapshot:       pd?.elo_1v1 ?? 0,
-    ...(esportsElo !== undefined && { esports_elo: esportsElo }),
-    status:             'available',
-    tier:               null,
-    team_id:            null,
-    // ✅ AGORA É DINÂMICO:
-    is_reserve:         isLate, 
-    registered_at:      serverTimestamp() as any,
-    consent_rules:      form.consent_rules,
-    consent_format:     form.consent_format,
-  };
+  let playerUpdate: Partial<ForjaPlayer>;
 
-  await setDoc(doc(db, PLAYERS_COL, discordUser.discord_id), player);
+  if (existingDoc.exists()) {
+    // Caso 1: O jogador está atualizando seu perfil.
+    // REGRA DE OURO: ESTRITAMENTE PROIBIDO recalcular ou alterar os campos is_reserve e registered_at neste cenário.
+    playerUpdate = {
+      aom_profile_id:     profileId,
+      aom_id:             String(profileId),
+      nick:               form.nick.trim() || discordUser.username,
+      avatar_url,
+      discord_avatar_url: discordUser.avatar_url,
+      is_brazilian:       form.is_brazilian,
+      pitch_quote:        form.pitch_quote.slice(0, 50),
+      availability:       form.availability,
+      elo_1v1:            pd?.elo_1v1 ?? 0,
+      elo_tg:             pd?.elo_tg ?? 0,
+      top_gods:           pd?.top_gods ?? [],
+      elo_snapshot:       pd?.elo_1v1 ?? 0,
+      ...(esportsElo !== undefined ? { esports_elo: esportsElo } : {}),
+      consent_rules:      form.consent_rules,
+      consent_format:     form.consent_format,
+    };
+  } else {
+    // Caso 2: Inscrição nova.
+    // Use Firestore transaction to atomically check and allocate slot
+    const { runTransaction } = await import('firebase/firestore');
+
+    await runTransaction(db, async (transaction) => {
+      // 1. BUSCA AS CONFIGURAÇÕES TÉCNICAS (Deadline e Vagas)
+      const settingsRef = doc(db, CONTENT_COL, 'settings');
+      const settingsSnap = await transaction.get(settingsRef);
+      const settings = settingsSnap.data() as ForjaSettings | undefined;
+      const maxParticipants = settings?.max_participants ?? 48;
+
+      // 2. BUSCA A CONTAGEM DE TITULARES ATIVOS DENTRO DA TRANSAÇÃO
+      const q = query(
+        collection(db, PLAYERS_COL),
+        where('is_reserve', '==', false),
+        where('status', '!=', 'banned')
+      );
+      const countSnapshot = await getCountFromServer(q);
+      const activeStartersCount = countSnapshot.data().count;
+
+      // 3. LÓGICA DE RESERVA DINÂMICA E TRAVA DE VAGAS
+      const now = Date.now();
+      const isLate = settings ? now > settings.registration_deadline_ms : true;
+      const isOverLimit = activeStartersCount >= maxParticipants;
+      const shouldBeReserve = isLate || isOverLimit;
+
+      playerUpdate = {
+        aom_profile_id:     profileId,
+        aom_id:             String(profileId),
+        nick:               form.nick.trim() || discordUser.username,
+        avatar_url,
+        discord_avatar_url: discordUser.avatar_url,
+        is_brazilian:       form.is_brazilian,
+        pitch_quote:        form.pitch_quote.slice(0, 50),
+        availability:       form.availability,
+        elo_1v1:            pd?.elo_1v1 ?? 0,
+        elo_tg:             pd?.elo_tg ?? 0,
+        top_gods:           pd?.top_gods ?? [],
+        elo_snapshot:       pd?.elo_1v1 ?? 0,
+        ...(esportsElo !== undefined ? { esports_elo: esportsElo } : {}),
+        status:             'available',
+        tier:               null,
+        team_id:            null,
+        is_reserve:         shouldBeReserve,
+        registered_at:      serverTimestamp() as any,
+        consent_rules:      form.consent_rules,
+        consent_format:     form.consent_format,
+      };
+
+      transaction.set(playerRef, playerUpdate, { merge: true });
+    });
+    return;
+  }
+
+  await setDoc(playerRef, playerUpdate, { merge: true });
 }
 
 
+
+/**
+ * Deletes the Firestore document for the player with the specified Discord ID.
+ *
+ * Removes the document at the players collection corresponding to `discordId`.
+ */
 export async function removeForjaPlayer(discordId: string): Promise<void> {
   await deleteDoc(doc(db, PLAYERS_COL, discordId));
 }
@@ -804,9 +866,15 @@ export async function saveForjaSettings(
 // ─── Adição Manual de Jogador (Admin) ────────────────────────────────────────
 
 /**
- * Adiciona um jogador manualmente pelo Discord ID (apenas Admin).
- * Usado quando o Admin conhece o jogador e quer inscrevê-lo sem OAuth Discord.
- * O avatar usa o CDN do Discord como placeholder; o snapshot de ELO oficial atualiza depois.
+ * Creates and saves a new player record for the provided Discord ID using administrator-supplied data.
+ *
+ * If no `avatarUrl` is provided, a Discord CDN placeholder avatar is assigned. The function sets default
+ * competitive fields (ELOs, top gods, status, consents) and records `registered_at`.
+ *
+ * @param discordId - The Discord user ID to use as the document key for the new player
+ * @param aomProfileId - The AoM profile numeric identifier to store on the player record
+ * @param addedBy - Identifier of the admin performing the registration (used in the autogenerated pitch quote when none is provided)
+ * @throws Error if a player with the given `discordId` already exists
  */
 export async function adminRegisterPlayer(params: {
   discordId: string;
@@ -862,9 +930,18 @@ export async function adminRegisterPlayer(params: {
     role:               'player',
   };
 
-  await setDoc(doc(db, PLAYERS_COL, discordId), player);
+  await setDoc(doc(db, PLAYERS_COL, discordId), player, { merge: true });
 }
 
+/**
+ * Persist updates to a CMS content document and refresh the local cache.
+ *
+ * Writes `data` into `forja_content/<docId>` with `updated_at` set to the server timestamp and `updated_by` set to `updatedBy` using a merge write, then updates the in-memory cache by merging with the existing cached entry if present or storing `data` as the cached value otherwise.
+ *
+ * @param docId - The identifier of the content document under `forja_content`
+ * @param data - Partial document fields to be written/merged into the stored content
+ * @param updatedBy - Identifier of the user or system performing the update
+ */
 export async function updateForjaContent(
   docId: ForjaContentId,
   data: object,

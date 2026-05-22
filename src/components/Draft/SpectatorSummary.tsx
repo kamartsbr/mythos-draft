@@ -74,7 +74,7 @@ export function SpectatorSummary({ lobby, t, lang, onViewGame }: SpectatorSummar
               {lobby.config.teamSize === 1 ? t.roleHost : t.teamA}
             </span>
             <h2 className="text-3xl md:text-5xl font-black text-white uppercase tracking-tighter truncate max-w-[250px] md:max-w-[350px]">
-              {lobby.captain1Name || (lobby.config.teamSize === 1 ? t.roleHost : t.teamA)}
+              {(lobby.teamAName || lobby.captain1Name) || (lobby.config.teamSize === 1 ? t.roleHost : t.teamA)}
             </h2>
           </div>
 
@@ -125,7 +125,7 @@ export function SpectatorSummary({ lobby, t, lang, onViewGame }: SpectatorSummar
               {lobby.config.teamSize === 1 ? t.roleGuest : t.teamB}
             </span>
             <h2 className="text-3xl md:text-5xl font-black text-white uppercase tracking-tighter truncate max-w-[250px] md:max-w-[350px]">
-              {lobby.captain2Name || (lobby.config.teamSize === 1 ? t.roleGuest : t.teamB)}
+              {(lobby.teamBName || lobby.captain2Name) || (lobby.config.teamSize === 1 ? t.roleGuest : t.teamB)}
             </h2>
           </div>
         </div>
@@ -207,7 +207,7 @@ export function SpectatorSummary({ lobby, t, lang, onViewGame }: SpectatorSummar
                     <div className="flex items-center gap-2">
                       <Sword className="w-3 h-3 text-blue-500" />
                       <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                        {lobby.captain1Name || (lobby.config.teamSize === 1 ? t.roleHost : t.teamA)}
+                        {(lobby.teamAName || lobby.captain1Name) || (lobby.config.teamSize === 1 ? t.roleHost : t.teamA)}
                       </span>
                     </div>
                     {game?.winner === 'A' && <Check className="w-4 h-4 text-blue-500" />}
@@ -256,7 +256,7 @@ export function SpectatorSummary({ lobby, t, lang, onViewGame }: SpectatorSummar
                     <div className="flex items-center gap-2">
                       <Shield className="w-3 h-3 text-red-500" />
                       <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                        {lobby.captain2Name || (lobby.config.teamSize === 1 ? t.roleGuest : t.teamB)}
+                        {(lobby.teamBName || lobby.captain2Name) || (lobby.config.teamSize === 1 ? t.roleGuest : t.teamB)}
                       </span>
                     </div>
                     {game?.winner === 'B' && <Check className="w-4 h-4 text-red-500" />}

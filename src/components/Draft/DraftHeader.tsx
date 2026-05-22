@@ -36,8 +36,8 @@ export function DraftHeader({ lobby, timeLeft, t }: DraftHeaderProps) {
                 currentTurn.player === 'B' ? "bg-red-500/20 text-red-400" :
                 "bg-amber-500/20 text-amber-400"
               )}>
-                {currentTurn.player === 'A' ? (lobby.captain1Name || t.teamA) : 
-                 currentTurn.player === 'B' ? (lobby.captain2Name || t.teamB) : 
+                {currentTurn.player === 'A' ? ((lobby.teamAName || lobby.captain1Name) || t.teamA) : 
+                 currentTurn.player === 'B' ? ((lobby.teamBName || lobby.captain2Name) || t.teamB) : 
                  currentTurn.player === 'ADMIN' ? (t.system || 'SYSTEM') :
                  t.bothTeams}
               </div>

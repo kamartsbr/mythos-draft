@@ -240,7 +240,7 @@ export function LobbyCreation({
               { 
                 id: 'MCL', 
                 label: t.mclTournament,
-                icon: "https://liquipedia.net/commons/images/c/c0/Mythic_Clan_League_allmode.png"
+                icon: "/mcl-logo.png"
               },
               {
                 id: 'FORJA',
@@ -262,7 +262,7 @@ export function LobbyCreation({
                       {preset.icon ? (
                         <div className={cn(
                           "flex items-center justify-center",
-                          preset.id === 'FORJA' ? "w-20 h-20 -ml-2" : "w-10 h-10"
+                          preset.id === 'FORJA' || preset.id === 'MCL' ? "w-20 h-20 -ml-2" : "w-10 h-10"
                         )}>
                           <img 
                             src={preset.icon} 
@@ -271,9 +271,7 @@ export function LobbyCreation({
                             referrerPolicy="no-referrer"
                           />
                         </div>
-                      ) : (
-                        <div className="w-10 h-10 rounded bg-slate-800/50" />
-                      )}
+                      ) : null}
                     </div>
                 <span className="flex-1 text-left">{preset.label}</span>
               </button>
@@ -283,7 +281,7 @@ export function LobbyCreation({
 
 
           <AnimatePresence mode="popLayout">
-            {config.preset === 'MCL' && (
+            {(config.preset === 'MCL' || config.preset === 'MCL_PLAYOFFS') && (
               <motion.div
                 initial={{ height: 0, opacity: 0, marginBottom: 0 }}
                 animate={{ height: 'auto', opacity: 1, marginBottom: 16 }}
@@ -300,32 +298,39 @@ export function LobbyCreation({
                     </label>
                     <div className="grid grid-cols-2 gap-2">
                       <button
-                        onClick={() => setConfig((prev: any) => ({ ...prev, tournamentStage: 'GROUP' }))}
+                        onClick={() => {
+                          applyPreset('MCL');
+                          setConfig((prev: any) => ({ ...prev, tournamentStage: 'GROUP' }));
+                        }}
                         className={cn(
                           "py-2 rounded-lg border text-sm font-bold transition-all",
-                          config.tournamentStage === 'GROUP' 
+                          config.preset === 'MCL' 
                             ? "bg-amber-500 border-amber-500 text-slate-950" 
                             : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700"
                         )}
                       >
                         {t.mclGroupStage}
                       </button>
-                      <div className="relative group">
-                        <button
-                          disabled
-                          className="w-full py-2 rounded-lg border border-slate-800 bg-slate-900 text-slate-600 text-sm font-bold flex items-center justify-center gap-2 cursor-not-allowed"
-                        >
-                          <Lock className="w-4 h-4" />
-                          {t.mclPlayoffs}
-                        </button>
-                        <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-slate-800 text-[10px] text-slate-300 px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none border border-slate-700">
-                          {t.mclPlayoffsLocked}
-                        </div>
-                      </div>
+                      <button
+                        onClick={() => {
+                          applyPreset('MCL_PLAYOFFS');
+                          setConfig((prev: any) => ({ ...prev, seriesType: 'BO5' }));
+                        }}
+                        className={cn(
+                          "py-2 rounded-lg border text-sm font-bold transition-all",
+                          config.preset === 'MCL_PLAYOFFS'
+                            ? "bg-amber-500 border-amber-500 text-slate-950"
+                            : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700"
+                        )}
+                      >
+                        {t.mclPlayoffs}
+                      </button>
                     </div>
                   </div>
 
-                  <div className="space-y-3">
+                  {config.preset === 'MCL' && (
+                    <>
+                      <div className="space-y-3">
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">
                       {t.tournamentRound}
                     </label>
@@ -387,6 +392,54 @@ export function LobbyCreation({
                       </div>
                     </div>
                   </div>
+                    </>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence mode="popLayout">
+            {config.preset === 'MCL_PLAYOFFS' && (
+              <motion.div
+                initial={{ height: 0, opacity: 0, marginBottom: 0 }}
+                animate={{ height: 'auto', opacity: 1, marginBottom: 16 }}
+                exit={{ height: 0, opacity: 0, marginBottom: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-4">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => setConfig((p: any) => ({ ...p, seriesType: 'BO5', customGameCount: 5 }))}
+                      className={cn("py-2 rounded-lg border text-sm font-bold transition-all", config.seriesType === 'BO5' ? "bg-amber-500 border-amber-500 text-slate-950" : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700")}
+                    >MD5</button>
+                    <button onClick={() => setConfig((p: any) => ({ ...p, seriesType: 'BO7', customGameCount: 7 }))}
+                      className={cn("py-2 rounded-lg border text-sm font-bold transition-all", config.seriesType === 'BO7' ? "bg-amber-500 border-amber-500 text-slate-950" : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700")}
+                    >MD7 (Grande Final)</button>
+                  </div>
+                  <p className="text-[10px] text-amber-400/80 italic text-center px-2">
+                    {t.playoffsProvisionalWarning}
+                  </p>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Mapa do {config.seriesType === 'BO7' ? 'Game 7' : 'Game 5'} (Placeholder)</label>
+                  <div className="grid grid-cols-3 gap-1 max-h-48 overflow-y-auto">
+                    {MAPS.filter(m => config.allowedMaps.includes(m.id)).map(m => (
+                      <button
+                        key={m.id}
+                        onClick={() => setConfig((p: any) => ({ ...p, playoffsLastMap: m.id }))}
+                        className={cn("py-1 px-2 rounded border text-[10px] font-bold text-left truncate transition-all", config.playoffsLastMap === m.id ? "bg-amber-500 border-amber-500 text-slate-950" : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700")}
+                      >
+                        {m.name}
+                      </button>
+                    ))}
+                  </div>
+                  {config.playoffsLastMap && (
+                    <div className="flex items-center gap-3 p-2 bg-slate-900/50 rounded-lg border border-amber-500/20">
+                      <img src={MAPS.find(m => m.id === config.playoffsLastMap)?.image} alt="" className="w-10 h-10 rounded object-cover" />
+                      <div>
+                        <div className="text-[10px] text-slate-500 uppercase font-bold tracking-tighter">PLACEHOLDER — GAME {config.seriesType === 'BO7' ? '7' : '5'}</div>
+                        <div className="text-sm font-bold text-amber-500">{MAPS.find(m => m.id === config.playoffsLastMap)?.name}</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}

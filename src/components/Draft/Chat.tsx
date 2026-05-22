@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MessageSquare, Send, User, Shield, MessageCircleOff, ChevronRight, ChevronLeft } from 'lucide-react';
-import { lobbyService } from '../../services/lobbyService';
-import { ChatMessage } from '../../types';
+import { lobbyService, getMillis } from '../../services/lobbyService';
+import { ChatMessage, DraftTimestampRead } from '../../types';
 import { cn } from '../../lib/utils';
 
 interface ChatProps {
@@ -16,6 +16,21 @@ interface ChatProps {
   t: any;
 }
 
+/**
+ * Render the lobby chat UI with real-time message subscription, automatic scrolling, message sending, and role-based permission gating.
+ *
+ * Renders a toggleable chat panel and launcher button; subscribes to lobby messages and keeps the view scrolled to the latest message, displays role badges and timestamps, and conditionally shows a send input or a spectator notice based on user roles.
+ *
+ * @param lobbyId - Identifier of the lobby whose messages are displayed and where messages are sent
+ * @param guestId - Identifier of the current user sending messages
+ * @param nickname - Display name of the current user
+ * @param isCaptain1 - Whether the current user is captain1 (maps to 'Host' role)
+ * @param isCaptain2 - Whether the current user is captain2 (maps to 'Guest' role)
+ * @param isAdmin - Whether the current user is an admin (maps to 'ADMIN' role and bypasses spectator restrictions)
+ * @param isSpectator - Whether the current user is a spectator (prevents sending unless also admin)
+ * @param t - Localization object with optional keys used by the component (e.g., `chat`, `noMessages`, `typeMessage`, `spectatorsCannotChat`)
+ * @returns The chat component's JSX element
+ */
 export function Chat({ lobbyId, guestId, nickname, isCaptain1, isCaptain2, isAdmin, isSpectator, t }: ChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
@@ -117,7 +132,7 @@ export function Chat({ lobbyId, guestId, nickname, isCaptain1, isCaptain2, isAdm
                         </span>
                       </div>
                       <span className="text-[8px] text-slate-600 font-mono">
-                        {msg.timestamp?.toDate ? new Date(msg.timestamp.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                        {getMillis(msg.timestamp) ? new Date(getMillis(msg.timestamp)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                       </span>
                     </div>
                     <p className="text-xs text-slate-300 bg-slate-800/50 p-2 rounded-lg border border-slate-800/50 break-words">

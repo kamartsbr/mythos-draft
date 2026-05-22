@@ -81,7 +81,7 @@ export function DraftResultCard({ lobby, t, cardRef }: DraftResultCardProps) {
             <div className="flex flex-col items-center gap-2">
               <span className="text-xs font-black text-blue-500 uppercase tracking-[0.3em]">{t.teamA}</span>
               <h2 className="text-4xl font-black text-white uppercase tracking-tight whitespace-nowrap">
-                {lobby.captain1Name || t.roleHost}
+                {(lobby.teamAName || lobby.captain1Name) || t.roleHost}
               </h2>
               {teamAMapBans.length > 0 && (
                 <div className="flex flex-col items-center gap-1 mt-2">
@@ -119,7 +119,7 @@ export function DraftResultCard({ lobby, t, cardRef }: DraftResultCardProps) {
             <div className="flex flex-col items-center gap-2">
               <span className="text-xs font-black text-red-500 uppercase tracking-[0.3em]">{t.teamB}</span>
               <h2 className="text-4xl font-black text-white uppercase tracking-tight whitespace-nowrap">
-                {lobby.captain2Name || t.roleGuest}
+                {(lobby.teamBName || lobby.captain2Name) || t.roleGuest}
               </h2>
               {teamBMapBans.length > 0 && (
                 <div className="flex flex-col items-center gap-1 mt-2">
@@ -177,7 +177,7 @@ export function DraftResultCard({ lobby, t, cardRef }: DraftResultCardProps) {
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest">{lobby.captain1Name || t.teamA}</span>
+                          <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest">{(lobby.teamAName || lobby.captain1Name) || t.teamA}</span>
                           {game.winner === 'A' && <Trophy className="w-3 h-3 text-amber-500" />}
                         </div>
                         {game.winner === 'A' && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
@@ -228,7 +228,7 @@ export function DraftResultCard({ lobby, t, cardRef }: DraftResultCardProps) {
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[8px] font-black text-red-500 uppercase tracking-widest">{lobby.captain2Name || t.teamB}</span>
+                          <span className="text-[8px] font-black text-red-500 uppercase tracking-widest">{(lobby.teamBName || lobby.captain2Name) || t.teamB}</span>
                           {game.winner === 'B' && <Trophy className="w-3 h-3 text-amber-500" />}
                         </div>
                         {game.winner === 'B' && <div className="w-1.5 h-1.5 rounded-full bg-red-500" />}
@@ -292,7 +292,7 @@ export function DraftResultCard({ lobby, t, cardRef }: DraftResultCardProps) {
               <div className="flex flex-col">
                 <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest">{t.teamA}</span>
                 <span className="text-lg font-black text-white uppercase tracking-tight whitespace-nowrap">
-                  {lobby.captain1Name || t.roleHost}
+                  {(lobby.teamAName || lobby.captain1Name) || t.roleHost}
                 </span>
               </div>
             </div>
@@ -371,7 +371,7 @@ export function DraftResultCard({ lobby, t, cardRef }: DraftResultCardProps) {
               <div className="flex flex-col items-end">
                 <span className="text-[10px] font-black text-red-500 uppercase tracking-widest">{t.teamB}</span>
                 <span className="text-lg font-black text-white uppercase tracking-tight whitespace-nowrap">
-                  {lobby.captain2Name || t.roleGuest}
+                  {(lobby.teamBName || lobby.captain2Name) || t.roleGuest}
                 </span>
               </div>
               <div className="w-12 h-12 rounded-xl bg-red-500 flex items-center justify-center text-white font-black text-xl">

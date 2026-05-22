@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { draftService } from '../services/draftService';
-import { lobbyService, IS_DEV, isSoloAdminLobby } from '../services/lobbyService';
+import { lobbyService, IS_DEV, isSoloAdminLobby, getMillis } from '../services/lobbyService';
 import { Lobby, LobbyConfig, DraftTurn, TeamSize, PickEntry, SeriesType, Substitution } from '../types';
 import { MAPS, MAJOR_GODS, PLAYER_COLORS, MCL_ROUND_MAPS } from '../constants';
 import { serverTimestamp } from 'firebase/firestore';
+import { calculateNextTurnOrder } from '../lib/pureDraftEngine';
 
 /**
  * Manage client-side draft state, permissions, optimistic updates, and actions for a lobby-based draft flow.
@@ -109,174 +110,7 @@ export function useDraft(
   }, [lobby, optimisticAction]);
 
   const generateStandardTurnOrder = useCallback((cfg: LobbyConfig, gameNumber: number = 1, lastWinner: 'A' | 'B' | null = null): { mapOrder: DraftTurn[], godOrder: DraftTurn[] } => {
-    // If custom turn orders are provided in the config, use them
-    if (cfg.mapTurnOrder && cfg.mapTurnOrder.length > 0 && cfg.godTurnOrder && cfg.godTurnOrder.length > 0) {
-      return { mapOrder: cfg.mapTurnOrder, godOrder: cfg.godTurnOrder };
-    }
-
-    const mapOrder: DraftTurn[] = [];
-    const godOrder: DraftTurn[] = [];
-    
-    if (cfg.preset === 'MCL' || cfg.preset === 'FORJA') {
-      if (gameNumber === 1) {
-        mapOrder.push({ player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-      } else if (gameNumber === 2) {
-        mapOrder.push({ player: 'B', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-      } else if (gameNumber === 3 && (cfg.preset === 'FORJA' || cfg.hasMap3RandomRoll)) {
-        // FORJA: Mapa 3 sempre sorteado pelo sistema (ADMIN turn)
-        mapOrder.push({ player: 'ADMIN', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-      }
-      // MCL puro: Mapa 3 é pré-determinado pelo round (seriesMaps[2] já está preenchido)
-    } else if (cfg.seriesType !== 'BO1') {
-      // Standard Series Logic (BO3, BO5, etc.)
-      
-      // Map logic only happens if we don't have a map yet
-      // For Game 1, we might have bans and a pick
-      if (gameNumber === 1) {
-        for (let i = 0; i < cfg.mapBanCount; i++) {
-          mapOrder.push({ player: 'A', action: 'BAN', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-          mapOrder.push({ player: 'B', action: 'BAN', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-        }
-
-        if (cfg.loserPicksNextMap) {
-          if (cfg.firstMapRandom) {
-            mapOrder.push({ player: 'ADMIN', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-          } else {
-            mapOrder.push({ player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-          }
-        } else {
-          // If not loser picks, we might pick multiple maps upfront
-          const gameCount = cfg.seriesType === 'BO3' ? 3 : 
-                            cfg.seriesType === 'BO5' ? 5 : 
-                            cfg.seriesType === 'BO7' ? 7 : 
-                            cfg.seriesType === 'BO9' ? 9 : 
-                            (cfg.customGameCount || 1);
-          
-          const playerPicks = gameCount - 1;
-          for (let i = 0; i < playerPicks; i++) {
-            const player = i % 2 === 0 ? 'A' : 'B';
-            mapOrder.push({ player, action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-          }
-          mapOrder.push({ player: 'ADMIN', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-        }
-      } else {
-        // For Game 2+, if loserPicksNextMap is on, they pick now
-        if (cfg.loserPicksNextMap) {
-          // This is handled in reportScore by adding a single map pick turn
-          // So we leave mapOrder empty here
-        }
-      }
-    } else {
-      // BO1 Logic
-      if (gameNumber === 1) {
-        for (let i = 0; i < cfg.mapBanCount; i++) {
-          mapOrder.push({ player: 'A', action: 'BAN', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-          mapOrder.push({ player: 'B', action: 'BAN', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-        }
-        if (cfg.firstMapRandom) {
-          mapOrder.push({ player: 'ADMIN', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-        } else {
-          mapOrder.push({ player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
-        }
-      }
-    }
-
-    // God Pick Logic
-    // In 1v1, we usually draft all gods in Game 1
-    if (cfg.teamSize === 1 && gameNumber > 1) {
-      return { mapOrder, godOrder: [] };
-    }
-
-    if (cfg.acePick) {
-      if (cfg.acePickHidden) {
-        godOrder.push({ player: 'A', action: 'PICK', target: 'GOD', modifier: 'EXCLUSIVE', execution: 'HIDDEN' });
-        godOrder.push({ player: 'B', action: 'PICK', target: 'GOD', modifier: 'EXCLUSIVE', execution: 'HIDDEN' });
-        godOrder.push({ player: 'ADMIN', action: 'REVEAL', target: 'GOD', modifier: 'NONEXCLUSIVE', execution: 'NORMAL' });
-      } else {
-        godOrder.push({ player: 'A', action: 'PICK', target: 'GOD', modifier: 'EXCLUSIVE', execution: 'NORMAL' });
-        godOrder.push({ player: 'B', action: 'PICK', target: 'GOD', modifier: 'EXCLUSIVE', execution: 'NORMAL' });
-      }
-    }
-
-    // MCL / FORJA: Game 2 começa com B (Guest escolhe mapa e abre bans/picks).
-    // Game 3: o PERDEDOR do G2 escolhe primeiro — se A ganhou G2, B (o perdedor) abre.
-    const startsWithB =
-      ((cfg.preset === 'MCL' || cfg.preset === 'FORJA') && gameNumber === 2) ||
-      ((cfg.preset === 'MCL' || cfg.preset === 'FORJA') && gameNumber > 2 && lastWinner === 'A');
-
-    if (cfg.hasBans) {
-      for (let i = 0; i < cfg.banCount; i++) {
-        godOrder.push({ player: startsWithB ? 'B' : 'A', action: 'BAN', target: 'GOD', modifier: cfg.isExclusive ? 'EXCLUSIVE' : 'GLOBAL', execution: 'NORMAL' });
-        godOrder.push({ player: startsWithB ? 'A' : 'B', action: 'BAN', target: 'GOD', modifier: cfg.isExclusive ? 'EXCLUSIVE' : 'GLOBAL', execution: 'NORMAL' });
-      }
-    } else if (cfg.hasPerMapBans) {
-      // FORJA Playoffs: 1 Ban de Deus por time antes dos picks em cada mapa
-      godOrder.push({ player: startsWithB ? 'B' : 'A', action: 'BAN', target: 'GOD', modifier: 'GLOBAL', execution: 'NORMAL' });
-      godOrder.push({ player: startsWithB ? 'A' : 'B', action: 'BAN', target: 'GOD', modifier: 'GLOBAL', execution: 'NORMAL' });
-    }
-
-    let picksPerTeam = cfg.teamSize;
-    if (cfg.teamSize === 1) {
-      const gameCount = cfg.seriesType === 'BO3' ? 3 : 
-                        cfg.seriesType === 'BO5' ? 5 : 
-                        cfg.seriesType === 'BO7' ? 7 : 
-                        cfg.seriesType === 'BO9' ? 9 : 
-                        (cfg.customGameCount || 1);
-      if (gameCount > 1) {
-        picksPerTeam = gameCount + 1;
-      }
-    }
-
-    const finalPicksPerTeam = picksPerTeam - (cfg.acePick ? 1 : 0);
-    if (finalPicksPerTeam > 0) {
-      if (cfg.pickType === 'alternated') {
-        let remainingA = finalPicksPerTeam;
-        let remainingB = finalPicksPerTeam;
-        let turn = 0;
-        
-        while (remainingA > 0 || remainingB > 0) {
-          const isTeamA = (turn % 2 === 0) !== startsWithB;
-          let maxCount = 2;
-          if (turn === 0) maxCount = 1;
-          const count = Math.min(maxCount, isTeamA ? remainingA : remainingB);
-          
-          if (count > 0) {
-            for (let i = 0; i < count; i++) {
-              godOrder.push({ 
-                player: isTeamA ? 'A' : 'B', 
-                action: 'PICK', 
-                target: 'GOD', 
-                modifier: cfg.isExclusive ? 'EXCLUSIVE' : 'NONEXCLUSIVE', 
-                execution: 'NORMAL' 
-              });
-              if (isTeamA) remainingA--;
-              else remainingB--;
-            }
-          }
-          turn++;
-        }
-      } else {
-        const totalPicks = finalPicksPerTeam * 2;
-
-        for (let i = 0; i < totalPicks; i++) {
-          const isTeamA = (i % 2 === 0) !== startsWithB;
-          const player = isTeamA ? 'A' : 'B';
-          godOrder.push({ 
-            player, 
-            action: 'PICK', 
-            target: 'GOD', 
-            modifier: cfg.isExclusive ? 'EXCLUSIVE' : 'NONEXCLUSIVE', 
-            execution: cfg.pickType === 'blind' ? 'HIDDEN' : 'NORMAL' 
-          });
-        }
-      }
-    }
-
-    if (cfg.pickType === 'blind') {
-      godOrder.push({ player: 'ADMIN', action: 'REVEAL', target: 'GOD', modifier: 'NONEXCLUSIVE', execution: 'NORMAL' });
-    }
-
-    return { mapOrder, godOrder };
+    return calculateNextTurnOrder(cfg, gameNumber, lastWinner);
   }, []);
 
   /**
@@ -332,9 +166,9 @@ export function useDraft(
     }
   }, [lobby, effectiveIsCaptain1, effectiveIsCaptain2, isProcessing]);
 
-  const reportScore = useCallback(async (winner: 'A' | 'B' | null) => {
+  const reportScore = useCallback(async (winner: 'A' | 'B' | null, isAdminOverride: boolean = false) => {
     if (!lobby) return;
-    const result = await draftService.reportScore(lobby, winner, effectiveIsCaptain1, effectiveIsCaptain2, (cfg, gn, lw) => generateStandardTurnOrder(cfg, gn, lw));
+    const result = await draftService.reportScore(lobby, winner, effectiveIsCaptain1, effectiveIsCaptain2, (cfg, gn, lw) => generateStandardTurnOrder(cfg, gn, lw), isAdminOverride);
     if (!result.success) {
       setError(result.error || "Report failed");
     }
@@ -424,7 +258,7 @@ export function useDraft(
     if (!isCaptain1) return; // Only host handles the auto-resolve check to avoid duplicate calls
 
     const checkAutoResolve = () => {
-      const start = new Date(lobby.reportStartAt!).getTime();
+      const start = getMillis(lobby.reportStartAt);
       const now = new Date().getTime();
       const diff = (now - start) / 1000;
 
@@ -447,7 +281,14 @@ export function useDraft(
 
   // Handle ADMIN turns and Revealing phase
   useEffect(() => {
-    if (!lobby || lobby.status !== 'drafting') return;
+    if (!lobby) return;
+
+    // TRAVA DE SEGURANÇA: O draft nunca progride se não houver confirmação de pronto
+    const isWaitingPhase = lobby.status === 'waiting' || lobby.phase === 'ready' || lobby.phase === 'waiting';
+    const isBothReady = (lobby.currentGame || 1) === 1 ? (lobby.readyA && lobby.readyB) : (lobby.readyA_nextGame && lobby.readyB_nextGame);
+    
+    if (isWaitingPhase && !isBothReady) return;
+    if (lobby.status !== 'drafting') return;
 
     if (lobby.phase === 'revealing') {
       if (!isCaptain1) return;

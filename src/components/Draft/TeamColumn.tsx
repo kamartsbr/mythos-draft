@@ -102,6 +102,8 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
   }
 
   const teamPicks = optimisticPicks.filter(p => p.team === team);
+
+  const sortedPicks = teamPicks;
   
   const teamGodBans = optimisticBans
     .filter(step => step.action === 'BAN' && step.target === 'GOD' && step.player === team && step.gameNumber === lobby.currentGame);
@@ -114,7 +116,7 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
   
   const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT' || (lobby.captain1 && lobby.captain1 === lobby.captain2);
   const isMyTeam = IS_DEV || (team === 'A' && isCaptain1) || (team === 'B' && isCaptain2);
-  const captainName = team === 'A' ? lobby.captain1Name : lobby.captain2Name;
+  const captainName = team === 'A' ? (lobby.teamAName || lobby.captain1Name) : (lobby.teamBName || lobby.captain2Name);
   const teamName = captainName || (team === 'A' ? 'Host' : 'Guest');
 
   return (
@@ -157,13 +159,13 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
           </div>
           
           <div className="flex flex-col gap-2">
-            {teamPicks.map((pick, i) => (
+            {(team === 'A' ? (lobby.teamAPlayers || []) : (lobby.teamBPlayers || [])).map((player, i) => (
               <div key={i} className={cn("flex items-center gap-2", team === 'B' && "flex-row-reverse text-right")}>
                 <span className="w-6 h-6 rounded-md bg-slate-900/50 flex items-center justify-center border border-slate-800">
                   <User className="w-3 h-3 text-slate-500" />
                 </span>
                 <span className="text-xs font-bold text-white tracking-widest uppercase">
-                  {pick.playerName || pick.assignedPlayerName || `Player ${i+1}`}
+                  {player.name}
                 </span>
               </div>
             ))}
@@ -362,14 +364,14 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
         
         {lobby.config.teamSize === 1 ? (
           <div className="flex flex-wrap gap-3">
-            {teamPicks.map((pick, idx) => {
+            {sortedPicks.map((pick, idx) => {
               const turn = lobby.turnOrder[lobby.turn];
               const isGodTurn = turn?.target === 'GOD';
               const isTeamTurn = turn?.player === team || turn?.player === 'BOTH';
               
               // Find the first player in this team who hasn't picked a god yet
               const nextPickForTeam = teamPicks.find(p => p.godId === null);
-              const isCurrentPlayerTurn = isGodTurn && isTeamTurn && pick.playerId === nextPickForTeam?.playerId;
+              const isCurrentPlayerTurn = isGodTurn && isTeamTurn && pick === nextPickForTeam;
               
               const hoveredGodId = team === 'A' ? lobby.hoveredGodIdA : lobby.hoveredGodIdB;
               const god = MAJOR_GODS.find(g => g.id === pick.godId) || (isCurrentPlayerTurn && hoveredGodId ? MAJOR_GODS.find(g => g.id === hoveredGodId) : null);
@@ -413,15 +415,15 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
             })}
           </div>
         ) : (
-          <div className="space-y-4">
-            {teamPicks.map((pick, idx) => {
+          <div className="flex flex-col gap-4">
+            {sortedPicks.map((pick, idx) => {
               const turn = lobby.turnOrder[lobby.turn];
               const isGodTurn = turn?.target === 'GOD';
               const isTeamTurn = turn?.player === team || turn?.player === 'BOTH';
               
               // Find the first player in this team who hasn't picked a god yet
               const nextPickForTeam = teamPicks.find(p => p.godId === null);
-              const isCurrentPlayerTurn = isGodTurn && isTeamTurn && pick.playerId === nextPickForTeam?.playerId;
+              const isCurrentPlayerTurn = isGodTurn && isTeamTurn && pick === nextPickForTeam;
               
               // Hide name from enemy team until god is picked
               const isMyTeamOverride = IS_DEV || (isCaptain1 && team === 'A') || (isCaptain2 && team === 'B');

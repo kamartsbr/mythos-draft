@@ -1,3 +1,8 @@
+import { Timestamp, FieldValue } from 'firebase/firestore';
+
+export type DraftTimestampWrite = Timestamp | FieldValue | Date | number | string | null;
+export type DraftTimestampRead = Timestamp | Date | number | string;
+
 export type God = {
   id: string;
   name: string;
@@ -60,6 +65,7 @@ export type LobbyConfig = {
   name: string;
   loserPicksNextMap: boolean;
   timerDuration?: number;
+  streamerHudSize?: number;
   preset?: string;
   mclRound?: number;
   tournamentStage?: 'GROUP' | 'PLAYOFFS' | 'PLAYOFFS_BO3' | 'PLAYOFFS_BO5';
@@ -79,6 +85,17 @@ export type LobbyConfig = {
   isOfficialForjaMatch?: boolean;
   /** Se true, a partida é um draft customizado e não deve ser exibida no hub do Forja */
   isCustomDraft?: boolean;
+  /** IDs do Discord dos capitães oficiais (para bloqueio de vaga no preset FORJA) */
+  captainA_discordId?: string;
+  captainB_discordId?: string;
+  /** Agendamento */
+  scheduledDate?: DraftTimestampWrite;
+  scheduledTime?: string;
+  streamerUrl?: string;
+  /** Link para draft externo (caso não tenha sido feito no Mythos) */
+  externalDraftLink?: string;
+  /** MCL Playoffs: mapa placeholder do último jogo (G5 em MD5, G7 em MD7). Injetado em seriesMaps[N-1] ao criar o lobby. */
+  playoffsLastMap?: string;
 };
 
 export type PickEntry = {
@@ -95,14 +112,17 @@ export type PickEntry = {
 
 export type GameResult = {
   gameNumber: number;
-  mapId: string;
+  mapId?: string;
   winner: 'A' | 'B';
-  picksA: string[];
-  picksB: string[];
+  scoreA?: number;
+  scoreB?: number;
+  picksA?: string[];
+  picksB?: string[];
   colorsA?: string[];
   colorsB?: string[];
   rosterA?: PickEntry[];
   rosterB?: PickEntry[];
+  isWO?: boolean;
 };
 
 export type ReplayStep = {
@@ -119,7 +139,7 @@ export type ReplayStep = {
 
 export type TeamPlayer = {
   name: string;
-  position: number; // 1-6
+  position: number;
 };
 
 export type Substitution = {
@@ -132,7 +152,7 @@ export type Substitution = {
 export type ResetRequest = {
   requestedBy: 'A' | 'B';
   status: 'pending' | 'accepted' | 'declined';
-  timestamp: any;
+  timestamp: DraftTimestampWrite;
 };
 
 export type LobbySummary = {
@@ -142,20 +162,22 @@ export type LobbySummary = {
   name: string;
   teamSize: number;
   /** Present when summary is built from Firestore; both required for public list visibility */
-  captain1Name: string;
-  captain2Name: string;
+  captain1Name?: string;
+  captain2Name?: string;
+  teamAName?: string;
+  teamBName?: string;
   status: LobbyStatus;
   phase: DraftPhase;
-  preset?: string;
+  preset?: string | null;
   mclRound?: number;
   tournamentStage?: 'GROUP' | 'PLAYOFFS';
-  lastActivityAt: any;
-  createdAt: any;
+  lastActivityAt: DraftTimestampRead | null;
+  createdAt: DraftTimestampRead | null;
 };
 
 export type LobbyIndex = {
   activeLobbies: LobbySummary[];
-  lastUpdate: any;
+  lastUpdate: DraftTimestampRead;
 };
 
 export type Lobby = {
@@ -165,6 +187,8 @@ export type Lobby = {
   captain2: string | null;
   captain1Name?: string;
   captain2Name?: string | null;
+  teamAName?: string;
+  teamBName?: string;
   teamAPlayers?: TeamPlayer[];
   teamBPlayers?: TeamPlayer[];
   readyA: boolean;
@@ -197,30 +221,32 @@ export type Lobby = {
   pickerPlayerA?: number | null;
   pickerPlayerB?: number | null;
   history: GameResult[];
+  gameResults?: GameResult[];
   replayLog: ReplayStep[];
   rosterA?: Record<number, PickEntry>;
   rosterB?: Record<number, PickEntry>;
   lastWinner: 'A' | 'B' | null;
   mapPool?: string[];
-  timerStart: any;
-  createdAt: any;
+  timerStart: DraftTimestampWrite;
+  createdAt: DraftTimestampRead;
   turnOrder: DraftTurn[];
-  hiddenActions: { turnIndex: number; actionId: string }[];
+  hiddenActions: { turnIndex: number; actionId: string; targetPlayerId?: number; playerName?: string }[];
   spectators: { id: string; name: string }[];
   adminId?: string;
   isPaused?: boolean;
-  timerPausedAt?: any;
+  timerPausedAt?: DraftTimestampWrite;
   captain1Active?: boolean;
   captain2Active?: boolean;
   isPermanent?: boolean;
   discordWebhookUrl?: string | null;
   discordMessageId?: string | null;
-  lastActivityAt?: any;
+  lastActivityAt?: DraftTimestampWrite;
   pausedTimeLeft?: number;
-  reportStartAt?: any;
+  reportStartAt?: DraftTimestampWrite;
   isHidden?: boolean;
   hoveredGodIdA?: string | null;
   hoveredGodIdB?: string | null;
+  turnEndsAt?: DraftTimestampWrite;
 };
 
 export type ChatMessage = {
@@ -230,5 +256,5 @@ export type ChatMessage = {
   senderName: string;
   senderRole: 'Host' | 'Guest' | 'ADMIN' | 'Spectator';
   text: string;
-  timestamp: any;
+  timestamp: DraftTimestampRead;
 };

@@ -2,8 +2,9 @@
 // Build Final Corrigido (Preservação de Dados + Elo Efetivo) - 07/05/2026
 // 🔥 CORREÇÃO DE CUSTOS: Remoção do loop de gravação de status e uso de Batch
 
-const { onCall, onRequest } = require("firebase-functions/v2/https");
+const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2");
+
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const { getFirestore } = require("firebase-admin/firestore");
@@ -19,8 +20,21 @@ setGlobalOptions({ region: "us-central1" });
 // API_KEY removida daqui — use VERCEL_API_KEY.value() dentro das funções
 const TARGET_ORIGIN = 'https://mythosdraft.com';
 
+const DISCORD_CLIENT_SECRET = defineSecret('DISCORD_CLIENT_SECRET');
+const DISCORD_CLIENT_ID = defineSecret('DISCORD_CLIENT_ID');
+
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Perform an HTTP GET and retry on HTTP 429 (Too Many Requests) using incremental backoff.
+ *
+ * @param {string} url - The request URL.
+ * @param {object} config - Axios request configuration (headers, timeout, etc.).
+ * @param {number} [retries=3] - Maximum number of attempts before giving up.
+ * @param {number} [backoff=1000] - Base delay in milliseconds used between retries (multiplied by attempt index).
+ * @returns {Promise<import('axios').AxiosResponse>} The Axios response object from a successful request.
+ * @throws {Error} The last encountered error when a non-429 response is received or all retries are exhausted.
+ */
 async function fetchWithRetry(url, config, retries = 3, backoff = 1000) {
   for (let i = 0; i < retries; i++) {
     try {
@@ -174,10 +188,105 @@ exports.updateEloSnapshot = onCall({ timeoutSeconds: 540, memory: "256MiB", secr
 });
 
 // --- FUNÇÃO 2: Busca Individual ---
-exports.fetchaomprofile = onRequest({ cors: true, secrets: [VERCEL_API_KEY] }, async (req, res) => {
-  const profileId = req.query.id;
-  if (!profileId) return res.status(400).send("ID ausente");
+exports.fetchaomprofile = onCall({ secrets: [VERCEL_API_KEY] }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const profileId = request.data.id;
+  if (!profileId) {
+    throw new HttpsError('invalid-argument', 'ID ausente');
+  }
+
   const result = await fetchVercelData(profileId);
-  if (result && result.isError) return res.status(result.status || 500).json({ success: false, error: result.message });
-  res.json({ success: !!result, data: result });
+  if (result && result.isError) {
+    throw new HttpsError('internal', result.message);
+  }
+  return result;
+});
+
+/**
+ * Verifica o token do Discord e retorna um custom token do Firebase.
+ * Isso garante que o UID do Firebase seja o próprio Discord ID do usuário.
+ */
+exports.verifydiscordtoken = onRequest({ cors: true, secrets: [DISCORD_CLIENT_SECRET, DISCORD_CLIENT_ID] }, async (req, res) => {
+    // Validate request structure and method
+    if (!req || typeof req.body !== 'object' || req.body === null) {
+      res.status(400).json({ error: "Invalid request structure" });
+      return;
+    }
+
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: "Method not allowed" });
+      return;
+    }
+
+    const { code, redirectUri } = req.body;
+
+    // Validate code is a non-empty string
+    if (!code || typeof code !== 'string' || code.trim() === '') {
+      res.status(400).json({ error: "Code ausente" });
+      return;
+    }
+
+    // Validate redirectUri against allowlist
+    const allowedRedirectUris = [
+      'https://mythosdraft.com/forja',
+      'http://localhost:8080/forja',
+      'http://localhost:5173/forja',
+      'http://localhost:4173/forja'
+    ];
+
+    if (!redirectUri || typeof redirectUri !== 'string' || !allowedRedirectUris.includes(redirectUri)) {
+      res.status(400).json({ error: "Invalid redirect URI" });
+      return;
+    }
+
+    try {
+      // 1. Trocar o CODE pelo ACCESS TOKEN (Server-side para segurança)
+      const params = new URLSearchParams();
+      params.append('client_id', DISCORD_CLIENT_ID.value());
+      params.append('client_secret', DISCORD_CLIENT_SECRET.value());
+      params.append('grant_type', 'authorization_code');
+      params.append('code', code);
+      params.append('redirect_uri', redirectUri);
+
+      const tokenRes = await axios.post('https://discord.com/api/oauth2/token', params, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 10000
+      });
+
+      const accessToken = tokenRes.data.access_token;
+
+      // 2. Buscar o usuário no Discord
+      const userRes = await axios.get('https://discord.com/api/users/@me', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: 10000
+      });
+
+      const discordUser = userRes.data;
+
+      // 3. Criar Custom Token no Firebase usando o Discord ID como UID
+      // O serviceAccountId configurado no initializeApp() garante que a
+      // App Engine SA (com permissão de signBlob) seja usada para assinar o JWT.
+      const customToken = await admin.auth().createCustomToken(discordUser.id, {
+        discord_id: discordUser.id,
+        username: discordUser.username,
+        avatar: discordUser.avatar
+      });
+
+      res.json({
+        customToken,
+        discordUser: {
+          id: discordUser.id,
+          username: discordUser.username,
+          avatar: discordUser.avatar
+        }
+      });
+    } catch (error) {
+      console.error("Erro na verificação do Discord:", error.response?.data || error.message);
+      // Retorna detalhes do erro para facilitar o debug no cliente (sem expor secrets)
+      const errorMessage = error.response?.data?.error || "Falha na autenticação com Discord";
+      res.status(500).json({ error: errorMessage });
+    }
 });

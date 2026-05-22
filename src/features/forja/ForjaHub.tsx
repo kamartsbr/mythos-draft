@@ -23,7 +23,6 @@ const ForjaMapas       = lazyWithRetry(() => import('./views/ForjaMapas'));
 const ForjaFormato     = lazyWithRetry(() => import('./views/ForjaFormato'));
 const ForjaSchedule    = lazyWithRetry(() => import('./views/ForjaSchedule'));
 const ForjaTimes       = lazyWithRetry(() => import('./views/ForjaTimes'));
-const ForjaTabela      = lazyWithRetry(() => import('./views/ForjaTabela'));
 const ForjaAdminDraft  = lazyWithRetry(() => import('./views/ForjaAdminDraft'));
 const ForjaDraftRoom   = lazyWithRetry(() => import('./views/ForjaDraftRoom'));
 const ForjaDraftOBS    = lazyWithRetry(() => import('./views/ForjaDraftOBS'));
@@ -39,9 +38,7 @@ const PUBLIC_TABS: ForjaTab[] = [
   { id: 'regras' as ForjaTabId,    label: 'Regras',    icon: '📜' },
   { id: 'mapas' as ForjaTabId,     label: 'Mapas',     icon: '🗺️' },
   { id: 'formato' as ForjaTabId,   label: 'Formato',   icon: '🐍' },
-  { id: 'schedule' as ForjaTabId,  label: 'Schedule',  icon: '📅' },
   { id: 'times' as ForjaTabId,     label: 'Times',     icon: '🛡️' },
-  { id: 'tabela' as ForjaTabId,    label: 'Tabela',    icon: '📊' },
 ];
 
 /** Visível para qualquer usuário Discord autenticado (participante ou admin). */
@@ -78,9 +75,9 @@ function TabFallback() {
 }
 
 /**
- * Renders the Forja Hub interface for the 3v3 tournament, including header, tab navigation, tab content and registration modal.
+ * Render the Forja Hub page for the 3v3 tournament, including header, tab navigation, tab content, deadline banner, Discord authentication UI, admin actions and registration modal.
  *
- * The component displays a dynamic set of tabs (public, member-only, admin-only and a draft-room when applicable), a deadline banner when registration is about to close, Discord authentication UI, admin quick actions (seed content), and a fullscreen OBS mode. Tab selection is synced to the `tab` query parameter and visibility of admin tabs depends on the current user's admin status.
+ * The component synchronizes the active tab with the `tab` query parameter, shows tabs conditionally (public, member-only, admin-only, and draft-room), and provides an OBS fullscreen mode when the `obs` tab is active.
  *
  * @returns The React element for the Forja Hub page.
  */
@@ -188,7 +185,7 @@ export default function ForjaHub() {
   })();
 
   return (
-    <div className="forja-hub">
+    <div className="forja-hub relative z-0">
 
       {/* ── Deadline Banner ──────────────────────── */}
       {showDeadlineBanner && (
@@ -247,7 +244,7 @@ export default function ForjaHub() {
                 </div>
               ) : discordUser ? (
                 <div className="forja-auth-user">
-                  <img src={discordUser.avatar_url} alt={discordUser.username}
+                  <img src={discordUser.avatar_url || undefined} alt={discordUser.username}
                     className="forja-auth-avatar" referrerPolicy="no-referrer" />
                   <div className="forja-auth-info">
                     <span className="forja-auth-name">{discordUser.username}</span>
@@ -273,7 +270,20 @@ export default function ForjaHub() {
         </div>
       </header>
 
-      {/* ── Tabs Nav ──────────────────────────── */}
+      {/* ── Content Area with Background ────────────────── */}
+      <div className="relative z-0 min-h-[60vh]">
+        {/* ── Background Video & Overlay (Localized) ── */}
+        <video 
+          autoPlay 
+          loop 
+          muted 
+          playsInline 
+          src="/mainmenubackground.mp4" 
+          className="absolute inset-0 w-full h-full object-cover -z-20 opacity-100"
+        />
+        <div className="absolute inset-0 bg-slate-950/85 -z-10" />
+
+        {/* ── Tabs Nav ──────────────────────────── */}
       <nav className="forja-tabs-nav" role="tablist">
         <div className="forja-tabs-inner">
           {allVisibleTabs.map(tab => (
@@ -294,21 +304,20 @@ export default function ForjaHub() {
       </nav>
 
       {/* ── Tab Content ───────────────────────── */}
-      <main className="forja-tab-content">
+      <main className={`forja-tab-content ${activeTab === 'times' || activeTab === 'inscritos' || activeTab === 'inicio' ? '!max-w-none w-[95vw] mx-auto' : ''}`}>
         <Suspense fallback={<TabFallback />}>
           {activeTab === 'inicio'      && <ForjaHome {...sharedProps} onRegisterClick={() => setShowRegModal(true)} onTabChange={handleTabChange} />}
           {activeTab === 'inscritos'    && <ForjaInicio {...sharedProps} onRegisterClick={() => setShowRegModal(true)} />}
           {activeTab === 'regras'      && <ForjaRulesEditor {...sharedProps} />}
           {activeTab === 'mapas'       && <ForjaMapas {...sharedProps} />}
           {activeTab === 'formato'     && <ForjaFormato {...sharedProps} />}
-          {activeTab === 'schedule'    && <ForjaSchedule {...sharedProps} />}
           {activeTab === 'times'       && <ForjaTimes {...sharedProps} />}
-          {activeTab === 'tabela'      && <ForjaTabela {...sharedProps} />}
           {activeTab === 'draft-room'  && showDraftRoomTab && <ForjaDraftRoom {...sharedProps} />}
           {activeTab === 'custom-draft' && discordUser && <ForjaCustomDraft {...sharedProps} />}
           {activeTab === 'admin-draft' && isAdmin && <ForjaAdminDraft {...sharedProps} />}
         </Suspense>
       </main>
+    </div>
 
       {/* ── Registration Modal ─────────────────── */}
       <ForjaRegistrationModal

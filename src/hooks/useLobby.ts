@@ -5,34 +5,12 @@ import { auth } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
 /**
- * Manages lobby state, presence, authentication-derived identity, admin status, and lobby actions for the UI.
+ * Manage UI-facing lobby state, guest identity, presence, admin status, and lobby actions.
  *
- * Exposes reactive state and action helpers for joining, creating, leaving, and administrating a lobby, plus automatic presence updates, Discord webhook triggers, and public-lobbies fetching.
+ * Exposes reactive state (current lobby, lobbyId, guestId, nickname, role flags, public lobbies, error/loading, auth readiness, and lobbyInitialLoading), admin helpers, presence handling, Discord webhook updates, and action helpers for joining, creating, leaving, and administrating a lobby.
  *
  * @param initialNickname - Initial display name to use for the current guest
- * @returns An object with current lobby state, identity, status flags, control actions, and utility setters:
- * - `lobby` — current lobby data or `null`
- * - `lobbyId` — active lobby identifier or `null`
- * - `setLobbyId` — setter for `lobbyId`
- * - `guestId` — guest identifier (from localStorage or auth) or `null`
- * - `nickname` — current display name
- * - `setNickname` — setter for `nickname`
- * - `isCaptain1`, `isCaptain2` — booleans indicating captain slots
- * - `isSpectator` — boolean indicating spectator role
- * - `setIsSpectator` — setter for `isSpectator`
- * - `isAdmin` — boolean admin flag
- * - `authenticateAdmin(token)` — grants admin when `token` matches the admin token
- * - `logoutAdmin()` — revokes admin status
- * - `publicLobbies` — list of fetched public lobby summaries
- * - `error`, `setError` — current error message and setter
- * - `loading` — boolean operation-in-progress flag
- * - `join(id, role, preferredPosition, playerNames, newNickname?)` — join a lobby
- * - `soloJoin(id, newNickname?)` — join a lobby as a solo player
- * - `create(id, newLobby)` — create a lobby
- * - `leave()` — leave the current lobby locally (clears URL param)
- * - `leaveSlot()` — leave the occupied captain slot and locally leave
- * - `forceReset()`, `resetCurrentGame()`, `forceFinish()`, `forceUnpause()`, `forceStartDraft()` — admin management actions
- * - `isAuthReady` — whether initial auth state has been resolved
+ * @returns An object containing the current lobby/identity state, role and admin flags, public lobby list, error/loading state, readiness flags, and action helpers for join/soloJoin/create/leave/leaveSlot and admin operations (forceReset, resetCurrentGame, forceFinish, forceUnpause, forceStartDraft), plus utility setters (setLobbyId, setNickname, setIsSpectator, setError)
  */
 export function useLobby(initialNickname: string) {
   const [guestId, setGuestId] = useState<string | null>(() => {
@@ -65,6 +43,7 @@ export function useLobby(initialNickname: string) {
 
   const [lobby, setLobby] = useState<Lobby | null>(null);
   const [lobbyId, setLobbyId] = useState<string | null>(null);
+  const [lobbyInitialLoading, setLobbyInitialLoading] = useState(false);
   const [nickname, setNickname] = useState(initialNickname);
   const [isCaptain1, setIsCaptain1] = useState(false);
   const [isCaptain2, setIsCaptain2] = useState(false);
@@ -145,8 +124,17 @@ export function useLobby(initialNickname: string) {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const id = params.get('lobby');
-    if (id) setLobbyId(id);
+    let id = params.get('lobby');
+    
+    // Support path-based ID: /lobby/hk4ltxt
+    if (!id && window.location.pathname.startsWith('/lobby/')) {
+      id = window.location.pathname.split('/')[2];
+    }
+    
+    if (id) {
+      setLobbyId(id);
+      setLobbyInitialLoading(true);
+    }
   }, []);
 
   // Presence update
@@ -198,13 +186,18 @@ export function useLobby(initialNickname: string) {
 
   // Lobby subscription (only when lobbyId exists)
   useEffect(() => {
-    if (!lobbyId || !guestId) return;
+    if (!lobbyId) return;
+    if (!guestId) {
+      setLobbyInitialLoading(false);
+      return;
+    }
 
     setPublicLobbies([]);
 
     const unsub = lobbyService.subscribeToLobby(
       lobbyId,
       (data) => {
+        setLobbyInitialLoading(false);
         setLobby(prev => {
           if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
           return data;
@@ -224,7 +217,10 @@ export function useLobby(initialNickname: string) {
 
         setIsSpectator(shouldBeSpectator);
       },
-      (err) => setError("Erro no Lobby: " + err.message)
+      (err) => {
+        setLobbyInitialLoading(false);
+        setError("Erro no Lobby: " + err.message);
+      }
     );
 
     return unsub;
@@ -299,6 +295,11 @@ export function useLobby(initialNickname: string) {
     await lobbyService.forceFinish(lobbyId);
   }, [lobbyId]);
 
+  const forceWO = useCallback(async (winner: 'A' | 'B', fillMaxScore: boolean = false) => {
+    if (!lobbyId) return;
+    await lobbyService.forceWO(lobbyId, winner, fillMaxScore);
+  }, [lobbyId]);
+
   const forceUnpause = useCallback(async () => {
     if (!lobbyId) return;
     await lobbyService.forceUnpause(lobbyId);
@@ -342,8 +343,10 @@ export function useLobby(initialNickname: string) {
     forceReset,
     resetCurrentGame,
     forceFinish,
+    forceWO,
     forceUnpause,
     forceStartDraft,
-    isAuthReady
+    isAuthReady,
+    lobbyInitialLoading
   };
 }

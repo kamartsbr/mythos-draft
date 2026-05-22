@@ -1,8 +1,9 @@
-import { doc, updateDoc, serverTimestamp, runTransaction } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp, runTransaction, Timestamp } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { Lobby, DraftTurn, PickEntry, TurnAction, TurnTarget, TurnModifier, TurnExecution, Substitution } from '../types';
 import { MAPS, MAJOR_GODS, MCL_ROUND_MAPS, getMCLPicks, PLAYER_COLORS } from '../constants';
 import { normalizeLobbyData, IS_DEV, isSoloAdminLobby } from './lobbyService';
+import { processTurnAction, processReportAction } from '../lib/pureDraftEngine';
 
 // Mock helpers for LocalStorage
 const STORAGE_PREFIX = 'mythos_draft_dev_';
@@ -122,217 +123,49 @@ export const draftService = {
     playerName?: string,
     options?: { isRandom?: boolean }
   ): { success: boolean; error?: string; updates?: Partial<Lobby> } {
-    if (freshLobby.status !== 'drafting') return { success: false, error: "Not drafting" };
+    try {
+      const actingTeam = isCaptain1 ? 'A' : 'B';
+      const updatedLobby = processTurnAction(
+        freshLobby,
+        actionId,
+        actingTeam,
+        targetPlayerId,
+        playerName,
+        options,
+        Date.now()
+      );
 
-    const currentTurn = freshLobby.turnOrder[freshLobby.turn];
-    if (!currentTurn) return { success: false, error: "No turn found" };
+      const updates: Partial<Lobby> = {
+        picks: updatedLobby.picks,
+        bans: updatedLobby.bans,
+        mapBans: updatedLobby.mapBans,
+        seriesMaps: updatedLobby.seriesMaps,
+        selectedMap: updatedLobby.selectedMap,
+        turn: updatedLobby.turn,
+        phase: updatedLobby.phase,
+        timerStart: updatedLobby.timerStart,
+        turnEndsAt: updatedLobby.turnEndsAt,
+        lastActivityAt: updatedLobby.lastActivityAt,
+        hiddenActions: updatedLobby.hiddenActions,
+        replayLog: updatedLobby.replayLog,
+      };
 
-    const isMyTurn = IS_DEV || isSoloAdminLobby(freshLobby) ||
-      (isCaptain1 && currentTurn.player === 'A') ||
-      (isCaptain2 && currentTurn.player === 'B') ||
-      (currentTurn.player === 'BOTH');
-
-    // Timer check
-    let isTimerExpired = false;
-    if (freshLobby.timerStart) {
-      let startTime: number;
-      if (typeof freshLobby.timerStart === 'string') {
-        startTime = new Date(freshLobby.timerStart).getTime();
-      } else if (typeof freshLobby.timerStart === 'number') {
-        startTime = freshLobby.timerStart;
-      } else if (freshLobby.timerStart && typeof (freshLobby.timerStart as any).toMillis === 'function') {
-        startTime = (freshLobby.timerStart as any).toMillis();
-      } else {
-        startTime = Date.now();
-      }
-      const elapsed = (Date.now() - startTime) / 1000;
-      const duration = freshLobby.config.timerDuration || 60;
-      if (elapsed >= duration + 1) {
-        isTimerExpired = true;
-      }
-    }
-
-    const isOpponentTriggeringAutoPick = isTimerExpired && (isCaptain1 || isCaptain2);
-
-    if (!isMyTurn && currentTurn.player !== 'ADMIN' && !isOpponentTriggeringAutoPick) {
-      return { success: false, error: "Not your turn" };
-    }
-
-    const updates: Partial<Lobby> = {
-      picks: [...freshLobby.picks.map(p => ({ ...p }))],
-      bans: [...(freshLobby.bans || [])],
-      mapBans: [...(freshLobby.mapBans || [])],
-      seriesMaps: [...(freshLobby.seriesMaps || [])],
-      replayLog: [...(freshLobby.replayLog || [])],
-      hiddenActions: Array.isArray(freshLobby.hiddenActions) ? [...freshLobby.hiddenActions] : [],
-      mapPool: freshLobby.mapPool ? [...freshLobby.mapPool] : [],
-      turn: freshLobby.turn,
-      phase: freshLobby.phase,
-      selectedMap: freshLobby.selectedMap,
-      timerStart: freshLobby.timerStart,
-      lastActivityAt: now()
-    };
-
-    let actingTeam: 'A' | 'B';
-    if (currentTurn.player === 'A') actingTeam = 'A';
-    else if (currentTurn.player === 'B') actingTeam = 'B';
-    else actingTeam = isCaptain1 ? 'A' : 'B';
-
-    if (currentTurn.execution === 'AS_OPPONENT') {
-      actingTeam = (actingTeam === 'A' ? 'B' : 'A') as 'A' | 'B';
-    }
-
-    const applyAction = (id: string, turn: DraftTurn, team: 'A' | 'B', tPlayerId?: number, pName?: string) => {
-      if (turn.action === 'BAN') {
-        if (turn.target === 'MAP') {
-          if (updates.mapBans!.includes(id)) return false;
-          if (updates.seriesMaps!.includes(id)) return false;
-          updates.mapBans!.push(id);
-        } else {
-          if (updates.bans!.includes(id)) return false;
-          updates.bans!.push(id);
+      if (!IS_DEV) {
+        if (updates.timerStart) {
+          updates.timerStart = serverTimestamp();
         }
-      } else if (turn.action === 'PICK') {
-        if (turn.target === 'MAP') {
-          if (updates.mapBans!.includes(id)) return false;
-          if (updates.seriesMaps!.includes(id)) return false;
-          if (updates.mapPool?.includes(id)) return false;
-
-          if (turn.player === 'ADMIN') {
-            const targetIndex = freshLobby.currentGame ? freshLobby.currentGame - 1 : 0;
-            if (!updates.seriesMaps || targetIndex < 0) {
-              console.error('Invalid seriesMaps index:', targetIndex);
-              return false;
-            }
-            // Expand seriesMaps if needed
-            while (updates.seriesMaps.length <= targetIndex) {
-              updates.seriesMaps.push("");
-            }
-            updates.seriesMaps![targetIndex] = id;
-          } else {
-            const emptySlotIndex = updates.seriesMaps!.indexOf("");
-            if (emptySlotIndex !== -1) {
-              if ((freshLobby.config.preset === 'MCL' || freshLobby.config.preset === 'FORJA') && emptySlotIndex !== (freshLobby.currentGame - 1)) {
-                return false;
-              }
-              updates.seriesMaps![emptySlotIndex] = id;
-            } else {
-              const gameCount = freshLobby.config.seriesType === 'BO1' ? 1 :
-                freshLobby.config.seriesType === 'BO3' ? 3 :
-                  freshLobby.config.seriesType === 'BO5' ? 5 :
-                    freshLobby.config.seriesType === 'BO7' ? 7 :
-                      freshLobby.config.seriesType === 'BO9' ? 9 :
-                        freshLobby.config.seriesType === '3G' ? 3 :
-                          (freshLobby.config.customGameCount || 1);
-
-              if (updates.seriesMaps!.length < gameCount) {
-                updates.seriesMaps!.push(id);
-              } else {
-                return false;
-              }
-            }
-          }
-
-          updates.selectedMap = id;
-
-          if (freshLobby.config.preset === 'MCL' || freshLobby.config.preset === 'FORJA') {
-            const newMCLPicks = getMCLPicks(freshLobby.currentGame, id, freshLobby.lastWinner || null);
-            updates.picks = newMCLPicks.map(p => {
-              const teamPlayers = p.team === 'A' ? freshLobby.teamAPlayers : freshLobby.teamBPlayers;
-              const playerAtPos = teamPlayers?.find(tp => tp.position === p.playerId);
-              const existingPick = freshLobby.picks.find(ep => ep.playerId === p.playerId);
-              const preservedName = playerAtPos?.name || existingPick?.playerName || '';
-              return { ...p, playerName: preservedName };
-            });
-          }
-        } else {
-          const alreadyPickedByTeam = updates.picks!.some(p => p.team === team && p.godId === id);
-          const alreadyPickedByAnyone = updates.picks!.some(p => p.godId === id);
-          if (turn.modifier === 'EXCLUSIVE' && alreadyPickedByAnyone) return false;
-          if (turn.modifier === 'NONEXCLUSIVE' && alreadyPickedByTeam) return false;
-          if (updates.bans!.includes(id)) return false;
-
-          let pickIndex = -1;
-          if (tPlayerId !== undefined) {
-            pickIndex = updates.picks!.findIndex(p => p.team === team && p.playerId === tPlayerId && p.godId === null);
-          } else {
-            pickIndex = updates.picks!.findIndex(p => p.team === team && p.godId === null);
-          }
-
-          if (pickIndex !== -1) {
-            updates.picks![pickIndex].godId = id;
-            updates.picks![pickIndex].turnIndex = freshLobby.turn;
-            if (options?.isRandom) {
-              updates.picks![pickIndex].isRandom = true;
-            }
-            if (pName) {
-              updates.picks![pickIndex].playerName = pName;
-            }
-          } else {
-            return false;
-          }
+        if (updates.lastActivityAt) {
+          updates.lastActivityAt = serverTimestamp();
         }
-      } else if (turn.action === 'SNIPE') {
-        const opponentTeam = team === 'A' ? 'B' : 'A';
-        const snipeIndex = updates.picks!.findIndex(p => p.team === opponentTeam && p.godId === id);
-        if (snipeIndex !== -1) updates.picks![snipeIndex].godId = null;
-      }
-
-      updates.replayLog!.push({
-        gameNumber: freshLobby.currentGame,
-        turnIndex: freshLobby.turn,
-        player: turn.player === 'BOTH' ? team : turn.player as any,
-        action: turn.action,
-        target: turn.target,
-        id,
-        timestamp: new Date().toISOString(),
-        playerId: tPlayerId || null,
-        isRandom: options?.isRandom || false
-      });
-
-      return true;
-    };
-
-    if (currentTurn.action === 'REVEAL') {
-      updates.hiddenActions!.forEach(ha => {
-        const turn = freshLobby.turnOrder[ha.turnIndex];
-        const team = turn.player === 'A' ? 'A' : (turn.player === 'B' ? 'B' : (isCaptain1 ? 'A' : 'B'));
-        applyAction(ha.actionId, turn, team as 'A' | 'B');
-      });
-      updates.hiddenActions = [];
-    } else if (currentTurn.execution === 'HIDDEN') {
-      updates.hiddenActions!.push({ turnIndex: freshLobby.turn, actionId });
-    } else {
-      if (!applyAction(actionId, currentTurn, actingTeam, targetPlayerId, playerName)) return { success: false, error: "Invalid action" };
-    }
-
-    updates.turn!++;
-    updates.timerStart = now();
-
-    const nextTurn = freshLobby.turnOrder[updates.turn!];
-    if (nextTurn) {
-      if (nextTurn.target === 'MAP') {
-        updates.phase = nextTurn.action === 'BAN' ? 'map_ban' : 'map_pick';
-      } else {
-        if (currentTurn.target === 'MAP') {
-          if (updates.seriesMaps!.length > 0) {
-            updates.selectedMap = updates.seriesMaps![freshLobby.currentGame - 1];
-          }
+        if (updates.turnEndsAt && typeof updates.turnEndsAt === 'number') {
+          updates.turnEndsAt = Timestamp.fromMillis(updates.turnEndsAt);
         }
-        updates.phase = nextTurn.action === 'BAN' ? 'god_ban' : 'god_pick';
       }
-    } else {
-      if (freshLobby.config.teamSize === 1) {
-        updates.phase = 'ready_picker';
-        updates.readyA = false;
-        updates.readyB = false;
-      } else {
-        updates.phase = 'post_draft';
-      }
-      updates.timerStart = null;
-    }
 
-    return { success: true, updates };
+      return { success: true, updates };
+    } catch (error: any) {
+      return { success: false, error: error.message || "Action execution failed" };
+    }
   },
 
   async reportScore(
@@ -340,13 +173,14 @@ export const draftService = {
     winner: 'A' | 'B' | null,
     isCaptain1: boolean,
     isCaptain2: boolean,
-    generateStandardTurnOrder: (cfg: any, gameNumber?: number, lastWinner?: 'A' | 'B' | null) => { mapOrder: DraftTurn[], godOrder: DraftTurn[] }
+    generateStandardTurnOrder: (cfg: any, gameNumber?: number, lastWinner?: 'A' | 'B' | null) => { mapOrder: DraftTurn[], godOrder: DraftTurn[] },
+    isAdminOverride: boolean = false
   ): Promise<{ success: boolean; error?: string }> {
     if (IS_DEV) {
       const freshLobby = getLocalLobby(lobby.id);
       if (!freshLobby) return { success: false, error: "Lobby not found" };
 
-      const result = this._processReportLogic(freshLobby, winner, isCaptain1, isCaptain2, generateStandardTurnOrder);
+      const result = this._processReportLogic(freshLobby, winner, isCaptain1, isCaptain2, generateStandardTurnOrder, isAdminOverride);
       if (result.success && result.updates) {
         setLocalLobby(lobby.id, cleanData({ ...freshLobby, ...result.updates }));
         return { success: true };
@@ -361,7 +195,7 @@ export const draftService = {
         if (!lobbyDoc.exists()) return { success: false, error: "Lobby not found" };
 
         const freshLobby = normalizeLobbyData({ id: lobbyDoc.id, ...lobbyDoc.data() });
-        const result = this._processReportLogic(freshLobby, winner, isCaptain1, isCaptain2, generateStandardTurnOrder);
+        const result = this._processReportLogic(freshLobby, winner, isCaptain1, isCaptain2, generateStandardTurnOrder, isAdminOverride);
 
         if (!result.success) return { success: false, error: result.error };
 
@@ -382,129 +216,61 @@ export const draftService = {
     winner: 'A' | 'B' | null,
     isCaptain1: boolean,
     isCaptain2: boolean,
-    generateStandardTurnOrder: any
+    generateStandardTurnOrder: any,
+    isAdminOverride: boolean = false
   ): { success: boolean, error?: string, updates?: Partial<Lobby> } {
-    const nextLobby = { ...lobby };
+    try {
+      const reportingTeam = isCaptain1 ? 'A' : 'B';
+      const updatedLobby = processReportAction(
+        lobby,
+        winner,
+        reportingTeam,
+        Date.now(),
+        { isAdminOverride }
+      );
 
-    if (nextLobby.phase === 'post_draft' && nextLobby.status === 'drafting') {
-      if (isCaptain1) nextLobby.readyA_report = true;
-      if (isCaptain2) nextLobby.readyB_report = true;
+      const updates: Partial<Lobby> = {
+        scoreA: updatedLobby.scoreA,
+        scoreB: updatedLobby.scoreB,
+        currentGame: updatedLobby.currentGame,
+        lastWinner: updatedLobby.lastWinner,
+        status: updatedLobby.status,
+        phase: updatedLobby.phase,
+        turnOrder: updatedLobby.turnOrder,
+        turn: updatedLobby.turn,
+        bans: updatedLobby.bans,
+        reportVoteA: updatedLobby.reportVoteA,
+        reportVoteB: updatedLobby.reportVoteB,
+        reportStartAt: updatedLobby.reportStartAt,
+        lastSubs: updatedLobby.lastSubs,
+        rosterChangedA: updatedLobby.rosterChangedA,
+        rosterChangedB: updatedLobby.rosterChangedB,
+        pickerVoteA: updatedLobby.pickerVoteA,
+        pickerVoteB: updatedLobby.pickerVoteB,
+        pickerPlayerA: updatedLobby.pickerPlayerA,
+        pickerPlayerB: updatedLobby.pickerPlayerB,
+        readyA_report: updatedLobby.readyA_report,
+        readyB_report: updatedLobby.readyB_report,
+        picks: updatedLobby.picks,
+        selectedMap: updatedLobby.selectedMap,
+        history: updatedLobby.history,
+        voteConflict: updatedLobby.voteConflict,
+        lastActivityAt: updatedLobby.lastActivityAt
+      };
 
-      if (nextLobby.readyA_report && nextLobby.readyB_report) {
-        nextLobby.phase = 'reporting';
-        nextLobby.readyA_report = false;
-        nextLobby.readyB_report = false;
+      if (!IS_DEV) {
+        if (updates.lastActivityAt) {
+          updates.lastActivityAt = serverTimestamp();
+        }
+        if (updates.reportStartAt && typeof updates.reportStartAt === 'number') {
+          updates.reportStartAt = Timestamp.fromMillis(updates.reportStartAt);
+        }
       }
 
-      nextLobby.lastActivityAt = now();
-      return { success: true, updates: nextLobby };
+      return { success: true, updates };
+    } catch (e: any) {
+      return { success: false, error: e.message || "Report failed" };
     }
-
-    if (!winner) return { success: false, error: "No winner selected" };
-
-    if (isCaptain1) nextLobby.reportVoteA = winner;
-    if (isCaptain2) nextLobby.reportVoteB = winner;
-
-    if (!lobby.reportVoteA && !lobby.reportVoteB) {
-      nextLobby.reportStartAt = now();
-    }
-
-    nextLobby.voteConflict = false;
-
-    if (nextLobby.reportVoteA && nextLobby.reportVoteB) {
-      if (nextLobby.reportVoteA === nextLobby.reportVoteB) {
-        const finalWinner = nextLobby.reportVoteA;
-
-        nextLobby.history.push({
-          gameNumber: lobby.currentGame,
-          mapId: lobby.selectedMap!,
-          winner: finalWinner,
-          picksA: lobby.config.teamSize === 1 ? [lobby.pickerVoteA!] : lobby.picks.filter(p => p.team === 'A').map(p => p.godId!),
-          picksB: lobby.config.teamSize === 1 ? [lobby.pickerVoteB!] : lobby.picks.filter(p => p.team === 'B').map(p => p.godId!),
-          colorsA: lobby.config.teamSize === 1 ? [lobby.picks.find(p => p.team === 'A')?.color!] : lobby.picks.filter(p => p.team === 'A').map(p => p.color),
-          colorsB: lobby.config.teamSize === 1 ? [lobby.picks.find(p => p.team === 'B')?.color!] : lobby.picks.filter(p => p.team === 'B').map(p => p.color),
-          rosterA: lobby.picks.filter(p => p.team === 'A'),
-          rosterB: lobby.picks.filter(p => p.team === 'B')
-        });
-
-        if (finalWinner === 'A') nextLobby.scoreA++;
-        else nextLobby.scoreB++;
-
-        let isFinished = false;
-        const sType = lobby.config.seriesType;
-
-        if (sType === '3G' || lobby.config.preset === 'MCL' || (lobby.config.preset === 'FORJA' && lobby.config.tournamentStage === 'GROUP')) {
-          // No modo 3G (ou Forja Grupos), a série SÓ acaba após o Game 3 ser reportado, independente do placar (pode ser 3-0 ou 2-1).
-          isFinished = lobby.currentGame === 3 && Boolean(nextLobby.reportVoteA && nextLobby.reportVoteB);
-        } else {
-          const maxGamesStr = sType === 'CUSTOM' ? (lobby.config.customGameCount || 1).toString() : sType.replace('BO', '');
-          const maxGames = parseInt(maxGamesStr);
-          const winThreshold = Math.ceil(maxGames / 2);
-          if (nextLobby.scoreA >= winThreshold || nextLobby.scoreB >= winThreshold) isFinished = true;
-        }
-
-        if (isFinished) {
-          nextLobby.status = 'finished';
-          nextLobby.phase = 'finished';
-        } else {
-          nextLobby.phase = 'ready';
-          nextLobby.currentGame++;
-          nextLobby.lastWinner = finalWinner;
-
-          const { mapOrder, godOrder } = generateStandardTurnOrder(lobby.config, nextLobby.currentGame, finalWinner);
-          nextLobby.turnOrder = [...mapOrder, ...godOrder];
-          nextLobby.turn = 0;
-          nextLobby.bans = [];
-          nextLobby.reportVoteA = null;
-          nextLobby.reportVoteB = null;
-          nextLobby.reportStartAt = null;
-          // Evita loop de substituições / alertas entre games sem novo roster edit
-          nextLobby.lastSubs = [];
-          nextLobby.rosterChangedA = false;
-          nextLobby.rosterChangedB = false;
-          // Limpar estados que podem vazar entre games
-          nextLobby.pickerVoteA = null;
-          nextLobby.pickerVoteB = null;
-          nextLobby.pickerPlayerA = null;
-          nextLobby.pickerPlayerB = null;
-          nextLobby.readyA_report = false;
-          nextLobby.readyB_report = false;
-          nextLobby.lastSubs = [];
-
-          // Para MCL/FORJA: se o próximo game tem mapa pré-determinado (Game 3 = round map no MCL, ou serieMaps no FORJA),
-          // reinicializa os picks com as posições corretas para aquele mapa.
-          // Se o mapa ainda não está definido (Game 2), apenas limpa os godIds.
-          if (nextLobby.config.preset === 'MCL' || nextLobby.config.preset === 'FORJA') {
-            const nextGameMap = (nextLobby.seriesMaps || [])[nextLobby.currentGame - 1];
-            if (nextGameMap && nextGameMap !== '') {
-              // Game 3: mapa pré-determinado pelo round — recalcula skeleton de posições
-              const newMCLPicks = getMCLPicks(nextLobby.currentGame, nextGameMap, finalWinner);
-              const teamAPlayers = nextLobby.teamAPlayers || [];
-              const teamBPlayers = nextLobby.teamBPlayers || [];
-              nextLobby.picks = newMCLPicks.map(p => {
-                const existingPick = (lobby.picks || []).find(ep => ep.playerId === p.playerId);
-                const teamPlayers = p.team === 'A' ? teamAPlayers : teamBPlayers;
-                const playerAtPos = (teamPlayers as any[]).find((tp: any) => tp.position === p.playerId);
-                return { ...p, playerName: playerAtPos?.name || existingPick?.playerName || '' };
-              });
-              nextLobby.selectedMap = nextGameMap;
-            } else {
-              // Game 2: mapa será escolhido pelo Guest — limpa godIds mas mantém skeleton
-              nextLobby.picks = nextLobby.picks.map(p => ({ ...p, godId: null }));
-              nextLobby.selectedMap = null;
-            }
-          } else {
-            nextLobby.picks = nextLobby.picks.map(p => ({ ...p, godId: null }));
-            nextLobby.selectedMap = null;
-          }
-        }
-      } else {
-        nextLobby.voteConflict = true;
-      }
-    }
-
-    nextLobby.lastActivityAt = now();
-    return { success: true, updates: nextLobby };
   },
 
   async handlePickerAction(
@@ -612,7 +378,7 @@ export const draftService = {
 
       const newHistoryPicks = [...(freshLobby.picks || [])];
       newPicks.forEach(np => {
-        const index = newHistoryPicks.findIndex(hp => hp.playerId === np.playerId && hp.team === np.team);
+        const index = newHistoryPicks.findIndex(hp => Number(hp.playerId) === Number(np.playerId) && hp.team === np.team);
         if (index !== -1) {
           newHistoryPicks[index] = np;
         } else {
@@ -620,14 +386,45 @@ export const draftService = {
         }
       });
       const namesChanged = newPicks.some(np => {
-        const old = (freshLobby.picks || []).find(hp => hp.playerId === np.playerId && hp.team === np.team);
+        const old = (freshLobby.picks || []).find(hp => Number(hp.playerId) === Number(np.playerId) && hp.team === np.team);
         return !!old && (old.playerName || '').trim() !== (np.playerName || '').trim();
       });
       const notifyOpponent = subs.length > 0 || namesChanged;
 
+      // Extract updated names into the lobby's persistent team arrays so they survive into the next game
+      const nextTeamAPlayers = [...(freshLobby.teamAPlayers || [])];
+      const nextTeamBPlayers = [...(freshLobby.teamBPlayers || [])];
+      
+      // We must figure out the roster index for each updated pick.
+      // Easiest way is to sort the team's picks by playerId ascending (which matches the roster array order 0, 1, 2)
+      // Since teamAPlayers always has 3 elements matching the 3 playerIds.
+      const getSortedTeamIds = (t: 'A' | 'B') => {
+         const ids = newHistoryPicks.filter(p => p.team === t).map(p => Number(p.playerId)).sort((a, b) => a - b);
+         return ids;
+      };
+      
+      const teamAIds = getSortedTeamIds('A');
+      const teamBIds = getSortedTeamIds('B');
+
+      newHistoryPicks.forEach(p => {
+        const targetArr = p.team === 'A' ? nextTeamAPlayers : nextTeamBPlayers;
+        const ids = p.team === 'A' ? teamAIds : teamBIds;
+        const rosterIdx = ids.indexOf(Number(p.playerId));
+        
+        if (rosterIdx !== -1) {
+          if (!targetArr[rosterIdx]) {
+             targetArr[rosterIdx] = { name: p.playerName || '', position: rosterIdx };
+          } else {
+             targetArr[rosterIdx] = { ...targetArr[rosterIdx], name: p.playerName || targetArr[rosterIdx].name };
+          }
+        }
+      });
+
       setLocalLobby(lobby.id, cleanData({
         ...freshLobby,
         picks: newHistoryPicks,
+        teamAPlayers: nextTeamAPlayers,
+        teamBPlayers: nextTeamBPlayers,
         ...(subs.length > 0 ? { lastSubs: [...(freshLobby.lastSubs || []), ...subs] } : {}),
         ...(notifyOpponent
           ? team === 'A'
@@ -649,7 +446,7 @@ export const draftService = {
 
         const newHistoryPicks = [...(freshLobby.picks || [])];
         newPicks.forEach(np => {
-          const index = newHistoryPicks.findIndex(hp => hp.playerId === np.playerId && hp.team === np.team);
+          const index = newHistoryPicks.findIndex(hp => Number(hp.playerId) === Number(np.playerId) && hp.team === np.team);
           if (index !== -1) {
             newHistoryPicks[index] = np;
           } else {
@@ -662,7 +459,7 @@ export const draftService = {
         }
 
         const namesChanged = newPicks.some(np => {
-          const old = (freshLobby.picks || []).find(hp => hp.playerId === np.playerId && hp.team === np.team);
+          const old = (freshLobby.picks || []).find(hp => Number(hp.playerId) === Number(np.playerId) && hp.team === np.team);
           return !!old && (old.playerName || '').trim() !== (np.playerName || '').trim();
         });
         const notifyOpponent = subs.length > 0 || namesChanged;
@@ -671,22 +468,33 @@ export const draftService = {
           else updates.rosterChangedB = true;
         }
 
-        const teamKey = team === 'A' ? 'teamAPlayers' : 'teamBPlayers';
-        const existingTeamPlayers = (team === 'A' ? (freshLobby.teamAPlayers || []) : (freshLobby.teamBPlayers || []))
-          .reduce((acc, player) => {
-            acc[player.position] = player.name;
-            return acc;
-          }, {} as Record<number, string>);
+        const nextTeamAPlayers = [...(freshLobby.teamAPlayers || [])];
+        const nextTeamBPlayers = [...(freshLobby.teamBPlayers || [])];
 
-        newPicks
-          .filter(p => p.team === team)
-          .forEach(p => {
-            existingTeamPlayers[p.playerId] = p.playerName?.trim() || existingTeamPlayers[p.playerId] || '';
-          });
+        const getSortedTeamIds = (t: 'A' | 'B') => {
+           const ids = newHistoryPicks.filter(p => p.team === t).map(p => Number(p.playerId)).sort((a, b) => a - b);
+           return ids;
+        };
 
-        (updates as any)[teamKey] = Object.entries(existingTeamPlayers)
-          .map(([position, name]) => ({ position: Number(position), name }))
-          .sort((a, b) => a.position - b.position);
+        const teamAIds = getSortedTeamIds('A');
+        const teamBIds = getSortedTeamIds('B');
+
+        newHistoryPicks.forEach(p => {
+          const targetArr = p.team === 'A' ? nextTeamAPlayers : nextTeamBPlayers;
+          const ids = p.team === 'A' ? teamAIds : teamBIds;
+          const rosterIdx = ids.indexOf(Number(p.playerId));
+
+          if (rosterIdx !== -1) {
+            if (!targetArr[rosterIdx]) {
+              targetArr[rosterIdx] = { name: p.playerName || '', position: rosterIdx };
+            } else {
+              targetArr[rosterIdx] = { ...targetArr[rosterIdx], name: p.playerName || targetArr[rosterIdx].name };
+            }
+          }
+        });
+
+        updates.teamAPlayers = nextTeamAPlayers;
+        updates.teamBPlayers = nextTeamBPlayers;
 
         transaction.update(lobbyRef, cleanData(updates));
         return { success: true };

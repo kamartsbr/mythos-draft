@@ -4,18 +4,17 @@ import { MAPS, MAJOR_GODS } from '../constants';
 import { getServerTime } from '../lib/serverTime';
 
 /**
- * Manage lobby countdown state and automatically trigger draft actions when the timer elapses.
+ * Manage and expose the lobby draft countdown and trigger automatic draft actions when the timer elapses.
  *
- * Tracks remaining seconds for the lobby draft timer, keeps the counter accurate across background tabs,
- * and dispatches automatic random picks/bans/reveals (including god-picker support) when the lobby timer ends
- * or when a delayed opponent window opens.
+ * When a drafting timer is active, keeps `timeLeft` synchronized (including across background tabs) and automatically
+ * submits picks, bans, reveals, or god-picker selections according to lobby state and turn rules.
  *
- * @param lobby - The current lobby object or `null`. When `null` or when the lobby is not in an active drafting state, no timer runs.
+ * @param lobby - Current lobby or `null`; no timer runs when the lobby is absent or not in an active drafting state.
  * @param isCaptain1 - True when the caller represents captain A.
  * @param isCaptain2 - True when the caller represents captain B.
- * @param handleAction - Required callback to perform draft actions (e.g. picks, bans, reveals). Called with an action id and optional player info; the `options.isRandom` flag is set when the action was selected automatically.
- * @param handlePickerAction - Optional callback used only during the `god_picker` phase to submit a god pick; receives the same arguments as `handleAction`.
- * @returns An object containing `timeLeft` — the countdown in seconds remaining, or `null` when no active timer is available.
+ * @param handleAction - Callback to submit non-god-picker draft actions. When invoked for automatic choices, `options.isRandom` is set.
+ * @param handlePickerAction - Optional callback used only during the `god_picker` phase; called similarly to `handleAction` when an automatic god pick is made.
+ * @returns `timeLeft` — seconds remaining on the active draft timer, or `null` when no valid timer is available.
  */
 export function useTimer(
   lobby: Lobby | null, 
@@ -60,7 +59,7 @@ export function useTimer(
 
   const tick = useCallback(async () => {
     const currentLobby = lobbyRef.current;
-    if (!currentLobby || !currentLobby.timerStart || currentLobby.status !== 'drafting' || currentLobby.phase === 'finished' || currentLobby.phase === 'post_draft') {
+    if (!currentLobby || (!currentLobby.timerStart && !currentLobby.turnEndsAt) || currentLobby.status !== 'drafting' || currentLobby.phase === 'finished' || currentLobby.phase === 'post_draft') {
       setTimeLeft(null);
       isProcessing.current = false;
       lastTriggeredTurn.current = null;
@@ -86,29 +85,37 @@ export function useTimer(
       return;
     }
 
-    let startTime: number;
-    const ts = currentLobby.timerStart;
+    // 🔥 SOLUÇÃO: Timer Absoluto (Sincronização Perfeita)
+    // Usamos o 'turnEndsAt' persistido no Firestore como fonte única da verdade.
+    let endTime: number;
+    const tea = currentLobby.turnEndsAt;
     
-    if (ts && typeof (ts as any).toMillis === 'function') {
-      startTime = (ts as any).toMillis();
-    } else if (ts && typeof (ts as any).toDate === 'function') {
-      const d = (ts as any).toDate();
-      startTime = d ? d.getTime() : Date.now();
-    } else if (typeof ts === 'number') {
-      startTime = ts < 10000000000 ? ts * 1000 : ts;
-    } else if (typeof ts === 'string') {
-      startTime = new Date(ts).getTime();
+    if (tea && typeof (tea as any).toMillis === 'function') {
+      endTime = (tea as any).toMillis();
+    } else if (tea && typeof (tea as any).toDate === 'function') {
+      endTime = (tea as any).toDate().getTime();
+    } else if (typeof tea === 'number') {
+      endTime = tea < 10000000000 ? tea * 1000 : tea;
     } else {
-      startTime = Date.now();
+      // Fallback para lógica antiga caso turnEndsAt não exista (migração)
+      let startTime: number;
+      const ts = currentLobby.timerStart;
+      if (ts && typeof (ts as any).toMillis === 'function') {
+        startTime = (ts as any).toMillis();
+      } else if (typeof ts === 'number') {
+        startTime = ts < 10000000000 ? ts * 1000 : ts;
+      } else {
+        startTime = Date.now();
+      }
+      const duration = currentLobby.config?.timerDuration || 60;
+      endTime = startTime + (duration * 1000);
     }
 
+    const duration = currentLobby.config?.timerDuration || 60;
     const nowServer = await getServerTime();
-    const elapsed = Math.max(0, (nowServer - startTime) / 1000);
-    const duration = (typeof currentLobby.config?.timerDuration === 'number' && !isNaN(currentLobby.config.timerDuration)) 
-      ? currentLobby.config.timerDuration 
-      : 60;
-    const remaining = Math.max(0, duration - Math.floor(elapsed));
-    
+    const remaining = Math.max(0, Math.floor((endTime - nowServer) / 1000));
+    const elapsed = Math.max(0, (nowServer - (endTime - (duration * 1000))) / 1000);
+
     // Protection: if the calculated time is suspiciously large (e.g. > 1 hour),
     // it likely indicates a clock sync issue or a corrupted timestamp.
     if (remaining > 3600 || isNaN(remaining)) {
@@ -237,8 +244,8 @@ export function useTimer(
 
         const availableGods = MAJOR_GODS.filter(g => {
           const isAllowed = allowedPantheons.length === 0 || 
-                            allowedPantheons.includes(g.id) ||
-                            allowedPantheons.includes(g.culture);
+                            allowedPantheons.some(p => p.toLowerCase() === g.id.toLowerCase()) ||
+                            allowedPantheons.some(p => p.toLowerCase() === g.culture.toLowerCase());
           const isBanned = bans.includes(g.id);
           const isPicked = picks.some(p => p.godId === g.id);
           const actingTeam = currentTurn.player === 'A' ? 'A' : (currentTurn.player === 'B' ? 'B' : (isCaptain1 ? 'A' : 'B'));

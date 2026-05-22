@@ -107,31 +107,24 @@ export interface RankedPlayer extends ForjaPlayer {
 }
 
 /**
- * Recebe um array de ForjaPlayer e retorna:
- * - Ordenado do maior para o menor effectiveElo
- * - Com rank (1-indexed) e computedTier atribuídos
- * - Players is_reserve === true são incluídos por último (sem tier)
+ * Compute a ranked list of players with active participants assigned contiguous ranks and reserves kept in a separate block.
  *
- * @param players - Array de jogadores
- * @param settings - Opções do torneio (para cortes dinâmicos de tier)
+ * Active (non-reserve) players are ordered by Esports ELO (when present), then effective ELO, then TG ELO, assigned ranks starting at 1 and given a `computedTier` based on rank. Players with `is_reserve === true` are kept in a separate reserve section (including any overflow active players converted to dynamic reserves when `settings.max_participants` is exceeded), are ordered using the same comparator, receive ranks after the active block, and have `computedTier` set to `null`.
+ *
+ * @param players - Array of players to rank (banished players are excluded)
+ * @param settings - Optional tournament settings used to compute tier cutoffs (e.g., `max_participants`, `tier_a_size`, `tier_b_size`)
+ * @returns An array of `RankedPlayer` where active players appear first with assigned `rank`, `computedTier`, and `effectiveElo`, followed by reserved players with `computedTier: null`
  */
 export function computeRankedPlayers(players: ForjaPlayer[], settings?: Pick<ForjaSettings, 'max_participants' | 'tier_a_size' | 'tier_b_size'>): RankedPlayer[] {
   // Filtra banidos
   const nonBanned = players.filter(p => p.status !== 'banned');
 
-  const maxParticipants = settings?.max_participants ?? DEFAULT_MAX_PARTICIPANTS;
-
-  // Separa reservas e participantes ativos
-  // Se houver mais ativos do que max_participants, os excedentes viram reserva implicitamente
+  // Separação estrita baseada exclusivamente na flag do banco de dados (blindagem cronológica/backend)
   const active  = nonBanned.filter(p => !p.is_reserve);
   const reserve = nonBanned.filter(p => p.is_reserve);
 
-  // Sort decrescente:
-  // 1. Quem tem Esports ELO fica sempre acima
-  // 2. Se ambos têm, compara pelo valor do Esports ELO
-  // 3. Se nenhum tem, compara pelo ELO médio (effectiveElo)
-  // 4. Tiebreak por elo_tg
-  const sorted = [...active].sort((a, b) => {
+  // Lógica central de ordenação (Esports ELO -> Effective ELO -> TG ELO)
+  const sortByElo = (a: ForjaPlayer, b: ForjaPlayer) => {
     const hasA = hasEsportsElo(a);
     const hasB = hasEsportsElo(b);
 
@@ -148,36 +141,38 @@ export function computeRankedPlayers(players: ForjaPlayer[], settings?: Pick<For
     const eloB = getEffectiveElo(b);
     if (eloB !== eloA) return eloB - eloA;
     return (b.elo_tg ?? 0) - (a.elo_tg ?? 0);
-  });
+  };
 
-  // Jogadores dentro do limite = participantes; acima do limite = reserva dinâmica
-  const withinLimit = sorted.slice(0, maxParticipants);
-  const overflow    = sorted.slice(maxParticipants);
+  const sortedActive = [...active].sort(sortByElo);
+  let finalActive = sortedActive;
+  let dynamicReserves: ForjaPlayer[] = [];
 
-  const rankedActive: RankedPlayer[] = withinLimit.map((p, idx) => ({
+  const maxParticipants = settings?.max_participants;
+  if (maxParticipants !== undefined && sortedActive.length > maxParticipants) {
+    finalActive = sortedActive.slice(0, maxParticipants);
+    dynamicReserves = sortedActive.slice(maxParticipants).map(p => ({
+      ...p,
+      is_reserve: true,
+    }));
+  }
+
+  const sortedReserve = [...reserve, ...dynamicReserves].sort(sortByElo);
+
+  const rankedActive: RankedPlayer[] = finalActive.map((p, idx) => ({
     ...p,
     rank: idx + 1,
     computedTier: getTierByRank(idx + 1, settings),
     effectiveElo: getEffectiveElo(p),
   }));
 
-  // Overflow tratado como reserva dinâmica (não altera o Firestore)
-  const overflowReserve: RankedPlayer[] = overflow.map((p, idx) => ({
+  const rankedReserve: RankedPlayer[] = sortedReserve.map((p, idx) => ({
     ...p,
     rank: rankedActive.length + idx + 1,
     computedTier: null,
     effectiveElo: getEffectiveElo(p),
-    is_reserve: true, // Forçado como reserva local apenas para exibição
   }));
 
-  const rankedReserve: RankedPlayer[] = reserve.map((p, idx) => ({
-    ...p,
-    rank: rankedActive.length + overflowReserve.length + idx + 1,
-    computedTier: null,
-    effectiveElo: getEffectiveElo(p),
-  }));
-
-  return [...rankedActive, ...overflowReserve, ...rankedReserve];
+  return [...rankedActive, ...rankedReserve];
 }
 
 // ─── Cor de ELO ───────────────────────────────────────────────────────────────

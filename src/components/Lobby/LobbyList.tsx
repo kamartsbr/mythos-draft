@@ -2,18 +2,35 @@ import { Eye, Users, ChevronRight, Info, Trash2, Search } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { LobbySummary } from '../../types';
 import { cn } from '../../lib/utils';
+import { getMillis } from '../../services/lobbyService';
 
 interface LobbyListProps {
   lobbies: LobbySummary[];
   t: any;
   isAdmin?: boolean;
   onJoin: (id: string) => void;
+  onDelete?: (id: string) => void;
   onClearAll?: () => void;
   onLoadMore?: () => void;
   hasMore?: boolean;
 }
 
-export function LobbyList({ lobbies, t, isAdmin, onJoin, onClearAll, onLoadMore, hasMore }: LobbyListProps) {
+/**
+ * Render a searchable list of lobbies with optional admin controls (clear, delete) and load-more support.
+ *
+ * Renders a header banner, a search input that filters the provided lobbies by id, name, or captain names, a scrollable list of lobby rows (each row invokes `onJoin` when clicked), and an informational footer. When `isAdmin` and corresponding callbacks are provided, shows admin actions for clearing history and deleting individual lobbies.
+ *
+ * @param lobbies - Array of lobby summaries to display/search; assumed to be pre-sorted/limited when no search is active
+ * @param t - Translation/label object used for UI text and confirmations
+ * @param isAdmin - When true, enables admin-only UI controls
+ * @param onJoin - Called with a lobby id when a lobby row is clicked
+ * @param onDelete - Optional. Called with a lobby id after admin confirms deletion
+ * @param onClearAll - Optional. Called when admin clears all history
+ * @param onLoadMore - Optional. Called when the "load more" button is clicked
+ * @param hasMore - Controls visibility of the "load more" button when true
+ * @returns A JSX element representing the lobby list UI
+ */
+export function LobbyList({ lobbies, t, isAdmin, onJoin, onDelete, onClearAll, onLoadMore, hasMore }: LobbyListProps) {
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredLobbies = useMemo(() => {
@@ -25,8 +42,8 @@ export function LobbyList({ lobbies, t, isAdmin, onJoin, onClearAll, onLoadMore,
       return visibleLobbies.filter(lobby => {
         const matchesId = lobby.id.toLowerCase().includes(search);
         const matchesName = (lobby.name || '').toLowerCase().includes(search);
-        const matchesCaptain1 = (lobby.captain1Name || '').toLowerCase().includes(search);
-        const matchesCaptain2 = (lobby.captain2Name || '').toLowerCase().includes(search);
+        const matchesCaptain1 = ((lobby.teamAName || lobby.captain1Name) || '').toLowerCase().includes(search);
+        const matchesCaptain2 = ((lobby.teamBName || lobby.captain2Name) || '').toLowerCase().includes(search);
         
         return matchesId || matchesName || matchesCaptain1 || matchesCaptain2;
       });
@@ -41,7 +58,7 @@ export function LobbyList({ lobbies, t, isAdmin, onJoin, onClearAll, onLoadMore,
       return <span className="text-green-500 font-bold uppercase tracking-widest text-xs">{t.draftComplete}</span>;
     }
     
-    const lastActivity = pub.lastActivityAt?.toMillis?.() || pub.createdAt?.toMillis?.() || Date.now();
+    const lastActivity = getMillis(pub.lastActivityAt) || getMillis(pub.createdAt) || Date.now();
     const isAbandoned = (Date.now() - lastActivity) > 2 * 60 * 60 * 1000;
     
     if (isAbandoned) {
@@ -118,7 +135,23 @@ export function LobbyList({ lobbies, t, isAdmin, onJoin, onClearAll, onLoadMore,
                       {pub.captain1Name || 'Captain 1'} vs {pub.captain2Name || 'Captain 2'} • {getLobbyStatus(pub)}
                     </p>
                   </div>
-                  <ChevronRight className="w-5 h-5 text-slate-700 group-hover:text-blue-500 transition-colors" />
+                  <div className="flex items-center gap-3">
+                    {isAdmin && onDelete && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`${t.confirmDelete || 'Delete this lobby?'} (${pub.id})`)) {
+                            onDelete(pub.id);
+                          }
+                        }}
+                        className="p-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all border border-red-500/20"
+                        title={t.deleteLobby || "Delete Lobby"}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                    <ChevronRight className="w-5 h-5 text-slate-700 group-hover:text-blue-500 transition-colors" />
+                  </div>
                 </button>
               ))}
               {hasMore && onLoadMore && (

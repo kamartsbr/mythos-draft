@@ -108,7 +108,7 @@ export function Header({
                   "text-lg font-black uppercase tracking-tight",
                   scoreA > scoreB ? "text-blue-400" : "text-slate-400"
                 )}>
-                  {lobby.captain1Name || (lobby.config.teamSize === 1 ? t.roleHost : t.teamA)}
+                  {(lobby.teamAName || lobby.captain1Name) || (lobby.config.teamSize === 1 ? t.roleHost : t.teamA)}
                 </span>
                 <span className="text-3xl font-black text-white bg-blue-500/20 px-3 py-1 rounded-lg border border-blue-500/30 min-w-[3rem] text-center">
                   {scoreA}
@@ -125,7 +125,7 @@ export function Header({
                   "text-lg font-black uppercase tracking-tight",
                   scoreB > scoreA ? "text-red-400" : "text-slate-400"
                 )}>
-                  {lobby.captain2Name || (lobby.config.teamSize === 1 ? t.roleGuest : t.teamB)}
+                  {(lobby.teamBName || lobby.captain2Name) || (lobby.config.teamSize === 1 ? t.roleGuest : t.teamB)}
                 </span>
               </div>
             </div>

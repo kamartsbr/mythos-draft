@@ -43,11 +43,10 @@ export default function App() {
 }
 
 /**
- * Coordinates authentication, routing, lobby and draft state, global UI, and renders the main application content.
+ * Render the main application content while coordinating authentication, route selection, lobby and draft state, and global UI.
  *
- * Handles anonymous sign-in and connection testing, initializes and reacts to lobby/draft configuration and presets,
- * manages modal and UI state (language, nickname, admin, donation widget, patch notes, invite/spectator/join flows),
- * and selects the appropriate route views (Forja hub, overlay/streamer HUD, landing page, or draft UI).
+ * Manages anonymous sign-in and connection checks, applies draft presets, controls modal and nickname/admin state,
+ * and chooses between Forja, overlay/streamer HUD, landing menu, lobby not-found/loading screens, or the Draft UI.
  *
  * @returns The rendered application content as a React element
  */
@@ -60,8 +59,9 @@ function AppContent() {
   const isOverlay = window.location.pathname.startsWith('/overlay/');
   const isStreamerHud = window.location.pathname.startsWith('/streamer/');
   const isStreamerDock = window.location.pathname.startsWith('/streamer-dock/');
+  const isLobbyPath = window.location.pathname.startsWith('/lobby/');
   const isForjaRoute = window.location.pathname.startsWith('/forja');
-  const lobbyIdFromPath = (isOverlay || isStreamerHud || isStreamerDock) ? window.location.pathname.split('/')[2] : null;
+  const lobbyIdFromPath = (isOverlay || isStreamerHud || isStreamerDock || isLobbyPath) ? window.location.pathname.split('/')[2] : null;
 
   useEffect(() => {
     const signIn = async () => {
@@ -121,9 +121,11 @@ function AppContent() {
     forceReset,
     resetCurrentGame,
     forceFinish,
+    forceWO,
     forceUnpause,
     forceStartDraft,
-    isAuthReady
+    isAuthReady,
+    lobbyInitialLoading
   } = useLobby(localStorage.getItem('mythos_nickname') || '');
 
   const {
@@ -245,6 +247,18 @@ function AppContent() {
     }
   }, [isAuthReady, lobbyId, lobby, isSpectator, isCaptain1, isCaptain2, guestId, nickname, join]);
 
+  const handleDeleteLobby = async (id: string) => {
+    try {
+      await lobbyService.deleteLobby(id);
+      setPaginatedLobbies(prev => prev.filter(l => l.id !== id));
+      if (!isLocked) {
+        await lobbyService.refreshLobbyIndex();
+      }
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
   const handleCreateLobby = async () => {
     if (!isAuthReady || !guestId) return;
     if (!lobbyName.trim()) {
@@ -270,8 +284,8 @@ function AppContent() {
 
     const initialSeriesMaps: string[] = [];
 
-    if (config.preset === 'MCL') {
-      const mclPicks = getMCLPicks(1, initialSeriesMaps[0] || null, null);
+    if (config.preset === 'MCL' || config.preset === 'MCL_PLAYOFFS') {
+      const mclPicks = getMCLPicks(1);
       picks.push(...mclPicks);
     } else {
       let picksPerTeam = teamSize;
@@ -338,6 +352,14 @@ function AppContent() {
         initialSeriesMaps[1] = "";
         initialSeriesMaps[2] = roundMap;
       }
+    } else if (config.preset === 'MCL_PLAYOFFS') {
+      const totalGames = config.seriesType === 'BO7' ? 7 : 5;
+      const lastMapId = config.playoffsLastMap || '';
+
+      // Preencher todos os slots como vazio, exceto o último (placeholder)
+      for (let i = 0; i < totalGames; i++) {
+        initialSeriesMaps[i] = i === totalGames - 1 ? lastMapId : '';
+      }
     }
 
     const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
@@ -345,7 +367,7 @@ function AppContent() {
       id,
       status: 'waiting',
       captain1: null,
-      captain1Name: null,
+      captain1Name: undefined,
       captain2: null,
       captain2Name: null,
       readyA: false,
@@ -372,8 +394,8 @@ function AppContent() {
       replayLog: [],
       lastWinner: null,
       timerStart: null,
-      lastActivityAt: IS_DEV ? Date.now() : (await import('firebase/firestore')).serverTimestamp(),
-      createdAt: IS_DEV ? Date.now() : (await import('firebase/firestore')).serverTimestamp(),
+      lastActivityAt: IS_DEV ? Date.now() : (await import('firebase/firestore')).serverTimestamp() as any,
+      createdAt: IS_DEV ? Date.now() : (await import('firebase/firestore')).serverTimestamp() as any,
       hiddenActions: [],
       spectators: [],
       adminId: guestId,
@@ -606,7 +628,7 @@ function AppContent() {
             </div>
           )}
 
-          {lobbyLoading || (!isAuthReady && !authError) ? (
+          {lobbyLoading || lobbyInitialLoading || (!isAuthReady && !authError) ? (
             <div className="flex-1 flex flex-col items-center justify-center p-4">
               <Loader2 className="w-12 h-12 animate-spin text-amber-500 mb-4" />
               <p className="text-xl font-medium">{t.loading}</p>
@@ -634,7 +656,7 @@ function AppContent() {
                 </ol>
               </div>
             </div>
-          ) : !lobbyId ? (
+          ) : (!lobbyId && !lobbyInitialLoading) ? (
             <div className="flex-1 relative overflow-hidden">
               {/* Background Decorative Elements */}
               <div className="mythic-glow top-[-10%] left-[-10%] w-[50%] h-[50%]" />
@@ -799,6 +821,7 @@ function AppContent() {
                         }
                       }}
                       onClearAll={() => setShowClearConfirm(true)}
+                      onDelete={handleDeleteLobby}
                       onLoadMore={loadMore}
                       hasMore={hasMore}
                     />
@@ -871,6 +894,23 @@ function AppContent() {
                 </footer>
               </div>
             </div>
+          ) : (lobbyId && !lobby && !lobbyInitialLoading) ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-4">
+              <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mb-4 border border-red-500/20">
+                <AlertTriangle className="w-8 h-8 text-red-500" />
+              </div>
+              <p className="text-xl font-bold text-white uppercase tracking-tight mb-2">Lobby Not Found</p>
+              <p className="text-slate-400 text-sm mb-6">The draft session you are looking for does not exist or has been deleted.</p>
+              <button 
+                onClick={() => {
+                  setLobbyId(null);
+                  window.history.replaceState({}, '', '/');
+                }}
+                className="px-6 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 font-bold uppercase tracking-widest hover:bg-slate-800 transition-all"
+              >
+                Return to Menu
+              </button>
+            </div>
           ) : (lobbyId && !lobby) ? (
             <div className="flex-1 flex flex-col items-center justify-center p-4">
               <Loader2 className="w-12 h-12 animate-spin text-amber-500 mb-4" />
@@ -888,6 +928,7 @@ function AppContent() {
               forceReset={forceReset}
               resetCurrentGame={resetCurrentGame}
               forceFinish={forceFinish}
+              forceWO={forceWO}
               forceUnpause={forceUnpause}
               forceStartDraft={forceStartDraft}
               leaveSlot={leaveSlot}

@@ -53,6 +53,28 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ lobby, isVisible, 
         
         {/* Player Positions */}
         {selectedMap.positions.map((pos) => {
+          let visualPos = { ...pos };
+
+          if (lobby.config.preset === 'FORJA' || lobby.config.preset === 'MCL') {
+            // 🔥 SOLUÇÃO: Coordinate Mapper (Visual Swap)
+            // Lado HOST (A): Turno 1 (Vermelho) <-> Turno 4 (Laranja)
+            if (pos.playerId === 1) {
+              const pos4 = selectedMap.positions.find(p => p.playerId === 4);
+              if (pos4) visualPos = { ...pos, x: pos4.x, y: pos4.y };
+            } else if (pos.playerId === 4) {
+              const pos1 = selectedMap.positions.find(p => p.playerId === 1);
+              if (pos1) visualPos = { ...pos, x: pos1.x, y: pos1.y };
+            } 
+            // Lado GUEST (B): Turno 2 (Pink) <-> Turno 3 (Blue)
+            else if (pos.playerId === 2) {
+              const pos3 = selectedMap.positions.find(p => p.playerId === 3);
+              if (pos3) visualPos = { ...pos, x: pos3.x, y: pos3.y };
+            } else if (pos.playerId === 3) {
+              const pos2 = selectedMap.positions.find(p => p.playerId === 2);
+              if (pos2) visualPos = { ...pos, x: pos2.x, y: pos2.y };
+            }
+          }
+
           let godId: string | null = null;
           let team: 'A' | 'B' | null = null;
           let playerName: string | null = null;
@@ -94,7 +116,7 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ lobby, isVisible, 
             const roster = team === 'A' ? game.rosterA : game.rosterB;
             const safeRoster = Array.isArray(roster) ? roster : [];
             const playerInRoster = safeRoster.find(p => p.playerId === pos.playerId);
-            playerName = playerInRoster?.playerName || (team === 'A' ? (lobby.captain1Name || 'Team A') : (lobby.captain2Name || 'Team B'));
+            playerName = playerInRoster?.playerName || (team === 'A' ? ((lobby.teamAName || lobby.captain1Name) || 'Team A') : ((lobby.teamBName || lobby.captain2Name) || 'Team B'));
           } else {
             // Logic for current draft visualization
             const pick = picks.find(p => p.playerId === pos.playerId);
@@ -120,7 +142,7 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ lobby, isVisible, 
                 "absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-300",
                 isSelected && "z-50 scale-125"
               )}
-              style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
+              style={{ left: `${visualPos.x}%`, top: `${visualPos.y}%` }}
             >
               <div className="relative flex flex-col items-center">
                 {/* Player Name above God */}

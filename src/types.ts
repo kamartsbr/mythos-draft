@@ -68,7 +68,7 @@ export type LobbyConfig = {
   streamerHudSize?: number;
   preset?: string;
   mclRound?: number;
-  tournamentStage?: 'GROUP' | 'PLAYOFFS' | 'PLAYOFFS_BO3' | 'PLAYOFFS_BO5';
+  tournamentStage?: 'GROUP' | 'PLAYOFFS' | 'PLAYOFFS_BO3' | 'PLAYOFFS_BO5' | 'TIEBREAKER';
   
   // Forja Integration
   forjaMatchId?: string;
@@ -170,7 +170,7 @@ export type LobbySummary = {
   phase: DraftPhase;
   preset?: string | null;
   mclRound?: number;
-  tournamentStage?: 'GROUP' | 'PLAYOFFS';
+  tournamentStage?: 'GROUP' | 'PLAYOFFS' | 'TIEBREAKER';
   lastActivityAt: DraftTimestampRead | null;
   createdAt: DraftTimestampRead | null;
 };

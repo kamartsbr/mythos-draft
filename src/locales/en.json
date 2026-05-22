@@ -285,6 +285,8 @@
   "teamNamePlaceholder": "Enter team name...",
   "selectCaptainPos": "Select your position",
   "teamRoster": "Team Roster",
+  "mclPlayoffs": "Playoffs",
+  "mclTiebreaker": "Tiebreaker",
   "tournamentRound": "Tournament Round",
   "predeterminedMap": "Pre-determined Map 3",
   "unknownMap": "Unknown Map",
@@ -300,7 +302,6 @@
   "mclTournament": "MCL Tournament (3x3)",
   "mclTournamentDesc": "3 games, map 1 host/guest choice, map 2 guest/host choice, map 3 pre determined by the round. 0 map/god bans, non-exclusive god picks (same god allowed on both teams).",
   "mclGroupStage": "Group Stage",
-  "mclPlayoffs": "Playoffs",
   "mclPlayoffsLocked": "Format not yet revealed",
   "createCustomPreset": "Create Custom Preset",
   "communityPresets": "Community Presets",
@@ -404,5 +405,6 @@
     "pixCopied": "PIX Key copied!",
     "pixCopyFailed": "Failed to copy PIX key to clipboard"
   },
-  "playoffsProvisionalWarning": "⚠️ Attention: Official final maps have not yet been approved by the organization. The current selection serves as a provisional setup for the draft."
+  "playoffsProvisionalWarning": "⚠️ Attention: Official final maps have not yet been approved by the organization. The current selection serves as a provisional setup for the draft.",
+  "advancedRulesToggle": "Advanced Rules Details"
 }

@@ -378,5 +378,6 @@
     "email": "goldpentakill@gmail.com",
     "pixCopied": "Ключ PIX скопирован!",
     "pixCopyFailed": "Не удалось скопировать ключ PIX в буфер обмена"
-  }
+  },
+  "advancedRulesToggle": "Advanced Rules Details"
 }

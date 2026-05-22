@@ -377,5 +377,6 @@
     "email": "goldpentakill@gmail.com",
     "pixCopied": "PIX-Schlüssel kopiert!",
     "pixCopyFailed": "PIX-Schlüssel konnte nicht in die Zwischenablage kopiert werden"
-  }
+  },
+  "advancedRulesToggle": "Advanced Rules Details"
 }

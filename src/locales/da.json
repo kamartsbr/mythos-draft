@@ -377,5 +377,6 @@
     "email": "goldpentakill@gmail.com",
     "pixCopied": "PIX-nøgle kopieret!",
     "pixCopyFailed": "Kunne ikke kopiere PIX-nøgle til udklipsholder"
-  }
+  },
+  "advancedRulesToggle": "Advanced Rules Details"
 }

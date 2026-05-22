@@ -187,6 +187,24 @@ export function useDraftConfig() {
         newConfig.mapTurnOrder = [];
         newConfig.godTurnOrder = [];
         newConfig.playoffsLastMap = '';         // cleared, user must select in UI
+      } else if (preset === 'MCL_TIEBREAKER') {
+        newConfig.allowedMaps = ['aztlan_oasis'];
+        newConfig.allowedPantheons = MAJOR_GODS.map(g => g.id);
+        newConfig.teamSize = 3;
+        newConfig.seriesType = 'BO1';
+        newConfig.customGameCount = 1;
+        newConfig.mapBanCount = 0;
+        newConfig.banCount = 0;
+        newConfig.acePick = false;
+        newConfig.isExclusive = false;
+        newConfig.pickType = 'alternated';
+        newConfig.firstMapRandom = false;
+        newConfig.loserPicksNextMap = false;
+        newConfig.hasPerMapBans = false; // By default no bans, can be toggled in UI
+        newConfig.tournamentStage = 'TIEBREAKER';
+        newConfig.timerDuration = 60;
+        newConfig.mapTurnOrder = [];
+        newConfig.godTurnOrder = [];
       }
       
       return newConfig;
@@ -200,6 +218,7 @@ export function useDraftConfig() {
       if (config.preset === 'MCL') return true;
       if (config.preset === 'FORJA') return true;
       if (config.preset === 'MCL_PLAYOFFS') return true;
+      if (config.preset === 'MCL_TIEBREAKER') return true;
       return false;
     }
 
@@ -207,8 +226,11 @@ export function useDraftConfig() {
       return true;
     }
 
-    if (config.preset === 'MCL' || config.preset === 'FORJA' || config.preset === 'MCL_PLAYOFFS') {
-      const lockedFields = ['seriesType', 'customGameCount', 'mapBanCount', 'banCount', 'isExclusive', 'pickType', 'teamSize', 'mapTurnOrder', 'firstMapRandom', 'loserPicksNextMap', 'acePick', 'tournamentStage', 'hasPerMapBans'];
+    if (config.preset === 'MCL' || config.preset === 'FORJA' || config.preset === 'MCL_PLAYOFFS' || config.preset === 'MCL_TIEBREAKER') {
+      let lockedFields = ['seriesType', 'customGameCount', 'mapBanCount', 'banCount', 'isExclusive', 'pickType', 'teamSize', 'mapTurnOrder', 'firstMapRandom', 'loserPicksNextMap', 'acePick', 'tournamentStage', 'hasPerMapBans'];
+      if (config.preset === 'MCL_TIEBREAKER') {
+        lockedFields = lockedFields.filter(f => f !== 'hasPerMapBans');
+      }
       return lockedFields.includes(field);
     }
     if (config.preset === 'RANKED') {

@@ -9,6 +9,45 @@ interface PatchNotesModalProps {
 
 const getPatchNotes = (t: any) => [
   {
+    version: 'v1.0.3v',
+    date: '2026-05-22',
+    title: 'The Admin Overrides & Engine Stability Patch',
+    items: [
+      {
+        icon: <Shield className="w-4 h-4 text-cyan-400" />,
+        text: 'Migrated Discord auth to secure Firebase Cloud Functions (onCall) with custom tokens and strict CSRF UUID validation.'
+      },
+      {
+        icon: <Clock className="w-4 h-4 text-emerald-400" />,
+        text: 'Refactored the timer system to use an absolute server-side authority (turnEndsAt) via Firestore, eliminating local desynchronization.'
+      },
+      {
+        icon: <MapIcon className="w-4 h-4 text-amber-400" />,
+        text: 'Introduced the isolated "MCL_PLAYOFFS" preset supporting BO5 and BO7 formats with dynamic, loser-picks-next-map logic.'
+      },
+      {
+        icon: <Shield className="w-4 h-4 text-red-400" />,
+        text: 'Added Game-Level God Bans that reset dynamically upon transitioning to the next map in a playoff series.'
+      },
+      {
+        icon: <RefreshCw className="w-4 h-4 text-purple-400" />,
+        text: 'Implemented the Admin Operations Desk, allowing live, atomic metadata overrides for Team Names and Captain nicknames.'
+      },
+      {
+        icon: <Sparkles className="w-4 h-4 text-indigo-400" />,
+        text: 'Added a "Force Game Report" override to artificially advance stalled matches by synthesizing a consensus vote.'
+      },
+      {
+        icon: <History className="w-4 h-4 text-orange-400" />,
+        text: 'Overhauled the W.O. (Walkover) tool with a granular modal, offering "Dry Series End" or "Max Score Fill".'
+      },
+      {
+        icon: <Scroll className="w-4 h-4 text-slate-400" />,
+        text: 'Fixed CSS typos and race conditions in Lobby Creation, and migrated provisional warnings to i18n.'
+      }
+    ]
+  },
+  {
     version: 'v1.0.2v',
     date: '2026-04-26',
     title: t.patchNotes_v1_0_2_title || 'Divine Stewardship Update',

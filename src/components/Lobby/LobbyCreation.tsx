@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sword, Plus, ChevronRight, RefreshCw, Map as MapIcon, Trophy, Lock, Eye, Globe, Trash2, ChevronDown, ChevronUp, Shield } from 'lucide-react';
+import { Sword, Plus, ChevronRight, RefreshCw, Map as MapIcon, Trophy, Lock, Eye, Globe, Trash2, ChevronDown, ChevronUp, Shield, Scroll } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { LobbyConfig, SeriesType, TeamSize } from '../../types';
 import { MAPS, MAJOR_GODS, PANTHEONS, MCL_ROUND_MAPS, getMCLMapPool } from '../../constants';
@@ -71,6 +71,17 @@ export function LobbyCreation({
   const [showPresetBuilder, setShowPresetBuilder] = useState(false);
   const [communityPresets, setCommunityPresets] = useState<any[]>([]);
   const requestIdRef = useRef(0);
+
+  const isCustomMode = config.preset === 'CUSTOM';
+  const [isRulesExpanded, setIsRulesExpanded] = useState(false);
+
+  useEffect(() => {
+    if (isCustomMode) {
+      setIsRulesExpanded(true);
+    } else {
+      setIsRulesExpanded(false);
+    }
+  }, [config.preset, isCustomMode]);
 
   // Shared loader function to prevent race conditions
   const loadPresets = useCallback(() => {
@@ -281,7 +292,7 @@ export function LobbyCreation({
 
 
           <AnimatePresence mode="popLayout">
-            {(config.preset === 'MCL' || config.preset === 'MCL_PLAYOFFS') && (
+            {(config.preset === 'MCL' || config.preset === 'MCL_PLAYOFFS' || config.preset === 'MCL_TIEBREAKER') && (
               <motion.div
                 initial={{ height: 0, opacity: 0, marginBottom: 0 }}
                 animate={{ height: 'auto', opacity: 1, marginBottom: 16 }}
@@ -296,14 +307,14 @@ export function LobbyCreation({
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">
                       {t.selectStage}
                     </label>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       <button
                         onClick={() => {
                           applyPreset('MCL');
                           setConfig((prev: any) => ({ ...prev, tournamentStage: 'GROUP' }));
                         }}
                         className={cn(
-                          "py-2 rounded-lg border text-sm font-bold transition-all",
+                          "py-2 rounded-lg border text-[11px] uppercase tracking-wider font-bold transition-all",
                           config.preset === 'MCL' 
                             ? "bg-amber-500 border-amber-500 text-slate-950" 
                             : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700"
@@ -317,13 +328,27 @@ export function LobbyCreation({
                           setConfig((prev: any) => ({ ...prev, seriesType: 'BO5' }));
                         }}
                         className={cn(
-                          "py-2 rounded-lg border text-sm font-bold transition-all",
+                          "py-2 rounded-lg border text-[11px] uppercase tracking-wider font-bold transition-all",
                           config.preset === 'MCL_PLAYOFFS'
                             ? "bg-amber-500 border-amber-500 text-slate-950"
                             : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700"
                         )}
                       >
                         {t.mclPlayoffs}
+                      </button>
+                      <button
+                        onClick={() => {
+                          applyPreset('MCL_TIEBREAKER');
+                          setConfig((prev: any) => ({ ...prev, seriesType: 'BO1', hasPerMapBans: false }));
+                        }}
+                        className={cn(
+                          "py-2 rounded-lg border text-[11px] uppercase tracking-wider font-bold transition-all",
+                          config.preset === 'MCL_TIEBREAKER'
+                            ? "bg-amber-500 border-amber-500 text-slate-950"
+                            : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700"
+                        )}
+                      >
+                        {t.mclTiebreaker || "TIEBREAKER"}
                       </button>
                     </div>
                   </div>
@@ -393,6 +418,43 @@ export function LobbyCreation({
                     </div>
                   </div>
                     </>
+                  )}
+
+                  {config.preset === 'MCL_TIEBREAKER' && (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3 p-2 bg-slate-900/50 rounded-lg border border-slate-800/50">
+                        <div className="w-10 h-10 rounded overflow-hidden bg-slate-800 flex-shrink-0">
+                          <img src="/Aztlan_Oasis.webp" alt="Aztlan Oasis" className="w-full h-full object-cover" />
+                        </div>
+                        <div>
+                          <div className="text-xs text-slate-500 uppercase font-bold tracking-tighter">
+                            {t.predeterminedMap || "Predetermined Map"}
+                          </div>
+                          <div className="text-sm font-bold text-amber-500">
+                            Aztlan Oasis
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border border-slate-800/50">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-bold text-slate-200">God Bans</span>
+                          <span className="text-[10px] text-slate-500">Enable 1 god ban per team</span>
+                        </div>
+                        <button
+                          onClick={() => setConfig((prev: any) => ({ ...prev, hasPerMapBans: !prev.hasPerMapBans }))}
+                          className={cn(
+                            "w-12 h-6 rounded-full relative transition-colors duration-200",
+                            config.hasPerMapBans ? "bg-amber-500" : "bg-slate-700"
+                          )}
+                        >
+                          <motion.div
+                            className="w-4 h-4 bg-white rounded-full absolute top-1 shadow-sm"
+                            animate={{ left: config.hasPerMapBans ? '26px' : '4px' }}
+                            transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                          />
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
               </motion.div>
@@ -492,8 +554,35 @@ export function LobbyCreation({
           </div>
         </div>
 
-        {/* Series Type */}
-        {config.preset !== 'MCL' && (
+        {/* Advanced Rules Accordion */}
+        {!isCustomMode && (
+          <button
+            onClick={() => setIsRulesExpanded(!isRulesExpanded)}
+            className="w-full flex items-center justify-between p-4 bg-slate-950/30 border border-slate-800 rounded-xl hover:border-slate-700 transition-all group"
+          >
+            <div className="flex items-center gap-3">
+              <Scroll className="w-5 h-5 text-amber-500/70 group-hover:text-amber-500 transition-colors" />
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest group-hover:text-slate-300 transition-colors">
+                {t.advancedRulesToggle || 'Advanced Rules Details'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {isRulesExpanded ? <ChevronUp className="w-5 h-5 text-slate-500" /> : <ChevronDown className="w-5 h-5 text-slate-500" />}
+            </div>
+          </button>
+        )}
+
+        <AnimatePresence>
+          {(isRulesExpanded || isCustomMode) && (
+            <motion.div
+              initial={isCustomMode ? false : { height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={isCustomMode ? undefined : { height: 0, opacity: 0 }}
+              className={cn("overflow-hidden", !isCustomMode && "bg-slate-950/20 border-x border-b border-slate-800/50 rounded-b-xl -mt-2 p-4 pt-6 space-y-6")}
+            >
+              <div className={cn(isCustomMode && "space-y-6")}>
+                {/* Series Type */}
+                {config.preset !== 'MCL' && (
           <div>
             <label className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
               {t.seriesType}
@@ -749,46 +838,29 @@ export function LobbyCreation({
           </div>
         )}
 
-        {/* Exclusivity & Privacy */}
-        <div className="grid grid-cols-2 gap-6">
-          {config.preset !== 'MCL' && (
-            <div>
-              <label className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-                {t.picks}
-                {isLocked('isExclusive') && <Lock className="w-3 h-3 text-amber-500/50" />}
-              </label>
-              <button
-                disabled={isLocked('isExclusive')}
-                onClick={() => setConfig((prev: any) => ({ ...prev, isExclusive: !prev.isExclusive }))}
-                className={cn(
-                  "w-full py-2 rounded-lg border text-base font-bold transition-all flex items-center justify-center gap-2",
-                  config.isExclusive 
-                    ? "bg-amber-500 border-amber-500 text-slate-950" 
-                    : "bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700",
-                  isLocked('isExclusive') && "opacity-50 cursor-not-allowed"
-                )}
-              >
-                {config.isExclusive ? <Lock className="w-4 h-4" /> : <Globe className="w-4 h-4" />}
-                {config.isExclusive ? t.exclusive : t.nonExclusive}
-              </button>
-            </div>
-          )}
-          <div className={cn(config.preset === 'MCL' && "col-span-2")}>
-            <label className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3 block">{t.visibility}</label>
+        {/* Exclusivity */}
+        {config.preset !== 'MCL' && (
+          <div>
+            <label className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+              {t.picks}
+              {isLocked('isExclusive') && <Lock className="w-3 h-3 text-amber-500/50" />}
+            </label>
             <button
-              onClick={() => setConfig((prev: any) => ({ ...prev, isPrivate: !prev.isPrivate }))}
+              disabled={isLocked('isExclusive')}
+              onClick={() => setConfig((prev: any) => ({ ...prev, isExclusive: !prev.isExclusive }))}
               className={cn(
                 "w-full py-2 rounded-lg border text-base font-bold transition-all flex items-center justify-center gap-2",
-                config.isPrivate 
+                config.isExclusive 
                   ? "bg-amber-500 border-amber-500 text-slate-950" 
-                  : "bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700"
+                  : "bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700",
+                isLocked('isExclusive') && "opacity-50 cursor-not-allowed"
               )}
             >
-              {config.isPrivate ? <Eye className="w-4 h-4" /> : <Globe className="w-4 h-4" />}
-              {config.isPrivate ? t.private : t.public}
+              {config.isExclusive ? <Lock className="w-4 h-4" /> : <Globe className="w-4 h-4" />}
+              {config.isExclusive ? t.exclusive : t.nonExclusive}
             </button>
           </div>
-        </div>
+        )}
 
         {/* Pick Type */}
         {config.preset !== 'MCL' && (
@@ -830,6 +902,29 @@ export function LobbyCreation({
             </p>
           </div>
         )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Lobby Visibility */}
+        <div className="space-y-3 mb-6">
+          <label className="text-sm font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+            {t.visibility}
+          </label>
+          <button
+            onClick={() => setConfig((prev: any) => ({ ...prev, isPrivate: !prev.isPrivate }))}
+            className={cn(
+              "w-full py-2 rounded-lg border text-base font-bold transition-all flex items-center justify-center gap-2",
+              config.isPrivate 
+                ? "bg-amber-500 border-amber-500 text-slate-950" 
+                : "bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700"
+            )}
+          >
+            {config.isPrivate ? <Eye className="w-4 h-4" /> : <Globe className="w-4 h-4" />}
+            {config.isPrivate ? t.private : t.public}
+          </button>
+        </div>
 
         {/* Manual Map Selection */}
         <div className="space-y-2">

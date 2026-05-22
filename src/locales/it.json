@@ -266,7 +266,6 @@
   "tournamentRound": "Round del Torneo",
   "predeterminedMap": "Mappa 3 predeterminata",
   "unknownMap": "Mappa Sconosciuta",
-  "won": "HA VINTO",
   "backToCurrentDraft": "TORNA AL DRAFT ATTUALE",
   "tbd": "TBD",
   "prepareForBattle": "PREPARATI ALLA BATTAGLIA",
@@ -375,5 +374,6 @@
     "email": "goldpentakill@gmail.com",
     "pixCopied": "Chiave PIX copiata!",
     "pixCopyFailed": "Impossibile copiare la chiave PIX negli appunti"
-  }
+  },
+  "advancedRulesToggle": "Advanced Rules Details"
 }

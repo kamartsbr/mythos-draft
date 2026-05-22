@@ -374,5 +374,6 @@
     "email": "goldpentakill@gmail.com",
     "pixCopied": "¡Clave PIX copiada!",
     "pixCopyFailed": "Error al copiar la clave PIX al portapapeles"
-  }
+  },
+  "advancedRulesToggle": "Advanced Rules Details"
 }

@@ -431,6 +431,10 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
               const shouldHideName = !isMyTeamOverride && !hasGod && lobby.config.preset === 'MCL';
               const hoveredGodId = team === 'A' ? lobby.hoveredGodIdA : lobby.hoveredGodIdB;
               
+              const playerKey = `player${team}${idx + 1}` as keyof Lobby;
+              const captainFallback = team === 'A' ? lobby.captain1Name : lobby.captain2Name;
+              const overridePlayerName = (lobby[playerKey] as string) || captainFallback || `Player ${idx + 1}`;
+              
               return (
                 <PlayerSlot                
                   key={pick.playerId + '-' + idx} 
@@ -443,6 +447,7 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
                   hoveredGodId={isCurrentPlayerTurn ? hoveredGodId : null}
                   timeLeft={timeLeft}
                   timerDuration={timerDuration || lobby.config.timerDuration || 60}
+                  overridePlayerName={overridePlayerName}
                 />
               );
             })}

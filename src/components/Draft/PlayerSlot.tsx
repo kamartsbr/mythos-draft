@@ -15,6 +15,7 @@ interface PlayerSlotProps {
   hoveredGodId?: string | null;
   timeLeft?: number | null;
   timerDuration?: number;
+  overridePlayerName?: string;
 }
 
 /**
@@ -30,9 +31,10 @@ interface PlayerSlotProps {
  * @param hoveredGodId - Optional god id currently hovered (used to preview a god during the current turn)
  * @param timeLeft - Remaining time for the current turn (used to compute progress bar width); may be null
  * @param timerDuration - Total timer duration used to compute progress; if null or <= 0 the bar is not shown
+ * @param overridePlayerName - Explicit player name pushed from top-level to bypass pick.playerName defaults
  * @returns The React element representing the player slot UI
  */
-export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, hoveredGodId, timeLeft, timerDuration }: PlayerSlotProps) {
+export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, hoveredGodId, timeLeft, timerDuration, overridePlayerName }: PlayerSlotProps) {
   const god = MAJOR_GODS.find(g => g.id === pick.godId) || (isCurrentTurn && hoveredGodId ? MAJOR_GODS.find(g => g.id === hoveredGodId) : undefined);
   const isHovered = !pick.godId && god && isCurrentTurn;
 
@@ -54,7 +56,7 @@ export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, ho
   const showColor = !isHidden && (god || (preset !== 'MCL' && preset !== 'FORJA'));
   const displayName = isHidden 
     ? (pick.team === 'A' ? t.teamA : t.teamB) 
-    : (isHovered ? (t.selecting || 'Selecting...') : (pick.playerName || ((preset === 'MCL' || preset === 'FORJA') ? (t.selecting || 'Selecionando...') : `Player ${pick.playerId}`)));
+    : (isHovered ? (t.selecting || 'Selecting...') : (overridePlayerName || pick.playerName || ((preset === 'MCL' || preset === 'FORJA') ? (t.selecting || 'Selecionando...') : `Player ${pick.playerId}`)));
 
   return (
     <motion.div 

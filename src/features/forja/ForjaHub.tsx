@@ -287,18 +287,23 @@ export default function ForjaHub() {
       <nav className="forja-tabs-nav" role="tablist">
         <div className="forja-tabs-inner">
           {allVisibleTabs.map(tab => (
-            <button
+            <a
               key={tab.id}
               id={`forja-tab-${tab.id}`}
               role="tab"
+              href={`/forja?tab=${tab.id}`}
               aria-selected={activeTab === tab.id}
               className={`forja-tab-btn ${activeTab === tab.id ? 'forja-tab-btn--active' : ''} ${[...MEMBER_TABS, ...ADMIN_ONLY_TABS].find(t => t.id === tab.id) ? 'forja-tab-btn--admin' : ''} ${tab.id === 'draft-room' ? 'forja-tab-btn--draft-room' : ''}`}
-              onClick={() => handleTabChange(tab.id)}
+              onClick={(e) => {
+                if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+                e.preventDefault();
+                handleTabChange(tab.id);
+              }}
             >
               <span className="forja-tab-icon">{tab.icon}</span>
               <span className="forja-tab-label">{tab.label}</span>
               {activeTab === tab.id && <span className="forja-tab-indicator" />}
-            </button>
+            </a>
           ))}
         </div>
       </nav>

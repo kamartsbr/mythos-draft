@@ -947,13 +947,12 @@ export const lobbyService = {
         const data = snap.data() as any;
         const updates: any = {};
         
-        const winThreshold = data.config.seriesType === 'BO7' ? 4 
-          : data.config.seriesType === 'BO5' ? 3 
-          : data.config.seriesType === 'BO3' ? 2 
-          : data.config.seriesType === 'BO2' ? 2
-          : 1;
+        const totalGames = data.config.customGameCount || data.config.maxGames || 3;
+        const winThreshold = Math.ceil(totalGames / 2);
 
-        const currentWins = winner === 'A' ? (data.scoreA || 0) : (data.scoreB || 0);
+        const currentWinsA = data.scoreA || 0;
+        const currentWinsB = data.scoreB || 0;
+        const currentWins = winner === 'A' ? currentWinsA : currentWinsB;
         const missingWins = Math.max(0, winThreshold - currentWins);
         
         updates.status = 'finished';
@@ -964,8 +963,8 @@ export const lobbyService = {
         updates.reportVoteB = null;
 
         if (fillMaxScore) {
-          if (winner === 'A') updates.scoreA = winThreshold;
-          if (winner === 'B') updates.scoreB = winThreshold;
+          if (winner === 'A') updates.scoreA = currentWinsA + missingWins;
+          if (winner === 'B') updates.scoreB = currentWinsB + missingWins;
         }
 
         if (missingWins > 0) {

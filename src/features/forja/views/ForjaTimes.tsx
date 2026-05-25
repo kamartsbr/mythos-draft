@@ -10,6 +10,16 @@ import { updateTeamName, updateTeamImageUrl }  from '../services/forjaService';
 
 const ForjaTimesManager = React.lazy(() => import('../components/ForjaTimesManager'));
 
+// ─── Utility ──────────────────────────────────────────────────────────────────
+function sanitizePlayerName(nick: string): string {
+  if (!nick) return '';
+  return nick
+    .replace(/\[.*?\]|\(.*?\)/g, '')
+    .replace(/(?:CaOK\s*[|_]?\s*)/gi, '')
+    .replace(/^[|_\s]+|[|_\s]+$/g, '')
+    .trim();
+}
+
 // ─── Team Card ────────────────────────────────────────────────────────────────
 const TEAM_COLORS = ['#f59e0b','#60a5fa','#a78bfa','#4ade80','#f87171','#fb923c'];
 
@@ -161,9 +171,16 @@ function TeamCard({ team, members, colorIdx, isAdmin, isCaptain }: {
                 />
                 {isCap && <span className="absolute -top-1 -right-1 text-[8px] leading-none drop-shadow">👑</span>}
               </div>
-              <span className={["text-[10px] font-bold truncate flex-1", isCap ? "text-white" : "text-slate-400"].filter(Boolean).join(" ")}>
+              <a
+                href={m.aom_profile_id ? `https://aomstats.io/profile/${m.aom_profile_id}` : `https://aomstats.io/profile/${encodeURIComponent(m.nick)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={["text-[10px] font-bold truncate flex-1 hover:underline decoration-amber-500 transition-colors", isCap ? "text-white hover:text-amber-400" : "text-slate-400 hover:text-slate-200"].filter(Boolean).join(" ")}
+                onClick={(e) => e.stopPropagation()}
+                title={`Ver perfil de ${m.nick} no aomstats`}
+              >
                 {m.nick}
-              </span>
+              </a>
               <div className="flex items-center gap-1 flex-shrink-0">
                 {m.tier && (
                   <span className={["text-[8px] font-black uppercase px-1 rounded", m.tier === 'A' ? "bg-amber-500/20 text-amber-500" : m.tier === 'B' ? "bg-blue-500/20 text-blue-400" : "bg-slate-500/20 text-slate-400"].filter(Boolean).join(" ")}>
@@ -258,19 +275,21 @@ export default function ForjaTimes({ discordUser, isAdmin }: ForjaViewProps) {
           )}
         </div>
       ) : (
-        <div className="forja-times-grid">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 lg:gap-6 w-full">
           {teams.map((team, i) => {
-            const members = team.members.map(id => playerMap[id]).filter(Boolean);
+            const members = team.members ? team.members.map(id => playerMap[id]).filter(Boolean) : [];
             const isCaptain = discordUser?.discord_id === team.captain_id;
+            
             return (
-              <TeamCard
-                key={team.id}
-                team={team}
-                members={members}
-                colorIdx={i}
-                isAdmin={isAdmin}
-                isCaptain={isCaptain}
-              />
+              <React.Fragment key={team.id || i}>
+                <TeamCard
+                  team={team}
+                  members={members}
+                  colorIdx={i}
+                  isAdmin={isAdmin}
+                  isCaptain={isCaptain}
+                />
+              </React.Fragment>
             );
           })}
         </div>

@@ -191,6 +191,12 @@ export type Lobby = {
   teamBName?: string;
   teamAPlayers?: TeamPlayer[];
   teamBPlayers?: TeamPlayer[];
+  playerA1?: string;
+  playerA2?: string;
+  playerA3?: string;
+  playerB1?: string;
+  playerB2?: string;
+  playerB3?: string;
   readyA: boolean;
   readyB: boolean;
   readyA_report?: boolean;

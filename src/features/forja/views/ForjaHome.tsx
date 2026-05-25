@@ -16,7 +16,7 @@ import { LobbyConfig, Lobby } from '../../../types';
 import { lobbyService, generateId } from '../../../services/lobbyService';
 import { MAJOR_GODS } from '../../../data/gods';
 import { db } from '../../../firebase';
-import { collection, query, where, getDocs, orderBy, doc, setDoc, serverTimestamp, updateDoc, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, doc, setDoc, serverTimestamp, updateDoc, onSnapshot, limit } from 'firebase/firestore';
 import { cn } from '../../../lib/utils';
 
 // ─── Tipos locais ─────────────────────────────────────────────────────────────
@@ -855,7 +855,9 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
     const q = query(
       collection(db, 'lobbies'),
       where('config.preset', '==', 'FORJA'),
-      orderBy('createdAt', 'desc')
+      where('status', 'in', ['waiting', 'drafting', 'active', 'paused', 'reporting']),
+      orderBy('createdAt', 'desc'),
+      limit(20)
     );
     const unsub = onSnapshot(q,
       snap => {

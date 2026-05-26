@@ -460,6 +460,47 @@ describe('pureDraftEngine > processReportAction', () => {
     expect(step2.status).toBe('finished');
     expect(step2.phase).toBe('finished');
   });
+
+  it('Scenario E: MCL Group Stage Game 3 start prevents isRandom or godId leakage and clears timer', () => {
+    const config: LobbyConfig = {
+      name: 'MCL Lobby',
+      preset: 'MCL',
+      teamSize: 3,
+      hasBans: false,
+      seriesType: '3G'
+    } as LobbyConfig;
+
+    const lobby: Lobby = {
+      id: 'test',
+      config,
+      status: 'drafting',
+      phase: 'reporting',
+      currentGame: 2,
+      history: [],
+      bans: [],
+      mapBans: [],
+      seriesMaps: ['map1', 'map2'],
+      scoreA: 1,
+      scoreB: 1,
+      picks: [
+        { playerId: 1, team: 'A', position: 'corner', color: '#ef4444', godId: 'oranos', isRandom: true, turnIndex: 1, playerName: 'P1' }
+      ]
+    } as unknown as Lobby;
+
+    const step1 = processReportAction(lobby, 'A', 'A', 1000);
+    const step2 = processReportAction(step1, 'A', 'B', 2000);
+
+    expect(step2.currentGame).toBe(3);
+    expect(step2.phase).toBe('ready');
+    expect(step2.status).toBe('waiting');
+    expect(step2.timerStart).toBeNull();
+    expect(step2.turnEndsAt).toBeNull();
+
+    // Verify all picks are wiped cleanly
+    const p1 = step2.picks.find(p => p.playerId === 1);
+    expect(p1?.godId).toBeNull();
+    expect(p1?.isRandom).toBe(false);
+    expect(p1?.turnIndex).toBeUndefined();
+    expect(p1?.playerName).toBe('P1');
+  });
 });
-
-

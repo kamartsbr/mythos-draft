@@ -71,6 +71,26 @@ export function LobbyCreation({
   const [showPresetBuilder, setShowPresetBuilder] = useState(false);
   const [communityPresets, setCommunityPresets] = useState<any[]>([]);
   const requestIdRef = useRef(0);
+  const [draftNameError, setDraftNameError] = useState<string | null>(null);
+  const draftNameInputRef = useRef<HTMLInputElement>(null);
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setLobbyName(e.target.value);
+    if (draftNameError && e.target.value.trim()) {
+      setDraftNameError(null);
+    }
+  };
+
+  const handleCreateClick = () => {
+    const trimmed = lobbyName.trim();
+    if (!trimmed) {
+      setDraftNameError(t.enterDraftName || "Please enter a draft name before creating the lobby.");
+      draftNameInputRef.current?.focus();
+      return;
+    }
+    setDraftNameError(null);
+    createLobby();
+  };
 
   const isCustomMode = config.preset === 'CUSTOM';
   const [isRulesExpanded, setIsRulesExpanded] = useState(false);
@@ -228,19 +248,6 @@ export function LobbyCreation({
         </AnimatePresence>
       
       <div className="space-y-6">
-        {/* Draft Name */}
-        <div>
-          <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-3 block">{t.lobbyName}</label>
-          <input 
-            type="text" 
-            maxLength={30}
-            value={lobbyName}
-            placeholder={t.lobbyNamePlaceholder}
-            onChange={(e) => setLobbyName(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-amber-500 transition-all"
-          />
-        </div>
-
         {/* Presets */}
         <div className="space-y-3">
           <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] block">{t.presets}</label>
@@ -1197,8 +1204,47 @@ export function LobbyCreation({
           </div>
         )}
 
+        {/* Draft Details */}
+        <div className="p-6 bg-slate-950/40 border border-slate-900 rounded-2xl space-y-4">
+          <div className="flex items-center gap-2 mb-2 select-none">
+            <Sword className="w-4 h-4 text-amber-500" />
+            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">{lang === 'en' ? "Draft Details" : "Detalhes do Draft"}</h3>
+          </div>
+          
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">{t.lobbyName}</label>
+            <input 
+              ref={draftNameInputRef}
+              type="text" 
+              maxLength={30}
+              value={lobbyName}
+              placeholder={t.lobbyNamePlaceholder}
+              onChange={handleNameChange}
+              className={cn(
+                "w-full bg-slate-950 border rounded-xl px-4 py-3 text-sm focus:outline-none transition-all",
+                draftNameError 
+                  ? "border-red-500 ring-2 ring-red-500/20" 
+                  : "border-slate-800 focus:border-amber-500"
+              )}
+            />
+            {draftNameError && (
+              <p className="text-xs font-bold uppercase tracking-wider text-red-400 mt-1 select-none animate-pulse">
+                {draftNameError}
+              </p>
+            )}
+          </div>
+
+          <div className="text-[10px] font-black uppercase tracking-widest text-center select-none pt-1">
+            {lobbyName.trim() ? (
+              <span className="text-green-500">Ready to create lobby</span>
+            ) : (
+              <span className="text-amber-500/80">Draft name required before creating lobby</span>
+            )}
+          </div>
+        </div>
+
         <button
-          onClick={createLobby}
+          onClick={handleCreateClick}
           className="w-full py-5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black mythic-text text-lg shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-3 group active:scale-[0.98]"
         >
           {t.createBtn}

@@ -4,6 +4,8 @@ import { ArrowRight, Clock } from 'lucide-react';
 import { Lobby, MapInfo, PickEntry, GameResult } from '../types';
 import { MAPS, MAJOR_GODS } from '../constants';
 import { cn } from '../lib/utils';
+import { resolveDraftPick, resolveGameResultPicks } from '../domain/draft/visuals/resolveDraftPick';
+import { MCL_FORMAT } from '../domain/draft/formats/mcl.format';
 
 interface MapVisualizerProps {
   lobby: Lobby;
@@ -31,6 +33,15 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ lobby, isVisible, 
 
   const picks = Array.isArray(lobby.picks) ? lobby.picks : [];
   
+  let resolvedPicks: any[] = [];
+  if (game) {
+    const gameNumber = (game as any).gameNumber || 1;
+    const { teamA, teamB } = resolveGameResultPicks(game, MCL_FORMAT, gameNumber);
+    resolvedPicks = [...teamA, ...teamB];
+  } else {
+    resolvedPicks = picks.map(pick => resolveDraftPick({ pick, format: MCL_FORMAT, mapId, gameNumber: lobby.currentGame }));
+  }
+  
   return (
     <div className="flex flex-col items-center gap-6 w-full">
       <div 
@@ -52,97 +63,54 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ lobby, isVisible, 
         <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,transparent_0%,rgba(2,6,23,0.4)_100%)]" />
         
         {/* Player Positions */}
-        {selectedMap.positions.map((pos) => {
-          let visualPos = { ...pos };
+        {resolvedPicks.map((resolved) => {
+            let godId = resolved.godId;
+            let team = resolved.team;
+            let playerName = resolved.playerName;
+            let playerColor = resolved.colorHex;
+            let showGod = false;
+            const isSelected = selectedPositionId === resolved.playerId;
 
-          if (lobby.config.preset === 'FORJA' || lobby.config.preset === 'MCL') {
-            // 🔥 SOLUÇÃO: Coordinate Mapper (Visual Swap)
-            // Lado HOST (A): Turno 1 (Vermelho) <-> Turno 4 (Laranja)
-            if (pos.playerId === 1) {
-              const pos4 = selectedMap.positions.find(p => p.playerId === 4);
-              if (pos4) visualPos = { ...pos, x: pos4.x, y: pos4.y };
-            } else if (pos.playerId === 4) {
-              const pos1 = selectedMap.positions.find(p => p.playerId === 1);
-              if (pos1) visualPos = { ...pos, x: pos1.x, y: pos1.y };
-            } 
-            // Lado GUEST (B): Turno 2 (Pink) <-> Turno 3 (Blue)
-            else if (pos.playerId === 2) {
-              const pos3 = selectedMap.positions.find(p => p.playerId === 3);
-              if (pos3) visualPos = { ...pos, x: pos3.x, y: pos3.y };
-            } else if (pos.playerId === 3) {
-              const pos2 = selectedMap.positions.find(p => p.playerId === 2);
-              if (pos2) visualPos = { ...pos, x: pos2.x, y: pos2.y };
-            }
-          }
+            if (game) {
+              showGod = !!godId;
+              const picksA = Array.isArray(game.picksA) ? game.picksA : [];
+              const picksB = Array.isArray(game.picksB) ? game.picksB : [];
+              const colorsA = Array.isArray(game.colorsA) ? game.colorsA : [];
+              const colorsB = Array.isArray(game.colorsB) ? game.colorsB : [];
+              
+              if (godId) {
+                const colorIdx = team === 'A' ? picksA.indexOf(godId) : picksB.indexOf(godId);
+                if (colorIdx !== -1) {
+                  const recordedColor = team === 'A' ? colorsA[colorIdx] : colorsB[colorIdx];
+                  if (recordedColor) playerColor = recordedColor;
+                }
+              }
 
-          let godId: string | null = null;
-          let team: 'A' | 'B' | null = null;
-          let playerName: string | null = null;
-          let playerColor: string | null = null;
-          let showGod = false;
-          const isSelected = selectedPositionId === pos.playerId;
-
-          if (game) {
-            // Logic for past game visualization
-            const teamSize = lobby.config.teamSize;
-            const picksA = Array.isArray(game.picksA) ? game.picksA : [];
-            const picksB = Array.isArray(game.picksB) ? game.picksB : [];
-            const colorsA = Array.isArray(game.colorsA) ? game.colorsA : [];
-            const colorsB = Array.isArray(game.colorsB) ? game.colorsB : [];
-
-            if (teamSize === 1) {
-              if (pos.playerId === 1) { godId = picksA[0]; team = 'A'; }
-              if (pos.playerId === 2) { godId = picksB[0]; team = 'B'; }
-            } else if (teamSize === 2) {
-              if (pos.playerId === 1) { godId = picksA[0]; team = 'A'; }
-              if (pos.playerId === 2) { godId = picksA[1]; team = 'A'; }
-              if (pos.playerId === 3) { godId = picksB[0]; team = 'B'; }
-              if (pos.playerId === 4) { godId = picksB[1]; team = 'B'; }
+              if (!playerName || playerName.startsWith('P')) {
+                 playerName = team === 'A' ? ((lobby.teamAName || lobby.captain1Name) || 'Team A') : ((lobby.teamBName || lobby.captain2Name) || 'Team B');
+              }
             } else {
-              if (pos.playerId === 1) { godId = picksA[0]; team = 'A'; }
-              if (pos.playerId === 4) { godId = picksA[1]; team = 'A'; }
-              if (pos.playerId === 5) { godId = picksA[2]; team = 'A'; }
-              if (pos.playerId === 3) { godId = picksB[0]; team = 'B'; }
-              if (pos.playerId === 2) { godId = picksB[1]; team = 'B'; }
-              if (pos.playerId === 6) { godId = picksB[2]; team = 'B'; }
+              const originalPick = picks.find(p => p.playerId === resolved.playerId);
+              showGod = !!godId && (originalPick ? isVisible(originalPick) : true);
+              
+              const isMyTeam = (isCaptain1 && team === 'A') || (isCaptain2 && team === 'B');
+              if (showGod || isMyTeam) {
+                playerName = playerName || `P${resolved.playerId}`;
+              } else {
+                playerName = `P${resolved.playerId}`;
+              }
             }
-            showGod = !!godId;
-            const colorIdx = team === 'A' ? picksA.indexOf(godId!) : picksB.indexOf(godId!);
-            playerColor = team === 'A' 
-              ? (colorsA[colorIdx] || '#3b82f6') 
-              : (colorsB[colorIdx] || '#ef4444');
-            
-            // Try to find player name in roster
-            const roster = team === 'A' ? game.rosterA : game.rosterB;
-            const safeRoster = Array.isArray(roster) ? roster : [];
-            const playerInRoster = safeRoster.find(p => p.playerId === pos.playerId);
-            playerName = playerInRoster?.playerName || (team === 'A' ? ((lobby.teamAName || lobby.captain1Name) || 'Team A') : ((lobby.teamBName || lobby.captain2Name) || 'Team B'));
-          } else {
-            // Logic for current draft visualization
-            const pick = picks.find(p => p.playerId === pos.playerId);
-            godId = pick?.godId || null;
-            team = pick?.team || null;
-            showGod = !!godId && isVisible(pick!);
-            playerColor = pick?.color || (pick?.team === 'A' ? '#3b82f6' : '#ef4444');
-            
-            const isMyTeam = (isCaptain1 && team === 'A') || (isCaptain2 && team === 'B');
-            if (showGod || isMyTeam) {
-              playerName = pick?.playerName || `P${pos.playerId}`;
-            } else {
-              playerName = `P${pos.playerId}`;
-            }
-          }
 
           const god = godId ? MAJOR_GODS.find(g => g.id === godId) : null;
 
           return (
             <div 
-              key={pos.playerId}
+              key={resolved.playerId}
               className={cn(
                 "absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-300",
                 isSelected && "z-50 scale-125"
               )}
-              style={{ left: `${visualPos.x}%`, top: `${visualPos.y}%` }}
+              style={{ left: `${resolved.mapX}%`, top: `${resolved.mapY}%` }}
             >
               <div className="relative flex flex-col items-center">
                 {/* Player Name above God */}
@@ -264,7 +232,7 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ lobby, isVisible, 
                   )}
                     style={{ color: isSelected ? '#f59e0b' : playerColor }}
                   >
-                    {showGod ? god?.name : `P${pos.playerId}`}
+                    {showGod ? god?.name : `P${resolved.playerId}`}
                   </span>
                 </div>
               </div>

@@ -125,7 +125,8 @@ function AppContent() {
     forceUnpause,
     forceStartDraft,
     isAuthReady,
-    lobbyInitialLoading
+    lobbyInitialLoading,
+    hasAttemptedLobbyLoad
   } = useLobby(localStorage.getItem('mythos_nickname') || '');
 
   const {
@@ -466,10 +467,11 @@ function AppContent() {
       ) : (
         <>
           {/* ── Top Left Donation Widget (Leveled Up) ── */}
-          <div className="fixed top-4 left-4 z-[100] hidden lg:flex items-center gap-2">
-            <motion.div 
-              initial={{ x: -20, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
+          {!lobbyId && (
+            <div className="fixed top-4 left-4 z-[100] hidden lg:flex items-center gap-2">
+              <motion.div 
+                initial={{ x: -20, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
               className="bg-slate-900/60 backdrop-blur-xl border border-white/5 p-1 rounded-2xl flex items-center gap-1 group hover:border-amber-500/30 transition-all duration-500 shadow-2xl shadow-black/50"
             >
               {/* Coffee Icon / Label */}
@@ -520,7 +522,6 @@ function AppContent() {
                 </a>
               </div>
             </motion.div>
-
             {/* PIX Copy Success Toast */}
             {copySuccess && (
               <motion.div
@@ -532,6 +533,7 @@ function AppContent() {
               </motion.div>
             )}
           </div>
+        )}
 
           {/* Global Language Toggle - Show when not in a lobby or when auth is required */}
           {(!lobbyId || (authError === 'anonymous_disabled' && !guestId)) && (
@@ -894,7 +896,25 @@ function AppContent() {
                 </footer>
               </div>
             </div>
-          ) : (lobbyId && !lobby && !lobbyInitialLoading) ? (
+          ) : (lobbyId && error) ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-4 text-center max-w-md mx-auto">
+              <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mb-4 border border-red-500/20">
+                <AlertTriangle className="w-8 h-8 text-red-500" />
+              </div>
+              <p className="text-xl font-bold text-white uppercase tracking-tight mb-2">Lobby Error</p>
+              <p className="text-red-400 text-sm mb-6">{error}</p>
+              <button 
+                onClick={() => {
+                  setError(null);
+                  setLobbyId(null);
+                  window.history.replaceState({}, '', '/');
+                }}
+                className="px-6 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 font-bold uppercase tracking-widest hover:bg-slate-800 transition-all"
+              >
+                Return to Menu
+              </button>
+            </div>
+          ) : (lobbyId && !lobby && !lobbyInitialLoading && hasAttemptedLobbyLoad && isAuthReady) ? (
             <div className="flex-1 flex flex-col items-center justify-center p-4">
               <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mb-4 border border-red-500/20">
                 <AlertTriangle className="w-8 h-8 text-red-500" />

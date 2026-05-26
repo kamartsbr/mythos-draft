@@ -497,8 +497,23 @@ export function processTurnAction(
             if (targetPlayerId === undefined) {
               targetPlayerId = nextLobby.picks[pickIndex].playerId;
             }
-            if (!playerName) {
-              playerName = nextLobby.picks[pickIndex].playerName;
+            
+            const isPlaceholder = (name?: string) => !name || /^P\d+$/i.test(name) || /^Player \d+$/i.test(name);
+            
+            if (!playerName || isPlaceholder(playerName)) {
+              const teamPlayers = executionTeam === 'A' ? nextLobby.teamAPlayers : nextLobby.teamBPlayers;
+              const assignedPlayerNames = nextLobby.picks
+                .filter(p => p.team === executionTeam && p.godId !== null)
+                .map(p => p.playerName)
+                .filter(Boolean);
+              
+              const availablePlayers = teamPlayers?.filter(tp => tp.name && !assignedPlayerNames.includes(tp.name)) || [];
+              
+              if (availablePlayers.length > 0) {
+                playerName = availablePlayers[Math.floor(Math.random() * availablePlayers.length)].name;
+              } else {
+                playerName = nextLobby.picks[pickIndex].playerName || `Player ${targetPlayerId}`;
+              }
             }
           }
         }
@@ -672,6 +687,9 @@ export function processReportAction(
         nextLobby.phase = 'finished';
       } else {
         nextLobby.phase = 'ready';
+        nextLobby.status = 'waiting';
+        nextLobby.timerStart = null;
+        nextLobby.turnEndsAt = null;
         nextLobby.currentGame++;
         nextLobby.lastWinner = finalWinner;
 
@@ -711,11 +729,11 @@ export function processReportAction(
             });
             nextLobby.selectedMap = nextGameMap;
           } else {
-            nextLobby.picks = nextLobby.picks.map(p => ({ ...p, godId: null }));
+            nextLobby.picks = nextLobby.picks.map(p => ({ ...p, godId: null, isRandom: false, turnIndex: undefined }));
             nextLobby.selectedMap = null;
           }
         } else {
-          nextLobby.picks = nextLobby.picks.map(p => ({ ...p, godId: null }));
+          nextLobby.picks = nextLobby.picks.map(p => ({ ...p, godId: null, isRandom: false, turnIndex: undefined }));
           nextLobby.selectedMap = null;
         }
       }

@@ -1048,6 +1048,8 @@ export const lobbyService = {
         const lobby = getLocalLobby(id);
         if (lobby) {
           onUpdate(lobby);
+        } else {
+          onUpdate(null as any);
         }
       };
 
@@ -1066,6 +1068,8 @@ export const lobbyService = {
       if (docSnap.exists()) {
         const data = normalizeLobbyData(docSnap.data());
         onUpdate(data);
+      } else {
+        onUpdate(null as any);
       }
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, `lobbies/${id}`);

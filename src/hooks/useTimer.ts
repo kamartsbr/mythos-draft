@@ -59,7 +59,7 @@ export function useTimer(
 
   const tick = useCallback(async () => {
     const currentLobby = lobbyRef.current;
-    if (!currentLobby || (!currentLobby.timerStart && !currentLobby.turnEndsAt) || currentLobby.status !== 'drafting' || currentLobby.phase === 'finished' || currentLobby.phase === 'post_draft') {
+    if (!currentLobby || (!currentLobby.timerStart && !currentLobby.turnEndsAt) || currentLobby.status !== 'drafting' || currentLobby.phase === 'finished' || currentLobby.phase === 'post_draft' || currentLobby.phase === 'ready') {
       setTimeLeft(null);
       isProcessing.current = false;
       lastTriggeredTurn.current = null;
@@ -263,14 +263,15 @@ export function useTimer(
 
       if (actionId) {
         try {
-          if (currentLobby.config.preset === 'MCL' && currentTurn.target === 'GOD' && currentTurn.action === 'PICK') {
+          const isPresetWithRoster = currentLobby.config.preset === 'MCL' || currentLobby.config.preset === 'FORJA' || currentLobby.config.preset === 'MCL_PLAYOFFS';
+          if (isPresetWithRoster && currentTurn.target === 'GOD' && currentTurn.action === 'PICK') {
             const team = currentTurn.player === 'A' ? 'A' : (currentTurn.player === 'B' ? 'B' : (isCaptain1 ? 'A' : 'B'));
             const teamPlayers = team === 'A' ? currentLobby.teamAPlayers : currentLobby.teamBPlayers;
             const emptyPick = currentLobby.picks.find(p => p.team === team && p.godId === null);
             
             if (emptyPick) {
-              const assignedPlayerNames = currentLobby.picks.filter(p => p.team === team && p.godId !== null).map(p => p.playerName);
-              const availablePlayers = teamPlayers?.filter(tp => !assignedPlayerNames.includes(tp.name)) || [];
+              const assignedPlayerNames = currentLobby.picks.filter(p => p.team === team && p.godId !== null).map(p => p.playerName).filter(Boolean);
+              const availablePlayers = teamPlayers?.filter(tp => tp.name && !assignedPlayerNames.includes(tp.name)) || [];
               const randomPlayer = availablePlayers.length > 0 
                 ? availablePlayers[Math.floor(Math.random() * availablePlayers.length)] 
                 : { name: `Player ${emptyPick.playerId}` };

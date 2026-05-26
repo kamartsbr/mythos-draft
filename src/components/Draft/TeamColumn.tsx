@@ -5,6 +5,8 @@ import { cn } from '../../lib/utils';
 import { Lobby, PickEntry, Substitution } from '../../types';
 import { PlayerSlot } from './PlayerSlot';
 import { MAJOR_GODS, MAPS } from '../../constants';
+import { resolveDraftPick } from '../../domain/draft/visuals/resolveDraftPick';
+import { MCL_FORMAT } from '../../domain/draft/formats/mcl.format';
 
 interface TeamColumnProps {
   team: 'A' | 'B';
@@ -374,8 +376,10 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
               const isCurrentPlayerTurn = isGodTurn && isTeamTurn && pick === nextPickForTeam;
               
               const hoveredGodId = team === 'A' ? lobby.hoveredGodIdA : lobby.hoveredGodIdB;
-              const god = MAJOR_GODS.find(g => g.id === pick.godId) || (isCurrentPlayerTurn && hoveredGodId ? MAJOR_GODS.find(g => g.id === hoveredGodId) : null);
-              const isHovered = !pick.godId && god && isCurrentPlayerTurn;
+              const committedGod = pick.godId ? MAJOR_GODS.find(g => g.id === pick.godId) : undefined;
+              const previewGod = !pick.godId && isCurrentPlayerTurn && hoveredGodId ? MAJOR_GODS.find(g => g.id === hoveredGodId) : undefined;
+              const god = committedGod || previewGod;
+              const isHovered = Boolean(previewGod);
 
               return (
                 <motion.div
@@ -431,6 +435,13 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
               const shouldHideName = !isMyTeamOverride && !hasGod && lobby.config.preset === 'MCL';
               const hoveredGodId = team === 'A' ? lobby.hoveredGodIdA : lobby.hoveredGodIdB;
               
+              const resolved = resolveDraftPick({
+                pick,
+                format: MCL_FORMAT,
+                mapId: lobby.selectedMap,
+                gameNumber: lobby.currentGame
+              });
+              
               return (
                 <PlayerSlot                
                   key={pick.playerId + '-' + idx} 
@@ -443,6 +454,8 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
                   hoveredGodId={isCurrentPlayerTurn ? hoveredGodId : null}
                   timeLeft={timeLeft}
                   timerDuration={timerDuration || lobby.config.timerDuration || 60}
+                  visualColor={resolved.colorHex}
+                  visualOrder={resolved.visualOrder}
                 />
               );
             })}

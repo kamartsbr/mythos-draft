@@ -7,6 +7,7 @@ import { PlayerSlot } from './PlayerSlot';
 import { MAJOR_GODS, MAPS } from '../../constants';
 import { resolveDraftPick } from '../../domain/draft/visuals/resolveDraftPick';
 import { MCL_FORMAT } from '../../domain/draft/formats/mcl.format';
+import { shouldUseGame2MclOrder } from '../../data/draft';
 
 interface TeamColumnProps {
   team: 'A' | 'B';
@@ -104,6 +105,7 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
   }
 
   const teamPicks = optimisticPicks.filter(p => p.team === team);
+  const useGame2Order = shouldUseGame2MclOrder(lobby.turnOrder);
 
   const sortedPicks = teamPicks;
   
@@ -439,7 +441,8 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
                 pick,
                 format: MCL_FORMAT,
                 mapId: lobby.selectedMap,
-                gameNumber: lobby.currentGame
+                gameNumber: lobby.currentGame,
+                useGame2Order
               });
               
               return (

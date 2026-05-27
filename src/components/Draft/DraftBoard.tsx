@@ -293,6 +293,7 @@ export function DraftBoard(props: DraftBoardProps) {
                   {t.bannedComboDesc || 'A tática do Hamadryad + SS está banida do campeonato MCL. Sua composição atual (Ra/Set + Demeter) viola esta regra e pode resultar em desclassificação.'}
                 </p>
                 <button 
+                  data-testid="combo-warning-dismiss"
                   onClick={() => setHasDismissedComboWarning(true)}
                   className="w-full py-4 bg-white text-red-600 rounded-2xl font-black text-lg hover:bg-red-50 transition-all shadow-xl"
                 >
@@ -320,6 +321,7 @@ export function DraftBoard(props: DraftBoardProps) {
               <div className="flex flex-col md:flex-row gap-4 w-full justify-center">
                 {(isCaptain1 || isCaptain2) && (
                   <button
+                    data-testid="draft-ready-button"
                     onClick={() => handleReady(!(isCaptain1 ? displayReadyA : displayReadyB))}
                     disabled={isProcessing}
                     className={cn(
@@ -436,6 +438,7 @@ export function DraftBoard(props: DraftBoardProps) {
             
             <div className="flex flex-col items-center gap-6">
               <button
+                data-testid="draft-ready-button"
                 onClick={() => handleReady(!(isCaptain1 ? displayReadyA : displayReadyB))}
                 className={cn(
                   "px-12 py-5 rounded-2xl font-black text-xl uppercase tracking-widest transition-all shadow-xl",
@@ -510,6 +513,7 @@ export function DraftBoard(props: DraftBoardProps) {
                   {t.bannedComboDesc || 'A tática do Hamadryad + SS está banida do campeonato MCL. Sua composição atual (Ra/Set + Demeter) viola esta regra e pode resultar em desclassificação.'}
                 </p>
                 <button 
+                  data-testid="combo-warning-dismiss"
                   onClick={() => setHasDismissedComboWarning(true)}
                   className="w-full py-4 bg-white text-red-600 rounded-2xl font-black text-lg hover:bg-red-50 transition-all shadow-xl"
                 >
@@ -558,6 +562,7 @@ export function DraftBoard(props: DraftBoardProps) {
             <>
               <div className="grid grid-cols-2 gap-6 mb-8">
                 <button
+                  data-testid="report-winner-a"
                   onClick={() => setConfirmWinner('A')}
                   disabled={!isCaptain1 && !isCaptain2}
                   className={cn(
@@ -573,6 +578,7 @@ export function DraftBoard(props: DraftBoardProps) {
                   <span className="font-black text-xl uppercase tracking-tight">{((lobby.teamAName || lobby.captain1Name) || t.teamA)} {t.won}</span>
                 </button>
                 <button
+                  data-testid="report-winner-b"
                   onClick={() => setConfirmWinner('B')}
                   disabled={!isCaptain1 && !isCaptain2}
                   className={cn(
@@ -602,6 +608,7 @@ export function DraftBoard(props: DraftBoardProps) {
                     </p>
                     <div className="flex gap-4">
                       <button
+                        data-testid="report-confirm-button"
                         onClick={() => {
                           reportScore(confirmWinner);
                           setConfirmWinner(null);
@@ -717,6 +724,7 @@ export function DraftBoard(props: DraftBoardProps) {
                   {t.bannedComboDesc || 'A tática do Hamadryad + SS está banida do campeonato MCL. Sua composição atual (Ra/Set + Demeter) viola esta regra e pode resultar em desclassificação.'}
                 </p>
                 <button 
+                  data-testid="combo-warning-dismiss"
                   onClick={() => setHasDismissedComboWarning(true)}
                   className="w-full py-4 bg-white text-red-600 rounded-2xl font-black text-lg hover:bg-red-50 transition-all shadow-xl"
                 >
@@ -794,6 +802,7 @@ export function DraftBoard(props: DraftBoardProps) {
                 {t.bannedComboDesc || 'A tática do Hamadryad + SS está banida do campeonato MCL. Sua composição atual (Ra/Set + Demeter) viola esta regra e pode resultar em desclassificação.'}
               </p>
               <button 
+                data-testid="combo-warning-dismiss"
                 onClick={() => setHasDismissedComboWarning(true)}
                 className="w-full py-4 bg-white text-red-600 rounded-2xl font-black text-lg hover:bg-red-50 transition-all shadow-xl"
               >
@@ -1022,6 +1031,7 @@ function ReadyPhase(props: {
         <div className="flex flex-col items-center gap-6">
           <div className="flex flex-col md:flex-row gap-4 w-full justify-center">
             <button
+              data-testid="draft-ready-button"
               onClick={() => handleReady(!isReady)}
               disabled={(!isCaptain1 && !isCaptain2) || isProcessing}
               className={cn(

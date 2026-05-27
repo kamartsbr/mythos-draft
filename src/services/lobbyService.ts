@@ -23,7 +23,7 @@ import {
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { Lobby, LobbyConfig, PickEntry, ChatMessage, LobbySummary, LobbyIndex, DraftTimestampRead } from '../types';
 import { PLAYER_COLORS, MCL_ROUND_MAPS } from '../constants';
-import { getMCLPicks, getMCLTeamOrder } from '../data/draft';
+import { getMCLPicks, getMCLTeamOrder, shouldUseGame2MclOrder } from '../data/draft';
 
 
 // --- SHIELDING: MOCK LAYER CONFIG ---
@@ -1642,8 +1642,9 @@ export const lobbyService = {
         // 🔥 INITIALIZE PICKS WITH PLAYER NAMES (Anti-Generic Name Bug)
         if (data.config.preset === 'MCL' || data.config.preset === 'FORJA') {
           const initialPicks = getMCLPicks(data.currentGame || 1);
-          const teamAOrder = getMCLTeamOrder('A');
-          const teamBOrder = getMCLTeamOrder('B');
+          const useGame2Order = shouldUseGame2MclOrder(data.turnOrder);
+          const teamAOrder = getMCLTeamOrder('A', null, useGame2Order);
+          const teamBOrder = getMCLTeamOrder('B', null, useGame2Order);
 
           updates.picks = initialPicks.map(p => {
             const teamPlayers = p.team === 'A' ? (updates.teamAPlayers || data.teamAPlayers) : (updates.teamBPlayers || data.teamBPlayers);

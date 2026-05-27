@@ -5,12 +5,14 @@ import { createPortal } from 'react-dom';
 import { cn } from '../../lib/utils';
 import { Lobby, God, MapInfo } from '../../types';
 import { MAJOR_GODS, MAPS, PANTHEONS } from '../../constants';
+import { getMCLTeamOrder } from '../../data/draft';
 import { lobbyService } from '../../services/lobbyService';
 import { MapVisualizer } from '../MapVisualizer';
 import { ConfirmModal } from '../UI/ConfirmModal';
 import { DraftResultCard } from './DraftResultCard';
 import { toPng } from 'html-to-image';
 import { useRef } from 'react';
+import { shouldUseGame2MclOrder } from '../../data/draft';
 
 interface PickBanPanelProps {
   lobby: Lobby;
@@ -137,15 +139,23 @@ export function PickBanPanel({
   }, [lobby.turn]);
 
   useEffect(() => {
-    if ((isCaptain1 || isCaptain2) || isAdmin || myTeam) {
-      let team = myTeam || 'A';
-      if (!myTeam && isCaptain2 && !isCaptain1) {
-        team = 'B';
-      }
-      const godId = isMyTurn ? selectedGodId : null;
-      lobbyService.setHoveredGod(lobby.id, team as 'A' | 'B', godId);
+    if (!((isCaptain1 || isCaptain2) || isAdmin || myTeam)) {
+      return;
     }
-  }, [selectedGodId, isMyTurn, isCaptain1, isCaptain2, lobby.id, myTeam, isAdmin]);
+
+    let team = myTeam || 'A';
+    if (!myTeam && isCaptain2 && !isCaptain1) {
+      team = 'B';
+    }
+
+    const isActiveGodPickTurn =
+      lobby.phase === 'god_pick' &&
+      currentTurn?.target === 'GOD' &&
+      currentTurn?.action === 'PICK';
+
+    const shouldPreview = Boolean(isMyTurn && isActiveGodPickTurn && selectedGodId);
+    lobbyService.setHoveredGod(lobby.id, team as 'A' | 'B', shouldPreview ? selectedGodId : null);
+  }, [selectedGodId, isMyTurn, isCaptain1, isCaptain2, lobby.id, myTeam, isAdmin, lobby.phase, currentTurn?.target, currentTurn?.action]);
 
   useEffect(() => {
     if (lobby.phase !== lastPhase && lobby.status === 'drafting') {
@@ -260,6 +270,8 @@ export function PickBanPanel({
     return (
       <motion.button
         key={map.id}
+        data-testid="map-card"
+        data-map-id={map.id}
         whileHover={!isDisabled ? { scale: 1.05, y: -4 } : {}}
         whileTap={!isDisabled ? { scale: 0.95 } : {}}
         onClick={() => {
@@ -343,12 +355,14 @@ export function PickBanPanel({
     return (
       <motion.button
         key={god.id}
+        data-testid="god-card"
+        data-god-id={god.id}
         layoutId={`god-${god.id}`}
         whileHover={!isDisabled ? { scale: 1.05, y: -1 } : {}}
         whileTap={!isDisabled ? { scale: 0.95 } : {}}
         onClick={() => {
           if (isDisabled) return;
-          if ((lobby.config.preset === 'MCL' || lobby.config.preset === 'FORJA') && lobby.phase === 'god_pick') {
+          if ((lobby.config.preset === 'MCL' || lobby.config.preset === 'FORJA' || lobby.config.preset === 'MCL_PLAYOFFS' || lobby.config.preset === 'MCL_TIEBREAKER') && lobby.phase === 'god_pick') {
             setSelectedGodId(prev => prev === god.id ? null : god.id);
           } else {
             handleAction(god.id);
@@ -525,6 +539,7 @@ export function PickBanPanel({
             <div className="flex flex-col items-center gap-4 w-full">
               <div className="flex gap-4 w-full max-w-sm">
                 <button
+                  data-testid="post-draft-ready-report-button"
                   onClick={() => reportScore(null as any)}
                   disabled={(!isCaptain1 && !isCaptain2) || (isCaptain1 && lobby.readyA_report) || (isCaptain2 && lobby.readyB_report)}
                   className={cn(
@@ -654,6 +669,7 @@ export function PickBanPanel({
         {isMyTurn && pendingMapId && (
           <div className="mt-6 flex justify-center shrink-0">
             <motion.button
+              data-testid="confirm-map-pick"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               onClick={() => {
@@ -715,8 +731,8 @@ export function PickBanPanel({
       </AnimatePresence>
 
       {lobby.selectedMap && (
-        <div className="mb-4 flex flex-col items-center bg-slate-900/20 p-3 rounded-2xl border border-slate-900/40 shrink-0 w-full">
-          <div className="w-[min(620px,70vw)] max-h-[360px] mx-auto shrink-0 overflow-hidden rounded-2xl flex items-center justify-center">
+        <div className="mb-4 flex flex-col items-center bg-slate-900/20 px-3 py-5 rounded-2xl border border-slate-900/40 shrink-0 w-full">
+          <div className="w-[min(700px,72vw)] mx-auto shrink-0 overflow-visible rounded-2xl flex items-center justify-center">
             <MapVisualizer 
               lobby={lobby} 
               isVisible={() => true} 
@@ -827,39 +843,43 @@ export function PickBanPanel({
       </div>
 
       {/* MCL / FORJA Player Selection */}
-      {(lobby.config.preset === 'MCL' || lobby.config.preset === 'FORJA') && currentTurn?.target === 'GOD' && currentTurn?.action === 'PICK' && isMyTurn && (
+      {(lobby.config.preset === 'MCL' || lobby.config.preset === 'FORJA' || lobby.config.preset === 'MCL_PLAYOFFS' || lobby.config.preset === 'MCL_TIEBREAKER') && currentTurn?.target === 'GOD' && currentTurn?.action === 'PICK' && isMyTurn && (
         <div className="sticky bottom-0 left-0 right-0 mt-3 p-3 bg-slate-950/90 border border-slate-800 rounded-2xl backdrop-blur-md z-[20] shadow-2xl">
           <h4 className="text-xs font-bold text-slate-300 mb-2 text-center uppercase tracking-widest">
             {selectedGodId ? t.selectPlayerForGod || "Select a player for this God" : t.selectGodFirst || "Select a God first"}
           </h4>
           <div className="flex items-center justify-center gap-2 sm:gap-4">
             {(() => {
-              const activeTeam = myTeam || (isCaptain1 ? 'A' : (isCaptain2 ? 'B' : 'A'));
+              const activeTeam: 'A' | 'B' = myTeam === 'A' || myTeam === 'B' ? myTeam : (isCaptain1 ? 'A' : (isCaptain2 ? 'B' : 'A'));
               let players = activeTeam === 'A' ? (lobby.teamAPlayers || []) : (lobby.teamBPlayers || []);
               
               if (players.length === 0) {
                 const teamSlots = activeTeam === 'A' ? [1, 4, 5] : [2, 3, 6];
                 players = teamSlots.map(id => ({ name: `Player ${id}`, position: id }));
               }
+
+              const teamOrder = getMCLTeamOrder(activeTeam, lobby.selectedMap || null, shouldUseGame2MclOrder(lobby.turnOrder));
               
               return players.map((tp, idx) => {
                 const lowerTpName = tp.name.toLowerCase().trim();
-                const isAssigned = lobby.picks.some(p => 
-                  p.team === activeTeam && 
-                  p.playerName?.toLowerCase().trim() === lowerTpName && 
+                const targetPlayerId = teamOrder[idx] ?? tp.position;
+                const targetPick = lobby.picks.find(p => p.team === activeTeam && p.playerId === targetPlayerId);
+                const isAssigned = !!targetPick?.godId || lobby.picks.some(p => 
+                  p.team === activeTeam &&
+                  p.playerName?.toLowerCase().trim() === lowerTpName &&
                   p.godId !== null
                 );
                 return (
                   <button
                     key={idx}
-                    disabled={!selectedGodId || isAssigned}
+                    data-testid="mcl-player-target"
+                    data-player-id={targetPlayerId}
+                    data-player-name={tp.name}
+                    disabled={!selectedGodId || isAssigned || !targetPick}
                     onClick={() => {
-                      if (selectedGodId && !isAssigned) {
-                        const targetPick = lobby.picks.find(p => p.team === activeTeam && p.godId === null);
-                        if (targetPick) {
-                          handleAction(selectedGodId, targetPick.playerId, tp.name);
-                          setSelectedGodId(null);
-                        }
+                      if (selectedGodId && !isAssigned && targetPick) {
+                        handleAction(selectedGodId, targetPick.playerId, tp.name);
+                        setSelectedGodId(null);
                       }
                     }}
                     className={cn(

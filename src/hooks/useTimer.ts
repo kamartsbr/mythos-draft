@@ -137,7 +137,9 @@ export function useTimer(
       return;
     }
     
-    if (elapsed >= duration) {
+    const shouldTimeoutNow = remaining === 0 || elapsed >= duration;
+
+    if (shouldTimeoutNow) {
       isProcessing.current = true;
       lastTriggerAt.current = nowMs;
       
@@ -155,7 +157,7 @@ export function useTimer(
         const opponentVote = isCaptain1 ? currentLobby.pickerVoteB : currentLobby.pickerVoteA;
         
         // If I already picked AND the opponent already picked, or it's not even my turn to help...
-        if (myVote && (opponentVote || elapsed < duration + 2)) {
+        if (myVote && opponentVote) {
           isProcessing.current = false;
           return;
         }
@@ -191,18 +193,6 @@ export function useTimer(
 
       const currentTurn = currentLobby.turnOrder[currentLobby.turn];
       if (!currentTurn) {
-        isProcessing.current = false;
-        return;
-      }
-
-      const isC1Turn = currentTurn.player === 'A' || currentTurn.player === 'BOTH';
-      const isC2Turn = currentTurn.player === 'B' || currentTurn.player === 'BOTH';
-      
-      const isMyTurn = (isC1Turn && isCaptain1) || (isC2Turn && isCaptain2);
-      const isOpponentTurn = (isC1Turn && isCaptain2) || (isC2Turn && isCaptain1);
-      
-      const shouldTrigger = isMyTurn || (isOpponentTurn && elapsed >= duration + 2);
-      if (!shouldTrigger) {
         isProcessing.current = false;
         return;
       }
@@ -263,7 +253,7 @@ export function useTimer(
 
       if (actionId) {
         try {
-          const isPresetWithRoster = currentLobby.config.preset === 'MCL' || currentLobby.config.preset === 'FORJA' || currentLobby.config.preset === 'MCL_PLAYOFFS';
+          const isPresetWithRoster = currentLobby.config.preset === 'MCL' || currentLobby.config.preset === 'FORJA' || currentLobby.config.preset === 'MCL_PLAYOFFS' || currentLobby.config.preset === 'MCL_TIEBREAKER';
           if (isPresetWithRoster && currentTurn.target === 'GOD' && currentTurn.action === 'PICK') {
             const team = currentTurn.player === 'A' ? 'A' : (currentTurn.player === 'B' ? 'B' : (isCaptain1 ? 'A' : 'B'));
             const teamPlayers = team === 'A' ? currentLobby.teamAPlayers : currentLobby.teamBPlayers;

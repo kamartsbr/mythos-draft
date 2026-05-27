@@ -37,7 +37,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
     score: true,
     picks: true,
     maps: true,
-    bans: false
+    bans: true
   });
   const [showSnakeWarning, setShowSnakeWarning] = useState(false);
   const [hudScale, setHudScale] = useState(0.75);
@@ -73,7 +73,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
         score: score !== 'false',
         picks: picks !== 'false',
         maps: maps !== 'false',
-        bans: bans === 'true'
+        bans: bans !== 'false'
       });
     }
   }, [isObsMode]);
@@ -156,6 +156,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
 
   const teamAPicks = picks.filter(p => p.team === 'A');
   const teamBPicks = picks.filter(p => p.team === 'B');
+  const replayLog = Array.isArray(lobby.replayLog) ? lobby.replayLog : [];
 
   const is1v1 = lobby.config.teamSize === 1;
   const isGodPickerPhase = ['god_picker', 'revealing', 'post_draft', 'reporting'].includes(lobby.phase);
@@ -169,6 +170,10 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
 
   const historyGame = history[displayGameIdx];
   const displayedGameWinner = historyGame?.winner;
+  const currentGameNumber = isViewingHistory ? ((historyGame as any)?.gameNumber || displayGameIdx + 1) : lobby.currentGame;
+  const gameGodBans = replayLog.filter(
+    (entry) => entry.action === 'BAN' && entry.target === 'GOD' && entry.gameNumber === currentGameNumber
+  );
 
   // For 1v1, if we are in a match phase, we only want to show the currently selected gods
   const displayPicksA = isViewingHistory && historyGame
@@ -607,7 +612,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: playerColor, boxShadow: `0 0 10px ${playerColor}` }} />
                           <span className="text-[12px] font-black uppercase tracking-[0.2em]" style={{ color: playerColor }}>
-                            {is1v1 ? ((lobby.teamAName || lobby.captain1Name) || 'HOST') : (pick.godId || isCurrentPlayerTurn ? (pick.playerName || `PLAYER ${pick.playerId}`) : '')}
+                            {is1v1 ? ((lobby.teamAName || lobby.captain1Name) || 'HOST') : (pick.godId || isCurrentPlayerTurn ? (pick.playerName || 'SELECTING...') : '')}
                           </span>
                         </div>
                         <span className={cn("text-3xl font-black uppercase text-white tracking-tight drop-shadow-xl", isHovered && "text-slate-400")}>
@@ -728,7 +733,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                         <div className="flex items-center gap-2 flex-row-reverse">
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: playerColor, boxShadow: `0 0 10px ${playerColor}` }} />
                           <span className="text-[12px] font-black uppercase tracking-[0.2em]" style={{ color: playerColor }}>
-                            {is1v1 ? ((lobby.teamBName || lobby.captain2Name) || 'GUEST') : (pick.godId || isCurrentPlayerTurn ? (pick.playerName || `PLAYER ${pick.playerId}`) : '')}
+                            {is1v1 ? ((lobby.teamBName || lobby.captain2Name) || 'GUEST') : (pick.godId || isCurrentPlayerTurn ? (pick.playerName || 'SELECTING...') : '')}
                           </span>
                         </div>
                         <span className={cn("text-3xl font-black uppercase text-white tracking-tight drop-shadow-xl", isHovered && "text-slate-400")}>
@@ -743,6 +748,43 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
           )}
         </AnimatePresence>
 
+        <AnimatePresence>
+          {visibleElements.bans && gameGodBans.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 16 }}
+              className="w-full px-12 pb-4"
+            >
+              <div className="w-full bg-slate-950/80 border border-slate-800 rounded-2xl px-4 py-3 backdrop-blur-md">
+                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">
+                  {t.godBans || 'GOD BANS'} · {t.game || 'GAME'} {currentGameNumber}
+                </div>
+                <div className="flex items-center gap-2 overflow-x-auto">
+                  {gameGodBans.map((ban, idx) => {
+                    const bannedGod = getGod(ban.id);
+                    const teamLabel = ban.player === 'A'
+                      ? ((lobby.teamAName || lobby.captain1Name) || t.teamA || 'TEAM A')
+                      : ((lobby.teamBName || lobby.captain2Name) || t.teamB || 'TEAM B');
+                    return (
+                      <div key={`${ban.id}-${idx}`} className="flex items-center gap-2 bg-slate-900/70 border border-slate-800 rounded-xl px-2 py-1.5 shrink-0">
+                        <div className="w-8 h-8 rounded-lg overflow-hidden border border-red-500/40 bg-slate-900">
+                          {bannedGod?.image ? (
+                            <img src={bannedGod.image} alt={bannedGod.name} className="w-full h-full object-cover grayscale" referrerPolicy="no-referrer" />
+                          ) : null}
+                        </div>
+                        <div className="leading-tight">
+                          <div className="text-[9px] font-black uppercase text-red-400">{bannedGod?.name || ban.id}</div>
+                          <div className="text-[8px] font-bold uppercase text-slate-500">{teamLabel}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
 
         {/* BOTTOM: Maps */}

@@ -1,5 +1,9 @@
 import { PickEntry } from '../types';
-import { getDraftTimeline as domainGetDraftTimeline, getMCLTeamOrder as domainGetMCLTeamOrder } from '../domain/draft/rules/turnOrder';
+import {
+  getDraftTimeline as domainGetDraftTimeline,
+  getMCLTeamOrder as domainGetMCLTeamOrder,
+  shouldUseGame2MclOrder as domainShouldUseGame2MclOrder,
+} from '../domain/draft/rules/turnOrder';
 
 export const PLAYER_COLORS = {
   1: '#ef4444', // Team A - P1 (Red)
@@ -22,6 +26,7 @@ export const PLAYER_POSITION_MAP = {
 
 export const getDraftTimeline = domainGetDraftTimeline;
 export const getMCLTeamOrder = domainGetMCLTeamOrder;
+export const shouldUseGame2MclOrder = domainShouldUseGame2MclOrder;
 
 export const getMCLPicks = (gameNumber: number): PickEntry[] => {
   const timeline = getDraftTimeline(gameNumber);

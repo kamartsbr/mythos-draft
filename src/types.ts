@@ -44,6 +44,8 @@ export type TeamSize = 1 | 2 | 3;
 export type SeriesType = 'BO1' | 'BO3' | 'BO5' | 'BO7' | 'BO9' | 'CUSTOM' | '3G';
 
 export type PickType = 'alternated' | 'blind';
+export type GodBanScope = 'PER_MAP' | 'SERIES';
+export type MCLPlayoffsPhase = 'QUARTERFINALS' | 'SEMIFINALS' | 'FINALS' | 'GRAND_FINALS';
 
 export type LobbyConfig = {
   teamSize: TeamSize;
@@ -81,6 +83,8 @@ export type LobbyConfig = {
   hasMap3RandomRoll?: boolean;
   /** Se true, introduz 1 Ban de Deus por time (Host + Guest) antes dos god picks em CADA mapa */
   hasPerMapBans?: boolean;
+  /** MCL Tiebreaker: controls whether configured god bans reset every map or stay banned for the full series. */
+  godBanScope?: GodBanScope;
   /** Se true, a partida foi criada oficialmente pela tabela e será exibida no painel principal */
   isOfficialForjaMatch?: boolean;
   /** Se true, a partida é um draft customizado e não deve ser exibida no hub do Forja */
@@ -96,6 +100,8 @@ export type LobbyConfig = {
   externalDraftLink?: string;
   /** MCL Playoffs: mapa placeholder do último jogo (G5 em MD5, G7 em MD7). Injetado em seriesMaps[N-1] ao criar o lobby. */
   playoffsLastMap?: string;
+  /** MCL Playoffs: bracket phase that determines series length and the predetermined final map. */
+  mclPlayoffsPhase?: MCLPlayoffsPhase;
 };
 
 export type PickEntry = {

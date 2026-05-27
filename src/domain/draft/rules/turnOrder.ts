@@ -1,9 +1,21 @@
+import { DraftTurn } from '../../../types';
+
 /**
  * Backward-compat: get strictly chronological pick order for the team.
  * Legacy timeline was [1, 2, 3, 4, 5, 6] for G1, and [3, 4, 1, 2, 6, 5] for G2.
  */
 export function getDraftTimeline(gameNumber: number): number[] {
   return gameNumber % 2 !== 0 ? [1, 2, 3, 4, 5, 6] : [3, 4, 1, 2, 6, 5];
+}
+
+/**
+ * Resolve whether MCL-style team ordering should use the alternate G2 layout.
+ * We derive this from the first GOD PICK turn, which reflects the actual draft starter.
+ */
+export function shouldUseGame2MclOrder(turnOrder?: DraftTurn[] | null): boolean {
+  const firstGodPick = turnOrder?.find(turn => turn.target === 'GOD' && turn.action === 'PICK');
+  const firstRelevantTurn = firstGodPick ?? turnOrder?.[0];
+  return firstRelevantTurn?.player === 'B';
 }
 
 /**

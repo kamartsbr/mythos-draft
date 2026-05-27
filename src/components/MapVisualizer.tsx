@@ -6,6 +6,7 @@ import { MAPS, MAJOR_GODS } from '../constants';
 import { cn } from '../lib/utils';
 import { resolveDraftPick, resolveGameResultPicks } from '../domain/draft/visuals/resolveDraftPick';
 import { MCL_FORMAT } from '../domain/draft/formats/mcl.format';
+import { shouldUseGame2MclOrder } from '../data/draft';
 
 interface MapVisualizerProps {
   lobby: Lobby;
@@ -32,6 +33,7 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ lobby, isVisible, 
   }
 
   const picks = Array.isArray(lobby.picks) ? lobby.picks : [];
+  const useGame2Order = shouldUseGame2MclOrder(lobby.turnOrder);
   
   let resolvedPicks: any[] = [];
   if (game) {
@@ -39,28 +41,30 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ lobby, isVisible, 
     const { teamA, teamB } = resolveGameResultPicks(game, MCL_FORMAT, gameNumber);
     resolvedPicks = [...teamA, ...teamB];
   } else {
-    resolvedPicks = picks.map(pick => resolveDraftPick({ pick, format: MCL_FORMAT, mapId, gameNumber: lobby.currentGame }));
+    resolvedPicks = picks.map(pick => resolveDraftPick({ pick, format: MCL_FORMAT, mapId, gameNumber: lobby.currentGame, useGame2Order }));
   }
   
   return (
     <div className="flex flex-col items-center gap-6 w-full">
       <div 
         ref={mapRef}
-        className="relative w-full aspect-square bg-slate-950 rounded-3xl border-4 border-slate-900 overflow-hidden shadow-2xl group"
+        className="relative w-full aspect-square bg-slate-950 rounded-3xl border-4 border-slate-900 overflow-visible shadow-2xl group"
       >
         {/* Map Background */}
-        <img 
-          src={selectedMap.image} 
-          alt={selectedMap.name}
-          className="w-full h-full object-contain opacity-80 group-hover:opacity-100 transition-opacity duration-700"
-          referrerPolicy="no-referrer"
-          onError={(e) => {
-            e.currentTarget.src = 'https://picsum.photos/seed/mythos/800/450';
-          }}
-        />
-        
-        {/* Grid Overlay for flavor */}
-        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,transparent_0%,rgba(2,6,23,0.4)_100%)]" />
+        <div className="absolute inset-0 rounded-[1.25rem] overflow-hidden">
+          <img 
+            src={selectedMap.image} 
+            alt={selectedMap.name}
+            className="w-full h-full object-contain opacity-80 group-hover:opacity-100 transition-opacity duration-700"
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              e.currentTarget.src = 'https://picsum.photos/seed/mythos/800/450';
+            }}
+          />
+          
+          {/* Grid Overlay for flavor */}
+          <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,transparent_0%,rgba(2,6,23,0.4)_100%)]" />
+        </div>
         
         {/* Player Positions */}
         {resolvedPicks.map((resolved) => {
@@ -95,9 +99,9 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ lobby, isVisible, 
               
               const isMyTeam = (isCaptain1 && team === 'A') || (isCaptain2 && team === 'B');
               if (showGod || isMyTeam) {
-                playerName = playerName || `P${resolved.playerId}`;
+                playerName = playerName || (t?.selecting || 'Selecting...');
               } else {
-                playerName = `P${resolved.playerId}`;
+                playerName = t?.selecting || 'Selecting...';
               }
             }
 
@@ -232,7 +236,7 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ lobby, isVisible, 
                   )}
                     style={{ color: isSelected ? '#f59e0b' : playerColor }}
                   >
-                    {showGod ? god?.name : `P${resolved.playerId}`}
+                    {showGod ? god?.name : (t?.selecting || 'Selecting...')}
                   </span>
                 </div>
               </div>

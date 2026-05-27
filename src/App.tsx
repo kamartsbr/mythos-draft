@@ -12,8 +12,8 @@ import { StreamerHUD } from './components/Draft/StreamerHUD';
 import { ConfirmModal } from './components/UI/ConfirmModal';
 import { BugReportModal } from './components/UI/BugReportModal';
 import { PatchNotesModal } from './components/UI/PatchNotesModal';
-import { TRANSLATIONS, PLAYER_COLORS, MCL_ROUND_MAPS, getMCLPicks } from './constants';
-import { Lobby, PickEntry, LobbySummary } from './types';
+import { TRANSLATIONS, PLAYER_COLORS, MCL_ROUND_MAPS, MCL_PLAYOFFS_PHASES, getMCLPicks } from './constants';
+import { DraftTurn, Lobby, PickEntry, LobbySummary } from './types';
 import { lobbyService, PUBLIC_LOBBIES_PAGE_SIZE } from './services/lobbyService';
 import { cn } from './lib/utils';
 
@@ -32,6 +32,67 @@ function ForjaLoader() {
       </div>
     </div>
   );
+}
+
+type E2EPickSnapshot = Pick<PickEntry, 'playerId' | 'playerName' | 'godId' | 'team' | 'position'>;
+
+type E2EGameSnapshot = {
+  gameNumber: number;
+  mapId: string | null;
+  winner: 'A' | 'B';
+};
+
+type E2ETurnSnapshot = Pick<DraftTurn, 'player' | 'action' | 'target' | 'modifier' | 'execution'>;
+
+type E2EStateSnapshot = {
+  lobbyId: string | null;
+  guestId: string | null;
+  isAuthReady: boolean;
+  isCaptain1: boolean;
+  isCaptain2: boolean;
+  isAdmin: boolean;
+  vibeMode: string | null;
+  href: string;
+  lobby: {
+    id: string;
+    status: Lobby['status'];
+    phase: Lobby['phase'];
+    preset: string | null;
+    isExclusive: boolean;
+    teamSize: number;
+    currentGame: number;
+    turn: number;
+    currentTurn: E2ETurnSnapshot | null;
+    readyA: boolean;
+    readyB: boolean;
+    readyANext: boolean;
+    readyBNext: boolean;
+    readyAReport: boolean;
+    readyBReport: boolean;
+    scoreA: number;
+    scoreB: number;
+    selectedMap: string | null;
+    seriesMaps: string[];
+    mapBans: string[];
+    bans: string[];
+    picks: E2EPickSnapshot[];
+    replayLogLength: number;
+    history: E2EGameSnapshot[];
+  } | null;
+};
+
+type E2ECleanupResult = {
+  ok: boolean;
+  error?: string;
+};
+
+declare global {
+  interface Window {
+    __MYTHOS_E2E__?: {
+      getState: () => E2EStateSnapshot;
+      cleanupLobby: (id?: string) => Promise<E2ECleanupResult>;
+    };
+  }
 }
 
 export default function App() {
@@ -150,6 +211,86 @@ function AppContent() {
     myTeam
   } = useDraft(lobby, isCaptain1, isCaptain2, guestId || '', lang);
 
+  useEffect(() => {
+    if (import.meta.env.VITE_E2E !== 'true') return;
+
+    window.__MYTHOS_E2E__ = {
+      getState: () => {
+        const currentTurn = lobby?.turnOrder?.[lobby.turn] ?? null;
+        return {
+          lobbyId,
+          guestId,
+          isAuthReady,
+          isCaptain1,
+          isCaptain2,
+          isAdmin,
+          vibeMode: import.meta.env.VITE_VIBE_MODE ?? null,
+          href: window.location.href,
+          lobby: lobby ? {
+            id: lobby.id,
+            status: lobby.status,
+            phase: lobby.phase,
+            preset: lobby.config.preset ?? null,
+            isExclusive: lobby.config.isExclusive,
+            teamSize: lobby.config.teamSize,
+            currentGame: lobby.currentGame,
+            turn: lobby.turn,
+            currentTurn: currentTurn ? {
+              player: currentTurn.player,
+              action: currentTurn.action,
+              target: currentTurn.target,
+              modifier: currentTurn.modifier,
+              execution: currentTurn.execution,
+            } : null,
+            readyA: lobby.readyA,
+            readyB: lobby.readyB,
+            readyANext: lobby.readyA_nextGame ?? false,
+            readyBNext: lobby.readyB_nextGame ?? false,
+            readyAReport: lobby.readyA_report ?? false,
+            readyBReport: lobby.readyB_report ?? false,
+            scoreA: lobby.scoreA,
+            scoreB: lobby.scoreB,
+            selectedMap: lobby.selectedMap,
+            seriesMaps: [...lobby.seriesMaps],
+            mapBans: [...lobby.mapBans],
+            bans: [...lobby.bans],
+            picks: lobby.picks.map((pick) => ({
+              playerId: pick.playerId,
+              playerName: pick.playerName,
+              godId: pick.godId,
+              team: pick.team,
+              position: pick.position,
+            })),
+            replayLogLength: lobby.replayLog.length,
+            history: lobby.history.map((game) => ({
+              gameNumber: game.gameNumber,
+              mapId: game.mapId ?? null,
+              winner: game.winner,
+            })),
+          } : null,
+        };
+      },
+      cleanupLobby: async (id?: string) => {
+        const targetId = id ?? lobby?.id ?? lobbyId;
+        if (!targetId) return { ok: false, error: 'No lobby id available for cleanup.' };
+
+        try {
+          await lobbyService.deleteLobby(targetId);
+          return { ok: true };
+        } catch (error) {
+          return {
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+      },
+    };
+
+    return () => {
+      delete window.__MYTHOS_E2E__;
+    };
+  }, [guestId, isAdmin, isAuthReady, isCaptain1, isCaptain2, lobby, lobbyId]);
+
   const {
     config,
     setConfig,
@@ -187,6 +328,7 @@ function AppContent() {
   const [isPermanent, setIsPermanent] = useState(false);
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState('');
   const [copySuccess, setCopySuccess] = useState(false);
+  const [urlCopySuccess, setUrlCopySuccess] = useState(false);
 
   const [paginatedLobbies, setPaginatedLobbies] = useState<LobbySummary[]>([]);
   const [hasMore, setHasMore] = useState(true);
@@ -285,7 +427,7 @@ function AppContent() {
 
     const initialSeriesMaps: string[] = [];
 
-    if (config.preset === 'MCL' || config.preset === 'MCL_PLAYOFFS') {
+    if (config.preset === 'MCL' || config.preset === 'MCL_PLAYOFFS' || config.preset === 'MCL_TIEBREAKER') {
       const mclPicks = getMCLPicks(1);
       picks.push(...mclPicks);
     } else {
@@ -355,7 +497,8 @@ function AppContent() {
       }
     } else if (config.preset === 'MCL_PLAYOFFS') {
       const totalGames = config.seriesType === 'BO7' ? 7 : 5;
-      const lastMapId = config.playoffsLastMap || '';
+      const configuredPlayoffsPhase = MCL_PLAYOFFS_PHASES.find(phase => phase.id === config.mclPlayoffsPhase);
+      const lastMapId = config.playoffsLastMap || configuredPlayoffsPhase?.finalMap || '';
 
       // Preencher todos os slots como vazio, exceto o último (placeholder)
       for (let i = 0; i < totalGames; i++) {
@@ -364,6 +507,7 @@ function AppContent() {
     }
 
     const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
+    const isE2ERun = import.meta.env.VITE_E2E === 'true';
     const newLobby: Lobby = {
       id,
       status: 'waiting',
@@ -400,7 +544,7 @@ function AppContent() {
       hiddenActions: [],
       spectators: [],
       adminId: guestId,
-      isHidden: false,
+      isHidden: isE2ERun,
       isPermanent: isAdmin ? isPermanent : false,
       discordWebhookUrl: isAdmin ? discordWebhookUrl : null,
     };
@@ -450,9 +594,14 @@ function AppContent() {
 
   const copyUrl = () => {
     const url = getShareableUrl();
-    navigator.clipboard.writeText(url);
-    setError(t.urlCopied);
-    setTimeout(() => setError(null), 3000);
+    navigator.clipboard.writeText(url)
+      .then(() => {
+        setUrlCopySuccess(true);
+        setTimeout(() => setUrlCopySuccess(false), 3000);
+      })
+      .catch((err) => {
+        console.error('Failed to copy public URL:', err);
+      });
   };
 
   return (
@@ -847,13 +996,22 @@ function AppContent() {
                   cancelText={t.cancel}
                 />
 
-                {(error || draftError) && (
+                {((error && error !== t.urlCopied) || draftError) && (
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     className="mt-8 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center"
                   >
-                    {error || draftError}
+                    {error && error !== t.urlCopied ? error : draftError}
+                  </motion.div>
+                )}
+                {urlCopySuccess && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="fixed top-24 right-6 z-[120] px-4 py-3 rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 text-sm font-bold shadow-xl"
+                  >
+                    {t.urlCopied}
                   </motion.div>
                 )}
 
@@ -896,7 +1054,7 @@ function AppContent() {
                 </footer>
               </div>
             </div>
-          ) : (lobbyId && error) ? (
+          ) : (lobbyId && error && error !== t.urlCopied) ? (
             <div className="flex-1 flex flex-col items-center justify-center p-4 text-center max-w-md mx-auto">
               <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mb-4 border border-red-500/20">
                 <AlertTriangle className="w-8 h-8 text-red-500" />

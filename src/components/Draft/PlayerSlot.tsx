@@ -43,8 +43,10 @@ export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, ho
   const isHovered = Boolean(previewGod);
 
   const getPlayerLabel = () => {
-    if (preset === 'MCL' || preset === 'FORJA') {
-      return `${t.player || 'Player'} ${(index ?? 0) + 1}`;
+    if (preset === 'MCL' || preset === 'FORJA' || preset === 'MCL_PLAYOFFS' || preset === 'MCL_TIEBREAKER') {
+      return pick.playerName?.trim()
+        ? pick.playerName
+        : (isCurrentTurn ? (t.picking || 'Picking...') : (t.selecting || 'Selecting...'));
     }
     return pick.position === 'corner' ? t.corner : t.middle;
   };
@@ -52,7 +54,8 @@ export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, ho
   const showColor = !isHidden && (god || (preset !== 'MCL' && preset !== 'FORJA'));
   
   const displayPlayerName = pick.godId || isCurrentTurn ? pick.playerName : '';
-  const fallbackLabel = (preset === 'MCL' || preset === 'FORJA') ? (t.selecting || 'Selecionando...') : `Player ${pick.playerId}`;
+  const isMclStylePreset = preset === 'MCL' || preset === 'FORJA' || preset === 'MCL_PLAYOFFS' || preset === 'MCL_TIEBREAKER';
+  const fallbackLabel = isMclStylePreset ? (t.selecting || 'Selecting...') : `Player ${pick.playerId}`;
   
   const displayName = isHidden 
     ? (pick.team === 'A' ? t.teamA : t.teamB) 

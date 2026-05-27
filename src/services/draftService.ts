@@ -124,7 +124,11 @@ export const draftService = {
     options?: { isRandom?: boolean }
   ): { success: boolean; error?: string; updates?: Partial<Lobby> } {
     try {
-      const actingTeam = isCaptain1 ? 'A' : 'B';
+      const currentTurn = freshLobby.turnOrder?.[freshLobby.turn];
+      const actingTeam =
+        currentTurn?.player === 'A' ? 'A' :
+        currentTurn?.player === 'B' ? 'B' :
+        isCaptain1 ? 'A' : 'B';
       const updatedLobby = processTurnAction(
         freshLobby,
         actionId,

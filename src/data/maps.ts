@@ -29,6 +29,42 @@ const KERLAUGAR_POSITIONS: MapPosition[] = [
   { playerId: 6, x: 20, y: 80 }, // Cyan (faces Orange)
 ];
 
+const AUTUMN_EXCHANGE_POSITIONS: MapPosition[] = [
+  { playerId: 1, x: 62, y: 18 },
+  { playerId: 5, x: 17, y: 50 },
+  { playerId: 4, x: 31, y: 80 },
+  { playerId: 2, x: 69, y: 80 },
+  { playerId: 6, x: 83, y: 50 },
+  { playerId: 3, x: 38, y: 18 },
+];
+
+const AZTLAN_OASIS_POSITIONS: MapPosition[] = [
+  { playerId: 1, x: 68, y: 79 },
+  { playerId: 5, x: 83, y: 51 },
+  { playerId: 4, x: 62, y: 18 },
+  { playerId: 2, x: 32, y: 79 },
+  { playerId: 6, x: 17, y: 51 },
+  { playerId: 3, x: 38, y: 18 },
+];
+
+const DIVIDED_TIMBERLANDS_POSITIONS: MapPosition[] = [
+  { playerId: 1, x: 18, y: 58 },
+  { playerId: 5, x: 32, y: 35 },
+  { playerId: 4, x: 44, y: 18 },
+  { playerId: 2, x: 82, y: 58 },
+  { playerId: 6, x: 68, y: 35 },
+  { playerId: 3, x: 56, y: 18 },
+];
+
+const HAYWIRE_POSITIONS: MapPosition[] = [
+  { playerId: 1, x: 49, y: 44 },
+  { playerId: 5, x: 34, y: 58 },
+  { playerId: 4, x: 63, y: 67 },
+  { playerId: 2, x: 50, y: 56 },
+  { playerId: 6, x: 66, y: 42 },
+  { playerId: 3, x: 36, y: 33 },
+];
+
 export const MAPS: MapInfo[] = [
   { id: 'alfheim', name: 'Alfheim', image: 'https://static.wikia.nocookie.net/ageofempires/images/c/c4/AoMR_Alfheim_map_icon.png/revision/latest?cb=20240920074941', isRanked: true, positions: DEFAULT_POSITIONS },
   { id: 'anatolia', name: 'Anatolia', image: 'https://static.wikia.nocookie.net/ageofempires/images/1/15/AoMR_Anatolia_map_icon.png/revision/latest?cb=20240920074942', isRanked: true, positions: DEFAULT_POSITIONS },
@@ -59,7 +95,10 @@ export const MAPS: MapInfo[] = [
   { id: 'valley_of_kings', name: 'Valley of Kings', image: 'https://static.wikia.nocookie.net/ageofempires/images/0/01/AoMR_Valley_of_Kings_map_icon.png/revision/latest?cb=20240920075341', isRanked: true, positions: DEFAULT_POSITIONS },
   { id: 'watering_hole', name: 'Watering Hole', image: 'https://static.wikia.nocookie.net/ageofempires/images/0/01/AoMR_Watering_Hole_map_icon.png/revision/latest?cb=20240920075345', isRanked: true, positions: DEFAULT_POSITIONS },
   { id: 'yellow_river', name: 'Yellow River', image: 'https://static.wikia.nocookie.net/ageofempires/images/5/58/AoMR_Yellow_River.png/revision/latest?cb=20250303105325', isRanked: true, positions: DEFAULT_POSITIONS },
-  { id: 'aztlan_oasis', name: 'Aztlan Oasis', image: '/Aztlan_Oasis.webp', isRanked: true, positions: DEFAULT_POSITIONS },
+  { id: 'autumn_exchange', name: 'Autumn Exchange', image: '/maps/mcl/autumn-exchange.png', isRanked: true, positions: AUTUMN_EXCHANGE_POSITIONS },
+  { id: 'aztlan_oasis', name: 'Aztlan Oasis', image: '/maps/mcl/aztlan-oasis.png', isRanked: true, positions: AZTLAN_OASIS_POSITIONS },
+  { id: 'divided_timberlands', name: 'Divided Timberlands', image: '/maps/mcl/divided-timberlands.png', isRanked: true, positions: DIVIDED_TIMBERLANDS_POSITIONS },
+  { id: 'haywire', name: 'Haywire', image: '/maps/mcl/haywire.png', isRanked: true, positions: HAYWIRE_POSITIONS },
   { id: 'obsidian_ridge', name: 'Obsidian Ridge', image: '/Obsidian_Ridge.webp', isRanked: true, positions: DEFAULT_POSITIONS },
   { id: 'cloud_forest', name: 'Cloud Forest', image: '/Cloud_Forest.webp', isRanked: true, positions: DEFAULT_POSITIONS },
   { id: 'blood_river_crossing', name: 'Blood River Crossing', image: '/Blood_River_Crossing.webp', isRanked: true, positions: DEFAULT_POSITIONS },
@@ -88,6 +127,28 @@ export const MCL_MAP_POOL = [
   'yellow_river', 'team_migration', 'mediterranean', 'silk_road', 'gold_rush', 
   'kerlaugar', 'watering_hole'
 ];
+
+export const MCL_TIEBREAKER_AND_PLAYOFFS_EXTRA_MAPS = [
+  'autumn_exchange',
+  'aztlan_oasis',
+  'divided_timberlands',
+  'haywire',
+];
+
+export const MCL_TIEBREAKER_MAP_POOL = [
+  ...new Set([...getMCLMapPool(7), ...MCL_TIEBREAKER_AND_PLAYOFFS_EXTRA_MAPS]),
+];
+
+export function getMCLPlayoffsMapPool() {
+  return MCL_TIEBREAKER_MAP_POOL;
+}
+
+export const MCL_PLAYOFFS_PHASES = [
+  { id: 'QUARTERFINALS', label: 'Quarterfinals', seriesType: 'BO5', gameCount: 5, finalMap: 'aztlan_oasis' },
+  { id: 'SEMIFINALS', label: 'Semifinals', seriesType: 'BO5', gameCount: 5, finalMap: 'haywire' },
+  { id: 'FINALS', label: 'Finals', seriesType: 'BO5', gameCount: 5, finalMap: 'autumn_exchange' },
+  { id: 'GRAND_FINALS', label: 'Grand Finals', seriesType: 'BO7', gameCount: 7, finalMap: 'divided_timberlands' },
+] as const;
 
 export function getMCLMapPool(round: number) {
   if (round >= 5) {

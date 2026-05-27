@@ -11,8 +11,8 @@ export function resolveLaneFromX(x: number): 'left' | 'center' | 'right' {
 export function laneToOrder(lane: 'left' | 'center' | 'right'): number {
   switch (lane) {
     case 'left': return 1;
-    case 'center': return 2;
-    case 'right': return 3;
+    case 'right': return 2;
+    case 'center': return 3;
     default: return 1;
   }
 }
@@ -25,17 +25,22 @@ export function resolveDraftPick({
   pickIndex: providedPickIndex,
   format,
   mapId,
-  gameNumber
+  gameNumber,
+  useGame2Order
 }: {
   pick: PickEntry;
   pickIndex?: number;
   format: DraftFormat;
   mapId: string | null;
   gameNumber: number;
+  useGame2Order?: boolean;
 }): ResolvedDraftPick {
   const pickIndex = providedPickIndex ?? playerIdToPickIndex(pick.playerId, gameNumber);
   
-  const gameLayout = format.games[gameNumber] || format.games['default'];
+  const resolvedGameNumber = useGame2Order === undefined
+    ? gameNumber
+    : (useGame2Order ? 2 : 1);
+  const gameLayout = format.games[resolvedGameNumber] || format.games[gameNumber] || format.games['default'];
   const layout = (mapId && gameLayout.mapLayouts && gameLayout.mapLayouts[mapId]) 
     ? gameLayout.mapLayouts[mapId] 
     : gameLayout.defaultLayout;
@@ -82,7 +87,7 @@ export function resolveDraftPick({
     lane,
     colorName: slot.colorName,
     colorHex: slot.colorHex,
-    visualOrder: laneToOrder(lane),
+    visualOrder: pickIndex + 1,
     mapX,
     mapY,
     godId: pick.godId,
@@ -98,9 +103,10 @@ export function resolveAllPicks(
   picks: PickEntry[],
   format: DraftFormat,
   mapId: string | null,
-  gameNumber: number
+  gameNumber: number,
+  useGame2Order?: boolean
 ): ResolvedDraftPick[] {
-  return picks.map(pick => resolveDraftPick({ pick, format, mapId, gameNumber }));
+  return picks.map(pick => resolveDraftPick({ pick, format, mapId, gameNumber, useGame2Order }));
 }
 
 /**

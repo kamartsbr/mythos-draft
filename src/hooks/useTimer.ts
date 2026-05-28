@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Lobby } from '../types';
+import { Lobby, DraftActionOptions } from '../types';
 import { MAPS, MAJOR_GODS } from '../constants';
 import { getServerTime } from '../lib/serverTime';
 
@@ -20,8 +20,8 @@ export function useTimer(
   lobby: Lobby | null, 
   isCaptain1: boolean, 
   isCaptain2: boolean, 
-  handleAction: (id: string, playerId?: number, playerName?: string, options?: { isRandom?: boolean }) => void,
-  handlePickerAction?: (id: string, playerId?: number, playerName?: string, options?: { isRandom?: boolean }) => void
+  handleAction: (id: string, playerId?: number, playerName?: string, options?: DraftActionOptions) => void,
+  handlePickerAction?: (id: string, playerId?: number, playerName?: string, options?: DraftActionOptions) => void
 ) {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const isProcessing = useRef(false);
@@ -59,7 +59,7 @@ export function useTimer(
 
   const tick = useCallback(async () => {
     const currentLobby = lobbyRef.current;
-    if (!currentLobby || (!currentLobby.timerStart && !currentLobby.turnEndsAt) || currentLobby.status !== 'drafting' || currentLobby.phase === 'finished' || currentLobby.phase === 'post_draft') {
+    if (!currentLobby || (!currentLobby.timerStart && !currentLobby.turnEndsAt) || currentLobby.status !== 'drafting' || currentLobby.phase === 'finished' || currentLobby.phase === 'post_draft' || currentLobby.phase === 'ready') {
       setTimeLeft(null);
       isProcessing.current = false;
       lastTriggeredTurn.current = null;
@@ -137,7 +137,9 @@ export function useTimer(
       return;
     }
     
-    if (elapsed >= duration) {
+    const shouldTimeoutNow = remaining === 0 || elapsed >= duration;
+
+    if (shouldTimeoutNow) {
       isProcessing.current = true;
       lastTriggerAt.current = nowMs;
       
@@ -155,7 +157,7 @@ export function useTimer(
         const opponentVote = isCaptain1 ? currentLobby.pickerVoteB : currentLobby.pickerVoteA;
         
         // If I already picked AND the opponent already picked, or it's not even my turn to help...
-        if (myVote && (opponentVote || elapsed < duration + 2)) {
+        if (myVote && opponentVote) {
           isProcessing.current = false;
           return;
         }
@@ -195,12 +197,16 @@ export function useTimer(
         return;
       }
 
+      if (currentTurn.player === 'ADMIN') {
+        isProcessing.current = false;
+        return;
+      }
+
       const isC1Turn = currentTurn.player === 'A' || currentTurn.player === 'BOTH';
       const isC2Turn = currentTurn.player === 'B' || currentTurn.player === 'BOTH';
-      
       const isMyTurn = (isC1Turn && isCaptain1) || (isC2Turn && isCaptain2);
       const isOpponentTurn = (isC1Turn && isCaptain2) || (isC2Turn && isCaptain1);
-      
+
       const shouldTrigger = isMyTurn || (isOpponentTurn && elapsed >= duration + 2);
       if (!shouldTrigger) {
         isProcessing.current = false;
@@ -211,7 +217,7 @@ export function useTimer(
 
       if (currentTurn.action === 'REVEAL') {
         try {
-          await handleAction('REVEAL');
+          await handleAction('REVEAL', undefined, undefined, { isTimeoutAutoResolve: true });
         } finally {
           isProcessing.current = false;
         }
@@ -263,24 +269,25 @@ export function useTimer(
 
       if (actionId) {
         try {
-          if (currentLobby.config.preset === 'MCL' && currentTurn.target === 'GOD' && currentTurn.action === 'PICK') {
+          const isPresetWithRoster = currentLobby.config.preset === 'MCL' || currentLobby.config.preset === 'FORJA' || currentLobby.config.preset === 'MCL_PLAYOFFS' || currentLobby.config.preset === 'MCL_TIEBREAKER';
+          if (isPresetWithRoster && currentTurn.target === 'GOD' && currentTurn.action === 'PICK') {
             const team = currentTurn.player === 'A' ? 'A' : (currentTurn.player === 'B' ? 'B' : (isCaptain1 ? 'A' : 'B'));
             const teamPlayers = team === 'A' ? currentLobby.teamAPlayers : currentLobby.teamBPlayers;
             const emptyPick = currentLobby.picks.find(p => p.team === team && p.godId === null);
             
             if (emptyPick) {
-              const assignedPlayerNames = currentLobby.picks.filter(p => p.team === team && p.godId !== null).map(p => p.playerName);
-              const availablePlayers = teamPlayers?.filter(tp => !assignedPlayerNames.includes(tp.name)) || [];
+              const assignedPlayerNames = currentLobby.picks.filter(p => p.team === team && p.godId !== null).map(p => p.playerName).filter(Boolean);
+              const availablePlayers = teamPlayers?.filter(tp => tp.name && !assignedPlayerNames.includes(tp.name)) || [];
               const randomPlayer = availablePlayers.length > 0 
                 ? availablePlayers[Math.floor(Math.random() * availablePlayers.length)] 
                 : { name: `Player ${emptyPick.playerId}` };
                 
-              await handleAction(actionId, emptyPick.playerId, randomPlayer.name, { isRandom: true });
+              await handleAction(actionId, emptyPick.playerId, randomPlayer.name, { isRandom: true, isTimeoutAutoResolve: true });
             } else {
-              await handleAction(actionId, undefined, undefined, { isRandom: true });
+              await handleAction(actionId, undefined, undefined, { isRandom: true, isTimeoutAutoResolve: true });
             }
           } else {
-            await handleAction(actionId, undefined, undefined, { isRandom: true });
+            await handleAction(actionId, undefined, undefined, { isRandom: true, isTimeoutAutoResolve: true });
           }
         } finally {
           isProcessing.current = false;

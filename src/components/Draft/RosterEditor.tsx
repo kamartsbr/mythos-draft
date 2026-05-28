@@ -5,6 +5,7 @@ import { Lobby, PickEntry, Substitution } from '../../types';
 import { cn } from '../../lib/utils';
 
 import { getMCLTeamOrder } from '../../data/draft';
+import { shouldUseGame2MclOrder } from '../../data/draft';
 
 interface RosterEditorProps {
   lobby: Lobby;
@@ -22,7 +23,7 @@ export function RosterEditor({ lobby, team, onClose, onSave, t }: RosterEditorPr
     // Sort picks to ensure Player 1, 2, 3 order
     return picks.filter(p => p.team === team).sort((a, b) => {
       if (isMCL) {
-        const useGame2Order = lobby.currentGame === 2 || (lobby.currentGame === 3 && lobby.lastWinner === 'A');
+        const useGame2Order = shouldUseGame2MclOrder(lobby.turnOrder);
         const order = getMCLTeamOrder(team, lobby.selectedMap || null, useGame2Order);
         return order.indexOf(a.playerId) - order.indexOf(b.playerId);
       }

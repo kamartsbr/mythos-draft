@@ -22,8 +22,10 @@ import {
 } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { Lobby, LobbyConfig, PickEntry, ChatMessage, LobbySummary, LobbyIndex, DraftTimestampRead } from '../types';
+import { ForjaLiveMatchSummary, ForjaLiveMatchesSummaryDoc } from '../features/forja/types';
+import { updateCachedLiveMatchesSummary } from '../features/forja/services/forjaService';
 import { PLAYER_COLORS, MCL_ROUND_MAPS } from '../constants';
-import { getMCLPicks, getMCLTeamOrder } from '../data/draft';
+import { getMCLPicks, getMCLTeamOrder, shouldUseGame2MclOrder } from '../data/draft';
 
 
 // --- SHIELDING: MOCK LAYER CONFIG ---
@@ -67,6 +69,69 @@ export function filterPublicSummaries(summaries: LobbySummary[]): LobbySummary[]
   return summaries
     .filter((s) => !!(s.captain1 && s.captain2))
     .slice(0, PUBLIC_LOBBIES_PAGE_SIZE);
+}
+
+export function sortLobbySummaries(summaries: LobbySummary[]): LobbySummary[] {
+  return [...summaries].sort((left, right) => {
+    const leftTs = getMillis(left.lastActivityAt ?? left.createdAt ?? 0);
+    const rightTs = getMillis(right.lastActivityAt ?? right.createdAt ?? 0);
+    return rightTs - leftTs;
+  });
+}
+
+export function upsertLobbySummary(summaries: LobbySummary[], summary: LobbySummary): LobbySummary[] {
+  const next = summaries.filter((item) => item.id !== summary.id);
+  next.push(summary);
+  return filterPublicSummaries(sortLobbySummaries(next));
+}
+
+export function removeLobbySummary(summaries: LobbySummary[], lobbyId: string): LobbySummary[] {
+  return filterPublicSummaries(sortLobbySummaries(summaries.filter((item) => item.id !== lobbyId)));
+}
+
+function isOfficialForjaLobby(lobby: Lobby): boolean {
+  return lobby.config?.preset === 'FORJA' && (lobby.config.isOfficialForjaMatch === true || !!lobby.config.forjaTeamA);
+}
+
+export function lobbyToForjaLiveMatchSummary(lobby: Lobby): ForjaLiveMatchSummary {
+  return {
+    id: lobby.id,
+    name: lobby.config?.name ?? 'Partida',
+    status: lobby.status ?? 'waiting',
+    scoreA: lobby.scoreA ?? 0,
+    scoreB: lobby.scoreB ?? 0,
+    stage: lobby.config?.tournamentStage ?? 'GROUP',
+    scheduledDate: lobby.config?.scheduledDate as ForjaLiveMatchSummary['scheduledDate'],
+    scheduledTime: lobby.config?.scheduledTime,
+    streamerUrl: lobby.config?.streamerUrl,
+    externalLink: lobby.config?.externalDraftLink ?? '',
+    config: {
+      name: lobby.config?.name ?? 'Partida',
+      forjaTeamA: lobby.config?.forjaTeamA,
+      forjaTeamB: lobby.config?.forjaTeamB,
+      forjaGroupId: lobby.config?.forjaGroupId,
+      tournamentStage: lobby.config?.tournamentStage,
+      externalLink: lobby.config?.externalDraftLink ?? '',
+    },
+  };
+}
+
+export function upsertForjaLiveMatchSummary(
+  matches: ForjaLiveMatchSummary[],
+  match: ForjaLiveMatchSummary
+): ForjaLiveMatchSummary[] {
+  const next = matches.filter((item) => item.id !== match.id);
+  next.push(match);
+  return [...next].sort((left, right) => {
+    const leftTs = getMillis(left.scheduledDate ?? 0);
+    const rightTs = getMillis(right.scheduledDate ?? 0);
+    if (leftTs === rightTs) return left.name.localeCompare(right.name);
+    return leftTs - rightTs;
+  });
+}
+
+export function removeForjaLiveMatchSummary(matches: ForjaLiveMatchSummary[], lobbyId: string): ForjaLiveMatchSummary[] {
+  return matches.filter((item) => item.id !== lobbyId);
 }
 
 /**
@@ -306,9 +371,7 @@ export const lobbyService = {
     }
     try {
       await setDoc(doc(db, 'lobbies', id), cleanData(lobby));
-      if (!lobby.config.isPrivate) {
-        await this.refreshLobbyIndex();
-      }
+      await this.syncPublicMetadataForLobby(id, lobby);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `lobbies/${id}`);
     }
@@ -361,6 +424,75 @@ export const lobbyService = {
     }
   },
 
+  async syncPublicMetadataForLobby(id: string, lobby?: Lobby | null): Promise<void> {
+    if (IS_DEV) return;
+
+    const resolvedLobby = lobby ?? await this.getLobby(id);
+    let nextMatches: ForjaLiveMatchSummary[] = [];
+
+    await runTransaction(db, async (transaction) => {
+      const lobbyIndexRef = doc(db, 'metadata', 'lobby_index');
+      const lobbyIndexSnap = await transaction.get(lobbyIndexRef);
+      const lobbyIndexData = lobbyIndexSnap.exists() ? (lobbyIndexSnap.data() as Partial<LobbyIndex>) : {};
+      const currentSummaries = Array.isArray(lobbyIndexData.activeLobbies) ? lobbyIndexData.activeLobbies : [];
+
+      const liveMatchesRef = doc(db, 'forja_meta', 'live_matches_summary');
+      const liveMatchesSnap = await transaction.get(liveMatchesRef);
+      const liveMatchesData = liveMatchesSnap.exists() ? (liveMatchesSnap.data() as Partial<ForjaLiveMatchesSummaryDoc>) : {};
+      const currentMatches = Array.isArray(liveMatchesData.matches) ? liveMatchesData.matches : [];
+
+      const nextSummaries = resolvedLobby && isLobbyEligibleForPublicList(resolvedLobby)
+        ? upsertLobbySummary(currentSummaries, lobbyDocToSummary(id, resolvedLobby))
+        : removeLobbySummary(currentSummaries, id);
+
+      nextMatches = resolvedLobby && isOfficialForjaLobby(resolvedLobby)
+        ? upsertForjaLiveMatchSummary(currentMatches, lobbyToForjaLiveMatchSummary(resolvedLobby))
+        : removeForjaLiveMatchSummary(currentMatches, id);
+
+      transaction.set(lobbyIndexRef, cleanData({
+        activeLobbies: nextSummaries,
+        lastUpdated: now(),
+        initialized: true,
+      }), { merge: true });
+
+      transaction.set(liveMatchesRef, cleanData({
+        matches: nextMatches,
+        updated_at: now(),
+      }), { merge: true });
+    });
+    updateCachedLiveMatchesSummary({ matches: nextMatches });
+  },
+
+  async removeLobbyFromPublicMetadata(id: string): Promise<void> {
+    if (IS_DEV) return;
+    let nextMatches: ForjaLiveMatchSummary[] = [];
+
+    await runTransaction(db, async (transaction) => {
+      const lobbyIndexRef = doc(db, 'metadata', 'lobby_index');
+      const lobbyIndexSnap = await transaction.get(lobbyIndexRef);
+      const lobbyIndexData = lobbyIndexSnap.exists() ? (lobbyIndexSnap.data() as Partial<LobbyIndex>) : {};
+      const currentSummaries = Array.isArray(lobbyIndexData.activeLobbies) ? lobbyIndexData.activeLobbies : [];
+
+      const liveMatchesRef = doc(db, 'forja_meta', 'live_matches_summary');
+      const liveMatchesSnap = await transaction.get(liveMatchesRef);
+      const liveMatchesData = liveMatchesSnap.exists() ? (liveMatchesSnap.data() as Partial<ForjaLiveMatchesSummaryDoc>) : {};
+      const currentMatches = Array.isArray(liveMatchesData.matches) ? liveMatchesData.matches : [];
+
+      transaction.set(lobbyIndexRef, cleanData({
+        activeLobbies: removeLobbySummary(currentSummaries, id),
+        lastUpdated: now(),
+        initialized: true,
+      }), { merge: true });
+
+      nextMatches = removeForjaLiveMatchSummary(currentMatches, id);
+      transaction.set(liveMatchesRef, cleanData({
+        matches: nextMatches,
+        updated_at: now(),
+      }), { merge: true });
+    });
+    updateCachedLiveMatchesSummary({ matches: nextMatches });
+  },
+
   async refreshLobbyIndex(): Promise<void> {
     if (IS_DEV) return;
     try {
@@ -374,34 +506,30 @@ export const lobbyService = {
       );
 
       const snap = await getDocs(q);
-      const summaries = snap.docs
+      const normalizedLobbies = snap.docs.map((snapshot) => normalizeLobbyData({ id: snapshot.id, ...snapshot.data() } as Lobby));
+      const summaries = normalizedLobbies
         .map(d => {
-          const data = d.data() as Lobby;
-          if (!data.config || data.config.isPrivate || data.isHidden === true) return null;
-
-          return {
-            id: d.id,
-            name: data.config.name || `${(typeof data.config.teamSize === 'number' && !isNaN(data.config.teamSize)) ? data.config.teamSize : 2}v${(typeof data.config.teamSize === 'number' && !isNaN(data.config.teamSize)) ? data.config.teamSize : 2} Draft`,
-            teamSize: (typeof data.config.teamSize === 'number' && !isNaN(data.config.teamSize)) ? data.config.teamSize : 2,
-            captain1Name: data.captain1Name || 'Captain 1',
-            captain2Name: data.captain2Name || 'Captain 2',
-            teamAName: data.teamAName || data.captain1Name || 'Team A',
-            teamBName: data.teamBName || data.captain2Name || 'Team B',
-            status: data.status || 'waiting',
-            phase: data.phase || 'waiting',
-            preset: data.config.preset ?? null,
-            lastActivityAt: data.lastActivityAt ?? null,
-            createdAt: data.createdAt ?? null
-          } as LobbySummary;
+          if (!isLobbyEligibleForPublicList(d)) return null;
+          return lobbyDocToSummary(d.id, d);
         })
         .filter((l): l is LobbySummary => l !== null)
-        .slice(0, 20);
+        .slice(0, PUBLIC_LOBBIES_PAGE_SIZE);
+
+      const liveMatches = normalizedLobbies
+        .filter((lobby) => isOfficialForjaLobby(lobby))
+        .map((lobby) => lobbyToForjaLiveMatchSummary(lobby));
 
       await setDoc(doc(db, 'metadata', 'lobby_index'), cleanData({
         activeLobbies: summaries,
         lastUpdated: now(),
         initialized: true
       }), { merge: true });
+
+      await setDoc(doc(db, 'forja_meta', 'live_matches_summary'), cleanData({
+        matches: liveMatches,
+        updated_at: now(),
+      }), { merge: true });
+      updateCachedLiveMatchesSummary({ matches: liveMatches });
 
     } catch (err) {
       console.error("[Lobby Index] Erro ao atualizar ├¡ndice:", err);
@@ -442,7 +570,7 @@ export const lobbyService = {
       const isVisibilityUpdate = updates.isHidden !== undefined;
       
       if (statusChanged || isVisibilityUpdate) {
-        await this.refreshLobbyIndex();
+        await this.syncPublicMetadataForLobby(id);
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
@@ -454,12 +582,35 @@ export const lobbyService = {
     const existing = _hoverDebounceTimers.get(key);
     if (existing) clearTimeout(existing);
 
-    if (IS_DEV) {
-      _hoverDebounceTimers.set(key, setTimeout(() => {
+    const applyHoverUpdate = async () => {
+      if (IS_DEV) {
         const lobby = getLocalLobby(id);
         if (lobby) {
           setLocalLobby(id, { ...lobby, [`hoveredGodId${team}`]: godId } as any);
         }
+        return;
+      }
+
+      await updateDoc(doc(db, 'lobbies', id), cleanData({
+        [`hoveredGodId${team}`]: godId
+      }));
+    };
+
+    if (godId === null) {
+      _hoverDebounceTimers.delete(key);
+      try {
+        await applyHoverUpdate();
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
+      }
+      return;
+    }
+
+    if (IS_DEV) {
+      _hoverDebounceTimers.set(key, setTimeout(() => {
+        applyHoverUpdate().catch((error) => {
+          handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
+        });
         _hoverDebounceTimers.delete(key);
       }, 500));
       return;
@@ -467,9 +618,7 @@ export const lobbyService = {
 
     _hoverDebounceTimers.set(key, setTimeout(async () => {
       try {
-        await updateDoc(doc(db, 'lobbies', id), cleanData({
-          [`hoveredGodId${team}`]: godId
-        }));
+        await applyHoverUpdate();
       } catch (error) {
         handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
       }
@@ -985,7 +1134,7 @@ export const lobbyService = {
 
         transaction.update(docRef, cleanData(updates));
       });
-      this.refreshLobbyIndex();
+      await this.syncPublicMetadataForLobby(id);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
     }
@@ -1005,7 +1154,7 @@ export const lobbyService = {
         phase: 'finished',
         lastActivityAt: now()
       }));
-      this.refreshLobbyIndex();
+      await this.syncPublicMetadataForLobby(id);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
     }
@@ -1014,6 +1163,7 @@ export const lobbyService = {
   async deleteLobby(id: string): Promise<void> {
     try {
       await deleteDoc(doc(db, 'lobbies', id));
+      await this.removeLobbyFromPublicMetadata(id);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `lobbies/${id}`);
     }
@@ -1037,6 +1187,7 @@ export const lobbyService = {
         });
         await batch.commit();
       }
+      await this.refreshLobbyIndex();
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'lobbies');
     }
@@ -1048,6 +1199,8 @@ export const lobbyService = {
         const lobby = getLocalLobby(id);
         if (lobby) {
           onUpdate(lobby);
+        } else {
+          onUpdate(null as any);
         }
       };
 
@@ -1066,6 +1219,8 @@ export const lobbyService = {
       if (docSnap.exists()) {
         const data = normalizeLobbyData(docSnap.data());
         onUpdate(data);
+      } else {
+        onUpdate(null as any);
       }
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, `lobbies/${id}`);
@@ -1206,7 +1361,7 @@ export const lobbyService = {
       }
 
       await updateDoc(docRef, cleanData(updates));
-      if (!data.config.isPrivate) this.refreshLobbyIndex();
+      await this.syncPublicMetadataForLobby(id);
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -1227,7 +1382,7 @@ export const lobbyService = {
         firestoreUpdates[`config.${key}`] = val;
       });
       await updateDoc(doc(db, 'lobbies', id), cleanData(firestoreUpdates));
-      await this.refreshLobbyIndex();
+      await this.syncPublicMetadataForLobby(id);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
     }
@@ -1252,7 +1407,7 @@ export const lobbyService = {
       if (updates.captain2Name) firestoreUpdates.captain2Name = updates.captain2Name;
 
       await updateDoc(doc(db, 'lobbies', id), cleanData(firestoreUpdates));
-      await this.refreshLobbyIndex();
+      await this.syncPublicMetadataForLobby(id);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
     }
@@ -1283,7 +1438,7 @@ export const lobbyService = {
       if (updates.streamerHudSize !== undefined) firestoreUpdates['config.streamerHudSize'] = updates.streamerHudSize;
 
       await updateDoc(doc(db, 'lobbies', id), cleanData(firestoreUpdates));
-      await this.refreshLobbyIndex();
+      await this.syncPublicMetadataForLobby(id);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
     }
@@ -1544,10 +1699,7 @@ export const lobbyService = {
         transaction.update(docRef, cleanData({ ...updates, lastActivityAt: now() }));
       });
 
-      const finalSnap = await getDoc(docRef);
-      if (finalSnap.exists() && !finalSnap.data().config.isPrivate) {
-        await this.refreshLobbyIndex();
-      }
+      await this.syncPublicMetadataForLobby(id);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
     }
@@ -1638,8 +1790,9 @@ export const lobbyService = {
         // 🔥 INITIALIZE PICKS WITH PLAYER NAMES (Anti-Generic Name Bug)
         if (data.config.preset === 'MCL' || data.config.preset === 'FORJA') {
           const initialPicks = getMCLPicks(data.currentGame || 1);
-          const teamAOrder = getMCLTeamOrder('A');
-          const teamBOrder = getMCLTeamOrder('B');
+          const useGame2Order = shouldUseGame2MclOrder(data.turnOrder);
+          const teamAOrder = getMCLTeamOrder('A', null, useGame2Order);
+          const teamBOrder = getMCLTeamOrder('B', null, useGame2Order);
 
           updates.picks = initialPicks.map(p => {
             const teamPlayers = p.team === 'A' ? (updates.teamAPlayers || data.teamAPlayers) : (updates.teamBPlayers || data.teamBPlayers);
@@ -1751,7 +1904,7 @@ export const lobbyService = {
       };
 
       await updateDoc(docRef, cleanData(updates));
-      if (!data.config.isPrivate) await this.refreshLobbyIndex();
+      await this.syncPublicMetadataForLobby(lobbyId);
       return { success: true };
     } catch (error) {
       return { success: false, error: "Failed to join solo" };

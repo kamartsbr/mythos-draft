@@ -15,6 +15,8 @@ interface PlayerSlotProps {
   hoveredGodId?: string | null;
   timeLeft?: number | null;
   timerDuration?: number;
+  visualColor?: string;
+  visualOrder?: number;
 }
 
 /**
@@ -30,37 +32,40 @@ interface PlayerSlotProps {
  * @param hoveredGodId - Optional god id currently hovered (used to preview a god during the current turn)
  * @param timeLeft - Remaining time for the current turn (used to compute progress bar width); may be null
  * @param timerDuration - Total timer duration used to compute progress; if null or <= 0 the bar is not shown
+ * @param visualColor - Resolved visual color
+ * @param visualOrder - Resolved flex layout order
  * @returns The React element representing the player slot UI
  */
-export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, hoveredGodId, timeLeft, timerDuration }: PlayerSlotProps) {
-  const god = MAJOR_GODS.find(g => g.id === pick.godId) || (isCurrentTurn && hoveredGodId ? MAJOR_GODS.find(g => g.id === hoveredGodId) : undefined);
-  const isHovered = !pick.godId && god && isCurrentTurn;
+export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, hoveredGodId, timeLeft, timerDuration, visualColor, visualOrder }: PlayerSlotProps) {
+  const committedGod = pick.godId ? MAJOR_GODS.find(g => g.id === pick.godId) : undefined;
+  const previewGod = !pick.godId && isCurrentTurn && hoveredGodId ? MAJOR_GODS.find(g => g.id === hoveredGodId) : undefined;
+  const god = committedGod || previewGod;
+  const isHovered = Boolean(previewGod);
 
   const getPlayerLabel = () => {
-    if (preset === 'MCL' || preset === 'FORJA') {
-      return `${t.player || 'Player'} ${(index ?? 0) + 1}`;
+    if (preset === 'MCL' || preset === 'FORJA' || preset === 'MCL_PLAYOFFS' || preset === 'MCL_TIEBREAKER') {
+      return pick.playerName?.trim()
+        ? pick.playerName
+        : (isCurrentTurn ? (t.picking || 'Picking...') : (t.selecting || 'Selecting...'));
     }
     return pick.position === 'corner' ? t.corner : t.middle;
   };
 
-  // FIXED: Visual HUD layout requirements handled by CSS order (Visual Swap)
-  // Lado HOST (A): Turno 1 <-> Turno 4
-  // Lado GUEST (B): Turno 2 <-> Turno 3
-  const visualOrder = {
-    4: 1, 5: 2, 1: 3,
-    2: 1, 6: 2, 3: 3
-  }[pick.playerId!] || 1;
-
   const showColor = !isHidden && (god || (preset !== 'MCL' && preset !== 'FORJA'));
+  
+  const displayPlayerName = pick.godId || isCurrentTurn ? pick.playerName : '';
+  const isMclStylePreset = preset === 'MCL' || preset === 'FORJA' || preset === 'MCL_PLAYOFFS' || preset === 'MCL_TIEBREAKER';
+  const fallbackLabel = isMclStylePreset ? (t.selecting || 'Selecting...') : `Player ${pick.playerId}`;
+  
   const displayName = isHidden 
     ? (pick.team === 'A' ? t.teamA : t.teamB) 
-    : (isHovered ? (t.selecting || 'Selecting...') : (pick.playerName || ((preset === 'MCL' || preset === 'FORJA') ? (t.selecting || 'Selecionando...') : `Player ${pick.playerId}`)));
+    : (isHovered ? (t.selecting || 'Selecting...') : (displayPlayerName || fallbackLabel));
 
   return (
     <motion.div 
       initial={{ opacity: 0, x: pick.team === 'A' ? -20 : 20 }}
       animate={{ opacity: 1, x: 0 }}
-      style={{ order: visualOrder }}
+      style={{ order: visualOrder ?? 1 }}
       className={cn(
         "relative group h-24 rounded-2xl overflow-hidden border transition-all duration-500",
         isCurrentTurn 
@@ -89,7 +94,7 @@ export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, ho
         {/* Player Color Indicator */}
         <div 
           className="w-2 h-14 rounded-full shadow-lg transition-colors duration-500"
-          style={{ backgroundColor: showColor ? pick.color : '#1e293b', opacity: isHovered ? 0.5 : 1 }}
+          style={{ backgroundColor: showColor ? (visualColor ?? pick.color) : '#1e293b', opacity: isHovered ? 0.5 : 1 }}
         />
 
         <div className="flex-1 min-w-0">

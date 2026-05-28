@@ -2,6 +2,29 @@ import { describe, it, expect } from 'vitest';
 import { calculateNextTurnOrder, processTurnAction, processReportAction } from '../pureDraftEngine';
 import { LobbyConfig, Lobby } from '../../types';
 
+const createConfig = (overrides: Partial<LobbyConfig>): LobbyConfig => ({
+  name: 'Test Lobby',
+  preset: 'CUSTOM',
+  teamSize: 3,
+  hasBans: false,
+  banCount: 0,
+  isExclusive: false,
+  isPrivate: false,
+  allowedPantheons: ['greek', 'egyptian', 'norse'],
+  allowedMaps: ['oasis', 'tundra', 'marsh'],
+  pickType: 'alternated',
+  timerDuration: 60,
+  mapBanCount: 0,
+  loserPicksNextMap: false,
+  firstMapRandom: false,
+  acePick: false,
+  acePickHidden: false,
+  mapTurnOrder: [],
+  godTurnOrder: [],
+  seriesType: 'BO5',
+  ...overrides,
+});
+
 describe('pureDraftEngine > calculateNextTurnOrder', () => {
   // Scenario A: Preset MCL or FORJA, Game 1
   it('Scenario A: MCL/FORJA Preset, Game 1 should start with Team A and generate standard structure', () => {
@@ -137,6 +160,44 @@ describe('pureDraftEngine > calculateNextTurnOrder', () => {
     // When loserPicksNextMap is true, Game 2+ maps are chosen out-of-band before god draft
     expect(mapOrder).toHaveLength(0);
   });
+
+  it('Scenario D: MCL Playoffs Game 2 should let the previous loser pick map, ban first, and pick first', () => {
+    const config = createConfig({
+      preset: 'MCL_PLAYOFFS',
+      hasPerMapBans: true,
+      seriesType: 'BO5',
+    });
+
+    const afterHostWin = calculateNextTurnOrder(config, 2, 'A');
+    expect(afterHostWin.mapOrder[0].player).toBe('B');
+    expect(afterHostWin.godOrder[0]).toMatchObject({ player: 'B', action: 'BAN' });
+    expect(afterHostWin.godOrder.find(turn => turn.action === 'PICK')?.player).toBe('B');
+
+    const afterGuestWin = calculateNextTurnOrder(config, 2, 'B');
+    expect(afterGuestWin.mapOrder[0].player).toBe('A');
+    expect(afterGuestWin.godOrder[0]).toMatchObject({ player: 'A', action: 'BAN' });
+    expect(afterGuestWin.godOrder.find(turn => turn.action === 'PICK')?.player).toBe('A');
+  });
+
+  it('Scenario E: MCL Tiebreaker should follow MCL group-stage parity with ban phase added', () => {
+    const config = createConfig({
+      preset: 'MCL_TIEBREAKER',
+      hasBans: true,
+      banCount: 1,
+      seriesType: 'BO5',
+    });
+
+    const afterHostWin = calculateNextTurnOrder(config, 2, 'A');
+    expect(afterHostWin.mapOrder[0].player).toBe('B');
+    expect(afterHostWin.godOrder[0]).toMatchObject({ player: 'B', action: 'BAN' });
+
+    const afterGuestWin = calculateNextTurnOrder(config, 2, 'B');
+    expect(afterGuestWin.mapOrder[0].player).toBe('A');
+    expect(afterGuestWin.godOrder[0]).toMatchObject({ player: 'B', action: 'BAN' });
+
+    const game3 = calculateNextTurnOrder(config, 3, 'A');
+    expect(game3.godOrder[0]).toMatchObject({ player: 'A', action: 'BAN' });
+  });
 });
 
 describe('pureDraftEngine > processTurnAction', () => {
@@ -270,6 +331,27 @@ describe('pureDraftEngine > processTurnAction', () => {
     expect(() => processTurnAction(lobby, 'zeus', 'B')).toThrow("Not your turn");
   });
 
+  it('Scenario D2: Should reject expired manual picks instead of replacing them with random actions', () => {
+    const mapLobby = createBaseLobby('drafting');
+    mapLobby.phase = 'map_pick';
+    mapLobby.timerStart = 1000;
+    mapLobby.turnOrder = [
+      { player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' }
+    ];
+
+    expect(() => processTurnAction(mapLobby, 'ghost_lake', 'A', undefined, undefined, undefined, 63_000)).toThrow("Turn timed out");
+    expect(() => processTurnAction(mapLobby, 'ghost_lake', 'A', undefined, undefined, { isRandom: true }, 63_000)).toThrow("Turn timed out");
+
+    const godLobby = createBaseLobby('drafting');
+    godLobby.timerStart = 1000;
+    godLobby.picks = [
+      { playerId: 1, godId: null, team: 'A', color: 'red', position: 'corner', playerName: 'PlayerOne' }
+    ];
+
+    expect(() => processTurnAction(godLobby, 'huitzilopochtli', 'A', 1, 'PlayerOne', undefined, 63_000)).toThrow("Turn timed out");
+    expect(() => processTurnAction(godLobby, 'huitzilopochtli', 'A', 1, 'PlayerOne', { isRandom: true }, 63_000)).toThrow("Turn timed out");
+  });
+
   // Scenario E: Auto-pick MAP on timeout or null actionId
   it('Scenario E: Should auto-pick a random map when target is MAP and actionId is null', () => {
     const lobby = createBaseLobby('drafting');
@@ -278,7 +360,7 @@ describe('pureDraftEngine > processTurnAction', () => {
     ];
     lobby.config.allowedMaps = ['oasis', 'marsh'];
     
-    const updated = processTurnAction(lobby, null as any, 'A', undefined, undefined, undefined, 1000);
+    const updated = processTurnAction(lobby, null as any, 'A', undefined, undefined, { isTimeoutAutoResolve: true }, 1000);
     
     expect(updated.selectedMap).toBeDefined();
     expect(['oasis', 'marsh']).toContain(updated.selectedMap);
@@ -295,7 +377,7 @@ describe('pureDraftEngine > processTurnAction', () => {
       { playerId: 10, godId: null, team: 'A', color: 'red', position: 'corner', playerName: 'PlayerOne' }
     ];
     
-    const updated = processTurnAction(lobby, null as any, 'A', undefined, undefined, undefined, 1000);
+    const updated = processTurnAction(lobby, null as any, 'A', undefined, undefined, { isTimeoutAutoResolve: true }, 1000);
     
     expect(updated.picks[0].godId).toBeDefined();
     expect(updated.picks[0].godId).not.toBeNull();
@@ -316,7 +398,7 @@ describe('pureDraftEngine > processTurnAction', () => {
     ];
     lobby.config.allowedPantheons = ['greek'];
     
-    const updated = processTurnAction(lobby, null as any, 'A', undefined, undefined, undefined, 1000);
+    const updated = processTurnAction(lobby, null as any, 'A', undefined, undefined, { isTimeoutAutoResolve: true }, 1000);
     
     expect(updated.bans).toHaveLength(1);
     expect(updated.bans[0]).toBeDefined();
@@ -460,6 +542,65 @@ describe('pureDraftEngine > processReportAction', () => {
     expect(step2.status).toBe('finished');
     expect(step2.phase).toBe('finished');
   });
+
+  it('Scenario E: MCL Group Stage Game 3 start prevents isRandom or godId leakage and clears timer', () => {
+    const config: LobbyConfig = {
+      name: 'MCL Lobby',
+      preset: 'MCL',
+      teamSize: 3,
+      hasBans: false,
+      seriesType: '3G'
+    } as LobbyConfig;
+
+    const lobby: Lobby = {
+      id: 'test',
+      config,
+      status: 'drafting',
+      phase: 'reporting',
+      currentGame: 2,
+      history: [],
+      bans: [],
+      mapBans: [],
+      seriesMaps: ['map1', 'map2'],
+      scoreA: 1,
+      scoreB: 1,
+      picks: [
+        { playerId: 1, team: 'A', position: 'corner', color: '#ef4444', godId: 'oranos', isRandom: true, turnIndex: 1, playerName: 'P1' }
+      ]
+    } as unknown as Lobby;
+
+    const step1 = processReportAction(lobby, 'A', 'A', 1000);
+    const step2 = processReportAction(step1, 'A', 'B', 2000);
+
+    expect(step2.currentGame).toBe(3);
+    expect(step2.phase).toBe('ready');
+    expect(step2.status).toBe('waiting');
+    expect(step2.timerStart).toBeNull();
+    expect(step2.turnEndsAt).toBeNull();
+
+    // Verify all picks are wiped cleanly
+    const p1 = step2.picks.find(p => p.playerId === 1);
+    expect(p1?.godId).toBeNull();
+    expect(p1?.isRandom).toBe(false);
+    expect(p1?.turnIndex).toBeUndefined();
+    expect(p1?.playerName).toBe('P1');
+  });
+
+  it('Scenario F: MCL Playoffs per-game god bans reset when advancing to the next game', () => {
+    const lobby = createDraftedLobby('reporting');
+    lobby.config = createConfig({
+      preset: 'MCL_PLAYOFFS',
+      hasPerMapBans: true,
+      seriesType: 'BO5',
+    });
+    lobby.bans = ['zeus'];
+
+    const step1 = processReportAction(lobby, 'A', 'A', 1000);
+    const step2 = processReportAction(step1, 'A', 'B', 2000);
+
+    expect(step2.currentGame).toBe(2);
+    expect(step2.bans).toHaveLength(0);
+    expect(step2.turnOrder[0]).toMatchObject({ player: 'B', action: 'PICK', target: 'MAP' });
+    expect(step2.turnOrder[1]).toMatchObject({ player: 'B', action: 'BAN', target: 'GOD' });
+  });
 });
-
-

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { draftService } from '../services/draftService';
 import { lobbyService, IS_DEV, isSoloAdminLobby, getMillis } from '../services/lobbyService';
-import { Lobby, LobbyConfig, DraftTurn, TeamSize, PickEntry, SeriesType, Substitution } from '../types';
+import { Lobby, LobbyConfig, DraftTurn, TeamSize, PickEntry, SeriesType, Substitution, DraftActionOptions } from '../types';
 import { MAPS, MAJOR_GODS, PLAYER_COLORS, MCL_ROUND_MAPS } from '../constants';
 import { serverTimestamp } from 'firebase/firestore';
 import { calculateNextTurnOrder } from '../lib/pureDraftEngine';
@@ -131,7 +131,7 @@ export function useDraft(
    * **WARNING:** Do NOT use `force` in other contexts (e.g., manual user actions) as it can lead to
    * race conditions where multiple actions fire simultaneously, corrupting draft state.
    */
-  const handleAction = useCallback(async (actionIdArg: any, playerId?: number, playerName?: string, options?: { isRandom?: boolean; force?: boolean }) => {
+  const handleAction = useCallback(async (actionIdArg: any, playerId?: number, playerName?: string, options?: DraftActionOptions) => {
     if (!lobby) return;
     if (isProcessing && !options?.force) return;
     
@@ -201,7 +201,7 @@ export function useDraft(
     }
   }, [lobby, effectiveIsCaptain1, effectiveIsCaptain2, guestId, generateStandardTurnOrder, isProcessing]);
 
-  const handlePickerAction = useCallback(async (godIdArg: any, playerId?: number, playerName?: string, options?: { isRandom?: boolean }) => {
+  const handlePickerAction = useCallback(async (godIdArg: any, playerId?: number, playerName?: string, options?: DraftActionOptions) => {
     if (!lobby || isProcessing) return;
     
     // Ensure godId is a string.

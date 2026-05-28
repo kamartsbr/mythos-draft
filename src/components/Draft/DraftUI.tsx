@@ -148,8 +148,8 @@ export function DraftUI(props: DraftUIProps) {
           }
         }}
         className={cn(
-          "relative w-56 aspect-video rounded-2xl overflow-hidden border-4 transition-all duration-500",
-          isCurrent ? "border-amber-500 shadow-[0_0_30px_rgba(245,158,11,0.3)] z-10" : 
+          "relative w-36 h-14 rounded-xl overflow-hidden border-2 transition-all duration-500",
+          isCurrent ? "border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.3)] z-10" : 
           canView ? "border-slate-800 opacity-80 cursor-pointer hover:border-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500" : "border-slate-800 opacity-40 grayscale"
         )}
       >
@@ -157,17 +157,17 @@ export function DraftUI(props: DraftUIProps) {
           <img src={map.image} alt={map.name} loading="lazy" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
         ) : (
           <div className="w-full h-full bg-slate-950 flex items-center justify-center">
-            <span className="text-xs font-black text-slate-700 uppercase tracking-widest">GAME {idx + 1}</span>
+            <span className="text-[10px] font-black text-slate-700 uppercase tracking-widest">GAME {idx + 1}</span>
           </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent" />
-        <div className="absolute bottom-3 left-4">
+        <div className="absolute bottom-1.5 left-2 right-2">
           <span className={cn(
-            "text-xs font-black uppercase tracking-widest flex items-center gap-1",
+            "text-[9px] font-black uppercase tracking-tight flex items-center gap-1 leading-none truncate block",
             isCurrent ? "text-amber-500" : "text-slate-500"
           )}>
             {map ? (t.mapNames?.[map.id] || map.name) : `GAME ${idx + 1}`}
-            {pickStep?.isRandom && <Dices className="w-3 h-3 text-amber-500" />}
+            {pickStep?.isRandom && <Dices className="w-2.5 h-2.5 text-amber-500 shrink-0" />}
           </span>
         </div>
       </motion.div>
@@ -268,7 +268,7 @@ export function DraftUI(props: DraftUIProps) {
 
         {/* Series Maps Bar - Always Visible */}
         {(lobby.config.preset === 'MCL' || (lobby.status !== 'finished' && lobby.config.teamSize !== 1)) && (
-          <div className="bg-slate-900/30 border-b border-slate-900 p-4 md:p-6 z-30 overflow-x-auto custom-scrollbar" aria-label="Series Maps">
+          <div className="h-[72px] bg-slate-900/30 border-b border-slate-900 py-2 px-4 z-30 overflow-x-auto custom-scrollbar flex items-center justify-center shrink-0" aria-label="Series Maps">
             <div className="flex items-center justify-start md:justify-center gap-4 md:gap-8 min-w-max px-4">
               {mapElements}
             </div>

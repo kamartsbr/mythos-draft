@@ -1,8 +1,8 @@
 import { doc, updateDoc, serverTimestamp, runTransaction, Timestamp } from 'firebase/firestore';
 import { db, auth } from '../firebase';
-import { Lobby, DraftTurn, PickEntry, TurnAction, TurnTarget, TurnModifier, TurnExecution, Substitution } from '../types';
+import { Lobby, DraftTurn, PickEntry, TurnAction, TurnTarget, TurnModifier, TurnExecution, Substitution, DraftActionOptions } from '../types';
 import { MAPS, MAJOR_GODS, MCL_ROUND_MAPS, getMCLPicks, PLAYER_COLORS } from '../constants';
-import { normalizeLobbyData, IS_DEV, isSoloAdminLobby } from './lobbyService';
+import { normalizeLobbyData, IS_DEV, isSoloAdminLobby, lobbyService } from './lobbyService';
 import { processTurnAction, processReportAction } from '../lib/pureDraftEngine';
 
 // Mock helpers for LocalStorage
@@ -29,6 +29,60 @@ enum OperationType {
   GET = 'get',
   WRITE = 'write',
 }
+
+const hasTurnTimedOut = (lobby: Lobby, currentTimeMs: number): boolean => {
+  const durationMs = (lobby.config.timerDuration || 60) * 1000;
+  const turnEndsAt = lobby.turnEndsAt;
+
+  if (typeof turnEndsAt === 'number') {
+    const normalizedTurnEndsAt = turnEndsAt < 10000000000 ? turnEndsAt * 1000 : turnEndsAt;
+    return currentTimeMs >= normalizedTurnEndsAt;
+  }
+
+  if (turnEndsAt && typeof turnEndsAt === 'object' && 'toMillis' in turnEndsAt && typeof turnEndsAt.toMillis === 'function') {
+    return currentTimeMs >= turnEndsAt.toMillis();
+  }
+
+  const timerStart = lobby.timerStart;
+  if (typeof timerStart === 'number') {
+    const normalizedTimerStart = timerStart < 10000000000 ? timerStart * 1000 : timerStart;
+    return currentTimeMs >= normalizedTimerStart + durationMs;
+  }
+
+  if (timerStart && typeof timerStart === 'object' && 'toMillis' in timerStart && typeof timerStart.toMillis === 'function') {
+    return currentTimeMs >= timerStart.toMillis() + durationMs;
+  }
+
+  return false;
+};
+
+const resolveActingTeam = (
+  freshLobby: Lobby,
+  isCaptain1: boolean,
+  isCaptain2: boolean,
+  options: DraftActionOptions | undefined,
+  currentTimeMs: number
+): 'A' | 'B' => {
+  const currentTurn = freshLobby.turnOrder?.[freshLobby.turn];
+  const activeTurnTeam = currentTurn?.player === 'A' || currentTurn?.player === 'B'
+    ? currentTurn.player
+    : null;
+
+  if (options?.isTimeoutAutoResolve && activeTurnTeam && hasTurnTimedOut(freshLobby, currentTimeMs)) {
+    return activeTurnTeam;
+  }
+
+  if (isCaptain1 && isCaptain2 && activeTurnTeam) {
+    return activeTurnTeam;
+  }
+
+  if (isCaptain1 && !isCaptain2) return 'A';
+  if (isCaptain2 && !isCaptain1) return 'B';
+  if (isCaptain1) return 'A';
+  if (isCaptain2) return 'B';
+
+  throw new Error("Not your turn");
+};
 
 const cleanData = (obj: any): any => {
   if (obj === null || obj === undefined) return obj;
@@ -70,7 +124,7 @@ export const draftService = {
     isCaptain2: boolean,
     targetPlayerId?: number,
     playerName?: string,
-    options?: { isRandom?: boolean },
+    options?: DraftActionOptions,
     retryCount = 0
   ): Promise<{ success: boolean; error?: string }> {
     if (IS_DEV) {
@@ -121,14 +175,11 @@ export const draftService = {
     isCaptain2: boolean,
     targetPlayerId?: number,
     playerName?: string,
-    options?: { isRandom?: boolean }
+    options?: DraftActionOptions
   ): { success: boolean; error?: string; updates?: Partial<Lobby> } {
     try {
-      const currentTurn = freshLobby.turnOrder?.[freshLobby.turn];
-      const actingTeam =
-        currentTurn?.player === 'A' ? 'A' :
-        currentTurn?.player === 'B' ? 'B' :
-        isCaptain1 ? 'A' : 'B';
+      const currentTimeMs = Date.now();
+      const actingTeam = resolveActingTeam(freshLobby, isCaptain1, isCaptain2, options, currentTimeMs);
       const updatedLobby = processTurnAction(
         freshLobby,
         actionId,
@@ -136,7 +187,7 @@ export const draftService = {
         targetPlayerId,
         playerName,
         options,
-        Date.now()
+        currentTimeMs
       );
 
       const updates: Partial<Lobby> = {
@@ -193,7 +244,8 @@ export const draftService = {
     }
 
     try {
-      return await runTransaction(db, async (transaction) => {
+      let summaryLobby: Lobby | null = null;
+      const transactionResult = await runTransaction(db, async (transaction) => {
         const lobbyRef = doc(db, 'lobbies', lobby.id);
         const lobbyDoc = await transaction.get(lobbyRef);
         if (!lobbyDoc.exists()) return { success: false, error: "Lobby not found" };
@@ -203,9 +255,14 @@ export const draftService = {
 
         if (!result.success) return { success: false, error: result.error };
 
+        summaryLobby = normalizeLobbyData({ ...freshLobby, ...result.updates, id: freshLobby.id });
         transaction.update(lobbyRef, cleanData(result.updates));
         return { success: true };
       });
+      if (transactionResult.success && summaryLobby) {
+        await lobbyService.syncPublicMetadataForLobby(lobby.id, summaryLobby);
+      }
+      return transactionResult;
     } catch (error: any) {
       if (error.message?.includes('failed-precondition')) {
         return { success: false, error: "O banco de dados está sincronizando os índices. Tente novamente em alguns segundos." };
@@ -283,7 +340,7 @@ export const draftService = {
     playerId: number | undefined,
     isCaptain1: boolean,
     isCaptain2: boolean,
-    options?: { isRandom?: boolean }
+    options?: DraftActionOptions
   ): Promise<{ success: boolean; error?: string }> {
     if (IS_DEV) {
       const freshLobby = getLocalLobby(lobby.id);

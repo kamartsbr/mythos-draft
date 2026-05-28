@@ -200,7 +200,7 @@ export function useForjaPlayers(wantsLive = false): UseForjaPlayersResult {
         const data = await getForjaPlayersOnce();
         if (isMounted) {
           setRawPlayers(data);
-          setIsLive(true);
+          setIsLive(false);
           setError(null);
         }
       } catch (err) {

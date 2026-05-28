@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Lobby } from '../types';
+import { Lobby, DraftActionOptions } from '../types';
 import { MAPS, MAJOR_GODS } from '../constants';
 import { getServerTime } from '../lib/serverTime';
 
@@ -20,8 +20,8 @@ export function useTimer(
   lobby: Lobby | null, 
   isCaptain1: boolean, 
   isCaptain2: boolean, 
-  handleAction: (id: string, playerId?: number, playerName?: string, options?: { isRandom?: boolean }) => void,
-  handlePickerAction?: (id: string, playerId?: number, playerName?: string, options?: { isRandom?: boolean }) => void
+  handleAction: (id: string, playerId?: number, playerName?: string, options?: DraftActionOptions) => void,
+  handlePickerAction?: (id: string, playerId?: number, playerName?: string, options?: DraftActionOptions) => void
 ) {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const isProcessing = useRef(false);
@@ -217,7 +217,7 @@ export function useTimer(
 
       if (currentTurn.action === 'REVEAL') {
         try {
-          await handleAction('REVEAL');
+          await handleAction('REVEAL', undefined, undefined, { isTimeoutAutoResolve: true });
         } finally {
           isProcessing.current = false;
         }
@@ -282,12 +282,12 @@ export function useTimer(
                 ? availablePlayers[Math.floor(Math.random() * availablePlayers.length)] 
                 : { name: `Player ${emptyPick.playerId}` };
                 
-              await handleAction(actionId, emptyPick.playerId, randomPlayer.name, { isRandom: true });
+              await handleAction(actionId, emptyPick.playerId, randomPlayer.name, { isRandom: true, isTimeoutAutoResolve: true });
             } else {
-              await handleAction(actionId, undefined, undefined, { isRandom: true });
+              await handleAction(actionId, undefined, undefined, { isRandom: true, isTimeoutAutoResolve: true });
             }
           } else {
-            await handleAction(actionId, undefined, undefined, { isRandom: true });
+            await handleAction(actionId, undefined, undefined, { isRandom: true, isTimeoutAutoResolve: true });
           }
         } finally {
           isProcessing.current = false;

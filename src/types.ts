@@ -40,6 +40,12 @@ export type DraftTurn = {
   execution: TurnExecution;
 };
 
+export type DraftActionOptions = {
+  isRandom?: boolean;
+  force?: boolean;
+  isTimeoutAutoResolve?: boolean;
+};
+
 export type TeamSize = 1 | 2 | 3;
 export type SeriesType = 'BO1' | 'BO3' | 'BO5' | 'BO7' | 'BO9' | 'CUSTOM' | '3G';
 
@@ -183,7 +189,7 @@ export type LobbySummary = {
 
 export type LobbyIndex = {
   activeLobbies: LobbySummary[];
-  lastUpdate: DraftTimestampRead;
+  lastUpdated: DraftTimestampRead;
 };
 
 export type Lobby = {

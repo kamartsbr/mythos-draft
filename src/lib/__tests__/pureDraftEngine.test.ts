@@ -340,6 +340,7 @@ describe('pureDraftEngine > processTurnAction', () => {
     ];
 
     expect(() => processTurnAction(mapLobby, 'ghost_lake', 'A', undefined, undefined, undefined, 63_000)).toThrow("Turn timed out");
+    expect(() => processTurnAction(mapLobby, 'ghost_lake', 'A', undefined, undefined, { isRandom: true }, 63_000)).toThrow("Turn timed out");
 
     const godLobby = createBaseLobby('drafting');
     godLobby.timerStart = 1000;
@@ -348,6 +349,7 @@ describe('pureDraftEngine > processTurnAction', () => {
     ];
 
     expect(() => processTurnAction(godLobby, 'huitzilopochtli', 'A', 1, 'PlayerOne', undefined, 63_000)).toThrow("Turn timed out");
+    expect(() => processTurnAction(godLobby, 'huitzilopochtli', 'A', 1, 'PlayerOne', { isRandom: true }, 63_000)).toThrow("Turn timed out");
   });
 
   // Scenario E: Auto-pick MAP on timeout or null actionId
@@ -358,7 +360,7 @@ describe('pureDraftEngine > processTurnAction', () => {
     ];
     lobby.config.allowedMaps = ['oasis', 'marsh'];
     
-    const updated = processTurnAction(lobby, null as any, 'A', undefined, undefined, undefined, 1000);
+    const updated = processTurnAction(lobby, null as any, 'A', undefined, undefined, { isTimeoutAutoResolve: true }, 1000);
     
     expect(updated.selectedMap).toBeDefined();
     expect(['oasis', 'marsh']).toContain(updated.selectedMap);
@@ -375,7 +377,7 @@ describe('pureDraftEngine > processTurnAction', () => {
       { playerId: 10, godId: null, team: 'A', color: 'red', position: 'corner', playerName: 'PlayerOne' }
     ];
     
-    const updated = processTurnAction(lobby, null as any, 'A', undefined, undefined, undefined, 1000);
+    const updated = processTurnAction(lobby, null as any, 'A', undefined, undefined, { isTimeoutAutoResolve: true }, 1000);
     
     expect(updated.picks[0].godId).toBeDefined();
     expect(updated.picks[0].godId).not.toBeNull();
@@ -396,7 +398,7 @@ describe('pureDraftEngine > processTurnAction', () => {
     ];
     lobby.config.allowedPantheons = ['greek'];
     
-    const updated = processTurnAction(lobby, null as any, 'A', undefined, undefined, undefined, 1000);
+    const updated = processTurnAction(lobby, null as any, 'A', undefined, undefined, { isTimeoutAutoResolve: true }, 1000);
     
     expect(updated.bans).toHaveLength(1);
     expect(updated.bans[0]).toBeDefined();

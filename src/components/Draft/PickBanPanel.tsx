@@ -5,14 +5,13 @@ import { createPortal } from 'react-dom';
 import { cn } from '../../lib/utils';
 import { Lobby, God, MapInfo } from '../../types';
 import { MAJOR_GODS, MAPS, PANTHEONS } from '../../constants';
-import { getMCLTeamOrder } from '../../data/draft';
 import { lobbyService } from '../../services/lobbyService';
+import { resolveDraftPlayerTargets } from '../../domain/draft/playerTargets';
 import { MapVisualizer } from '../MapVisualizer';
 import { ConfirmModal } from '../UI/ConfirmModal';
 import { DraftResultCard } from './DraftResultCard';
 import { toPng } from 'html-to-image';
 import { useRef } from 'react';
-import { shouldUseGame2MclOrder } from '../../data/draft';
 
 interface PickBanPanelProps {
   lobby: Lobby;
@@ -732,7 +731,7 @@ export function PickBanPanel({
 
       {lobby.selectedMap && (
         <div className="mb-4 flex flex-col items-center bg-slate-900/20 px-3 py-5 rounded-2xl border border-slate-900/40 shrink-0 w-full">
-          <div className="w-[min(700px,72vw)] mx-auto shrink-0 overflow-visible rounded-2xl flex items-center justify-center">
+          <div className="w-[min(630px,65vw)] mx-auto shrink-0 overflow-visible rounded-2xl flex items-center justify-center">
             <MapVisualizer 
               lobby={lobby} 
               isVisible={() => true} 
@@ -852,48 +851,41 @@ export function PickBanPanel({
             {(() => {
               const activeTeam: 'A' | 'B' = myTeam === 'A' || myTeam === 'B' ? myTeam : (isCaptain1 ? 'A' : (isCaptain2 ? 'B' : 'A'));
               let players = activeTeam === 'A' ? (lobby.teamAPlayers || []) : (lobby.teamBPlayers || []);
+              const teamPicks = lobby.picks.filter(p => p.team === activeTeam);
               
               if (players.length === 0) {
                 const teamSlots = activeTeam === 'A' ? [1, 4, 5] : [2, 3, 6];
                 players = teamSlots.map(id => ({ name: `Player ${id}`, position: id }));
               }
 
-              const teamOrder = getMCLTeamOrder(activeTeam, lobby.selectedMap || null, shouldUseGame2MclOrder(lobby.turnOrder));
+              const playerTargets = resolveDraftPlayerTargets(players, teamPicks);
               
-              return players.map((tp, idx) => {
-                const lowerTpName = tp.name.toLowerCase().trim();
-                const targetPlayerId = teamOrder[idx] ?? tp.position;
-                const targetPick = lobby.picks.find(p => p.team === activeTeam && p.playerId === targetPlayerId);
-                const isAssigned = !!targetPick?.godId || lobby.picks.some(p => 
-                  p.team === activeTeam &&
-                  p.playerName?.toLowerCase().trim() === lowerTpName &&
-                  p.godId !== null
-                );
+              return playerTargets.map((target, idx) => {
                 return (
                   <button
                     key={idx}
                     data-testid="mcl-player-target"
-                    data-player-id={targetPlayerId}
-                    data-player-name={tp.name}
-                    disabled={!selectedGodId || isAssigned || !targetPick}
+                    data-player-id={target.targetPlayerId ?? -1}
+                    data-player-name={target.name}
+                    disabled={!selectedGodId || target.isAssigned || !target.targetPlayerId}
                     onClick={() => {
-                      if (selectedGodId && !isAssigned && targetPick) {
-                        handleAction(selectedGodId, targetPick.playerId, tp.name);
+                      if (selectedGodId && !target.isAssigned && target.targetPlayerId) {
+                        handleAction(selectedGodId, target.targetPlayerId, target.name);
                         setSelectedGodId(null);
                       }
                     }}
                     className={cn(
                       "px-4 py-3 sm:px-8 sm:py-4 rounded-xl border-2 transition-all duration-300 flex flex-col items-center gap-1 shadow-lg",
-                      isAssigned ? "border-slate-800 opacity-50 grayscale" :
+                      target.isAssigned ? "border-slate-800 opacity-50 grayscale" :
                       selectedGodId ? "border-slate-700 hover:border-amber-500 hover:bg-amber-500/20 hover:shadow-amber-500/10 cursor-pointer" :
                       "border-slate-800 opacity-50 cursor-not-allowed"
                     )}
                   >
                     <span className={cn(
                       "text-xs sm:text-sm font-black uppercase tracking-widest truncate max-w-[100px] sm:max-w-[140px]",
-                      isAssigned ? "text-slate-500" : "text-white"
+                      target.isAssigned ? "text-slate-500" : "text-white"
                     )}>
-                      {tp.name}
+                      {target.name}
                     </span>
                   </button>
                 );

@@ -59,8 +59,8 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
   const [copied, setCopied] = useState(false);
 
   // Forja Auto-fill data
-  const { teams } = useForjaTeams(true);
-  const { rankedPlayers } = useForjaPlayers(true);
+  const { teams } = useForjaTeams(false);
+  const { rankedPlayers } = useForjaPlayers(false);
   const lastRole = useRef<string | null>(null);
 
   const isForjaPreset = lobby.config.preset === 'FORJA';
@@ -124,6 +124,7 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
 
   const teamSize = lobby.config.teamSize;
   const isMCL = lobby.config.preset?.includes('MCL');
+  const shouldShowNicknameField = role === 'SPECTATOR' || teamSize === 1;
 
   // FIXED: activeSlots are now simple roster indices (0, 1, 2) - memoized to prevent re-creation
   const activeSlots = useMemo(() => Array.from({ length: teamSize }, (_, i) => i), [teamSize]);
@@ -235,9 +236,11 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
   };
 
   const handleConfirm = () => {
-    const finalNickname = localNickname.trim() || (role === 'SPECTATOR' ? 'Spectator' : '');
-    if (!finalNickname && role !== 'SPECTATOR') return;
     if (!role) return;
+
+    const captainRosterName = captainPosition !== null ? (playerNames[captainPosition] || '').trim() : '';
+    const finalNickname = (shouldShowNicknameField ? localNickname.trim() : captainRosterName) || (role === 'SPECTATOR' ? 'Spectator' : '');
+    if (!finalNickname && role !== 'SPECTATOR') return;
     
     if (role === 'SPECTATOR') {
       onJoin(role, 0, {}, finalNickname);
@@ -420,8 +423,8 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
             </motion.div>
           )}
 
-          {/* Nickname (Hidden for FORJA Captains to simplify UX) */}
-          {(!isOfficialForjaMatch || role === 'SPECTATOR') && role && (
+          {/* Nickname */}
+          {shouldShowNicknameField && (!isOfficialForjaMatch || role === 'SPECTATOR') && role && (
             <motion.div 
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
@@ -589,7 +592,11 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
           )}
 
           <button
-            disabled={!role || (!localNickname.trim() && role !== 'SPECTATOR') || (!isFinished && role !== 'SPECTATOR' && activeSlots.some(id => !playerNames[id]?.trim()))}
+            disabled={
+              !role ||
+              (role === 'SPECTATOR' ? !localNickname.trim() : false) ||
+              (!isFinished && role !== 'SPECTATOR' && activeSlots.some(id => !playerNames[id]?.trim()))
+            }
             data-testid="join-confirm-button"
             onClick={handleConfirm}
             className="w-full py-4 rounded-2xl bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-black text-lg shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2"

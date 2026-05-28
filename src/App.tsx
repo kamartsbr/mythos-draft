@@ -130,12 +130,13 @@ function AppContent() {
         const { signInAnonymously, onAuthStateChanged } = await import('firebase/auth');
         const { auth } = await import('./firebase');
         const { getServerTimeOffset } = await import('./lib/serverTime');
+        const hasLobbyTarget = Boolean(lobbyIdFromPath || new URLSearchParams(window.location.search).get('lobby'));
 
         onAuthStateChanged(auth, async (user) => {
           if (user) {
-            getServerTimeOffset();
-            // Trigger a one-time index refresh for the current database if user is premium/admin or just once per session
-            lobbyService.refreshLobbyIndex().catch(console.error);
+            if (hasLobbyTarget) {
+              getServerTimeOffset();
+            }
           } else {
             // Only try anonymous if no user is present
             try {
@@ -154,7 +155,7 @@ function AppContent() {
       }
     };
     signIn();
-  }, []);
+  }, [lobbyIdFromPath]);
 
   const {
     lobby,
@@ -334,13 +335,23 @@ function AppContent() {
   const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
+    const isMenuRoute = !lobbyId && !isForjaRoute && !isOverlay && !isStreamerHud && !isStreamerDock && !isLobbyPath;
+    if (!isMenuRoute) return;
+
+    if (!isAdmin) {
+      setPaginatedLobbies(publicLobbies);
+      setHasMore(false);
+      return;
+    }
+
     lobbyService.getLobbiesPaginated(true).then((lbs) => {
       setPaginatedLobbies(lbs);
       setHasMore(lbs.length >= 20);
     });
-  }, []);
+  }, [publicLobbies, isAdmin, lobbyId, isForjaRoute, isOverlay, isStreamerHud, isStreamerDock, isLobbyPath]);
 
   const loadMore = async () => {
+    if (!isAdmin) return;
     const next = await lobbyService.getLobbiesPaginated(false);
     setPaginatedLobbies(prev => [...prev, ...next]);
     setHasMore(next.length >= 20);
@@ -394,9 +405,6 @@ function AppContent() {
     try {
       await lobbyService.deleteLobby(id);
       setPaginatedLobbies(prev => prev.filter(l => l.id !== id));
-      if (!isLocked) {
-        await lobbyService.refreshLobbyIndex();
-      }
     } catch (err: any) {
       setError(err.message);
     }

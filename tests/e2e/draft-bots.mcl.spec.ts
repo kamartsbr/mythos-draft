@@ -189,7 +189,7 @@ const SCENARIOS: PresetScenario[] = [
       await page.getByTestId('mcl-tiebreaker-ban-scope-series').click();
       await page.getByTestId('mcl-tiebreaker-ban-scope-per-map').click();
       await expect(page.locator('[data-testid="mcl-tiebreaker-map-option"][data-map-id="autumn_exchange"]')).toBeVisible();
-      await expect(page.locator('[data-testid="mcl-tiebreaker-map-option"][data-map-id="aztlan_oasis"] img')).toHaveAttribute('src', /\/maps\/mcl\/aztlan-oasis\.webp$/);
+      await expect(page.locator('[data-testid="mcl-tiebreaker-map-option"][data-map-id="aztlan_oasis"] img')).toHaveAttribute('src', /\/maps\/mcl\/aztlan-oasis\.png$/);
       await expect(page.locator('[data-testid="mcl-tiebreaker-map-option"][data-map-id="divided_timberlands"]')).toBeVisible();
       await expect(page.locator('[data-testid="mcl-tiebreaker-map-option"][data-map-id="haywire"]')).toBeVisible();
     },

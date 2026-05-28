@@ -1,4 +1,4 @@
-import { LobbyConfig, DraftTurn, Lobby, PickEntry } from '../types';
+import { LobbyConfig, DraftTurn, Lobby, PickEntry, DraftActionOptions } from '../types';
 import { getMCLPicks, getMCLTeamOrder, shouldUseGame2MclOrder } from '../data/draft';
 import { MAPS } from '../data/maps';
 import { MAJOR_GODS } from '../data/gods';
@@ -264,7 +264,7 @@ export function processTurnAction(
   actingTeam: 'A' | 'B',
   targetPlayerId?: number,
   playerName?: string,
-  options?: { isRandom?: boolean },
+  options?: DraftActionOptions,
   currentTimeMs: number = Date.now()
 ): Lobby {
   if (lobby.status !== 'drafting') {
@@ -310,7 +310,7 @@ export function processTurnAction(
   // Timer-expired manual clicks must not silently become random picks.
   // Only the timer worker path marks actions as random and may enter auto-resolution.
   if (isTimerExpired && currentTurn.player !== 'ADMIN') {
-    if (!options?.isRandom) {
+    if (!options?.isTimeoutAutoResolve) {
       throw new Error("Turn timed out");
     }
     actionId = null as any; // Force timeout pick path
@@ -444,6 +444,10 @@ export function processTurnAction(
   };
 
   if (actionId === null || actionId === undefined) {
+    if (!options?.isTimeoutAutoResolve && currentTurn.action !== 'REVEAL') {
+      throw new Error("Invalid action");
+    }
+
     if (currentTurn.action !== 'REVEAL') {
       if (currentTurn.target === 'MAP') {
         const allowedMaps = Array.isArray(nextLobby.config.allowedMaps) && nextLobby.config.allowedMaps.length > 0 

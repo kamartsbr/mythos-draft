@@ -331,6 +331,25 @@ describe('pureDraftEngine > processTurnAction', () => {
     expect(() => processTurnAction(lobby, 'zeus', 'B')).toThrow("Not your turn");
   });
 
+  it('Scenario D2: Should reject expired manual picks instead of replacing them with random actions', () => {
+    const mapLobby = createBaseLobby('drafting');
+    mapLobby.phase = 'map_pick';
+    mapLobby.timerStart = 1000;
+    mapLobby.turnOrder = [
+      { player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' }
+    ];
+
+    expect(() => processTurnAction(mapLobby, 'ghost_lake', 'A', undefined, undefined, undefined, 63_000)).toThrow("Turn timed out");
+
+    const godLobby = createBaseLobby('drafting');
+    godLobby.timerStart = 1000;
+    godLobby.picks = [
+      { playerId: 1, godId: null, team: 'A', color: 'red', position: 'corner', playerName: 'PlayerOne' }
+    ];
+
+    expect(() => processTurnAction(godLobby, 'huitzilopochtli', 'A', 1, 'PlayerOne', undefined, 63_000)).toThrow("Turn timed out");
+  });
+
   // Scenario E: Auto-pick MAP on timeout or null actionId
   it('Scenario E: Should auto-pick a random map when target is MAP and actionId is null', () => {
     const lobby = createBaseLobby('drafting');

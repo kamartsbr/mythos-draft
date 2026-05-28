@@ -197,6 +197,22 @@ export function useTimer(
         return;
       }
 
+      if (currentTurn.player === 'ADMIN') {
+        isProcessing.current = false;
+        return;
+      }
+
+      const isC1Turn = currentTurn.player === 'A' || currentTurn.player === 'BOTH';
+      const isC2Turn = currentTurn.player === 'B' || currentTurn.player === 'BOTH';
+      const isMyTurn = (isC1Turn && isCaptain1) || (isC2Turn && isCaptain2);
+      const isOpponentTurn = (isC1Turn && isCaptain2) || (isC2Turn && isCaptain1);
+
+      const shouldTrigger = isMyTurn || (isOpponentTurn && elapsed >= duration + 2);
+      if (!shouldTrigger) {
+        isProcessing.current = false;
+        return;
+      }
+
       lastTriggeredTurn.current = currentLobby.turn;
 
       if (currentTurn.action === 'REVEAL') {

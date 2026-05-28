@@ -307,8 +307,12 @@ export function processTurnAction(
     throw new Error("Not your turn");
   }
 
-  // When timer expires, ignore supplied actionId and invoke deterministic timeout logic
+  // Timer-expired manual clicks must not silently become random picks.
+  // Only the timer worker path marks actions as random and may enter auto-resolution.
   if (isTimerExpired && currentTurn.player !== 'ADMIN') {
+    if (!options?.isRandom) {
+      throw new Error("Turn timed out");
+    }
     actionId = null as any; // Force timeout pick path
   }
 
@@ -335,15 +339,18 @@ export function processTurnAction(
   const applyAction = (id: string, turn: DraftTurn, team: 'A' | 'B', tPlayerId?: number, pName?: string): boolean => {
     if (turn.action === 'BAN') {
       if (turn.target === 'MAP') {
+        if (!MAPS.some(map => map.id === id)) return false;
         if (nextLobby.mapBans.includes(id)) return false;
         if (nextLobby.seriesMaps.includes(id)) return false;
         nextLobby.mapBans.push(id);
       } else {
+        if (!MAJOR_GODS.some(god => god.id === id)) return false;
         if (nextLobby.bans.includes(id)) return false;
         nextLobby.bans.push(id);
       }
     } else if (turn.action === 'PICK') {
       if (turn.target === 'MAP') {
+        if (!MAPS.some(map => map.id === id)) return false;
         if (nextLobby.mapBans.includes(id)) return false;
         if (nextLobby.seriesMaps.includes(id)) return false;
         if (nextLobby.mapPool && nextLobby.mapPool.includes(id)) return false;
@@ -386,6 +393,7 @@ export function processTurnAction(
         }
       } else {
         // God PICK
+        if (!MAJOR_GODS.some(god => god.id === id)) return false;
         const alreadyPickedByTeam = nextLobby.picks.some(p => p.team === team && p.godId === id);
         const alreadyPickedByAnyone = nextLobby.picks.some(p => p.godId === id);
         if (turn.modifier === 'EXCLUSIVE' && alreadyPickedByAnyone) return false;
@@ -756,5 +764,4 @@ export function processReportAction(
 
   return nextLobby;
 }
-
 

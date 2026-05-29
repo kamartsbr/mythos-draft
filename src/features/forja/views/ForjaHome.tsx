@@ -9,7 +9,12 @@ import { ForjaViewProps, ForjaPlayer, ForjaTeam, ForjaLiveMatchSummary } from '.
 import { useForjaSettings } from '../hooks/useForjaSettings';
 import { useForjaTeams } from '../hooks/useForjaTeams';
 import { useForjaPlayers } from '../hooks/useForjaPlayers';
-import { getForjaContentOnce, getForjaLiveMatchesSummaryOnce } from '../services/forjaService';
+import {
+  getForjaContentOnce,
+  getForjaLiveMatchesSummaryOnce,
+  getForjaOfficialMatchesOnce,
+} from '../services/forjaService';
+import { mergeForjaLiveMatches } from '../forjaMatchSummary';
 import { FORJA_MAP_POOL, getMCLPicks } from '../../../constants';
 import { LobbyConfig, Lobby } from '../../../types';
 import { lobbyService, generateId, lobbyToForjaLiveMatchSummary, upsertForjaLiveMatchSummary, removeForjaLiveMatchSummary } from '../../../services/lobbyService';
@@ -869,10 +874,11 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
   // Cold summary fetch
   useEffect(() => {
     let isMounted = true;
-    getForjaLiveMatchesSummaryOnce()
-      .then((summary) => {
+    Promise.all([getForjaLiveMatchesSummaryOnce(), getForjaOfficialMatchesOnce()])
+      .then(([summary, officialMatches]) => {
         if (!isMounted) return;
-        setLobbies(Array.isArray(summary?.matches) ? summary.matches : []);
+        const summaryMatches = Array.isArray(summary?.matches) ? summary.matches : [];
+        setLobbies(mergeForjaLiveMatches(officialMatches, summaryMatches));
         setDataLoaded(true);
       })
       .catch((err) => {

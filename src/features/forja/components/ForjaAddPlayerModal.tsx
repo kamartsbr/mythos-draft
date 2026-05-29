@@ -6,7 +6,7 @@
 
 import React, { useState } from 'react';
 import { adminRegisterPlayer, parseAomProfileId } from '../services/forjaService';
-import { fetchAomProfileForPlayer } from '../services/aomProfileService';
+import { fetchAomProfileForPlayer, toAomProfileData } from '../services/aomProfileService';
 import { AVAILABILITY_LABELS } from '../forjaUtils';
 
 interface Props {
@@ -68,13 +68,13 @@ export default function ForjaAddPlayerModal({ discordUserId, discordUsername, on
     setFetchedProfile(null);
     try {
       const profile = await fetchAomProfileForPlayer(profileId);
-      const elo_efetivo = Math.round((profile.elo_1v1 + profile.elo_tg) / 2) || 0;
+      const profileData = toAomProfileData(profileId, profile);
       setFetchedProfile({
-        elo_1v1:     profile.elo_1v1,
-        elo_tg:      profile.elo_tg,
-        elo_efetivo: elo_efetivo,
-        avatar_url:  profile.avatar_url,
-        top_gods:    profile.top_gods,
+        elo_1v1:     profileData.elo_1v1,
+        elo_tg:      profileData.elo_tg,
+        elo_efetivo: profileData.elo_efetivo,
+        avatar_url:  profileData.avatar_url,
+        top_gods:    profileData.top_gods,
       });
     } catch (e: any) {
       setFetchError(e?.message || 'Não foi possível buscar o perfil.');

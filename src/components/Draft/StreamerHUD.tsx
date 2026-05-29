@@ -796,9 +796,11 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
               exit={{ y: 100, opacity: 0 }}
               className="w-full flex justify-center gap-8 pb-12"
             >
-              {(Array.isArray(lobby.seriesMaps) ? lobby.seriesMaps : Object.values(lobby.seriesMaps || {})).map((mapId, idx) => {
-                const mapIdText = typeof mapId === 'string' ? mapId : null;
-                const map = getMapById(mapIdText);
+              {(Array.isArray(lobby.seriesMaps)
+                ? lobby.seriesMaps
+                : Object.values(lobby.seriesMaps || {}).filter((mapId): mapId is string => typeof mapId === 'string')
+              ).map((mapId, idx) => {
+                const map = getMapById(mapId);
                 const isPlayed = idx < (manualMode ? displayGameIdx : lobby.currentGame - 1);
                 const isCurrent = idx === (manualMode ? displayGameIdx : lobby.currentGame - 1);
                 const winner = lobby.history?.[idx]?.winner;

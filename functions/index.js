@@ -5,7 +5,7 @@
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2");
 
-const { defineSecret } = require("firebase-functions/params");
+const { defineSecret, defineString } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const { getFirestore } = require("firebase-admin/firestore");
 const axios = require("axios");
@@ -22,11 +22,24 @@ const TARGET_ORIGIN = 'https://mythosdraft.com';
 
 const DISCORD_CLIENT_SECRET = defineSecret('DISCORD_CLIENT_SECRET');
 const DISCORD_CLIENT_ID = defineSecret('DISCORD_CLIENT_ID');
+const FORJA_ADMIN_IDS = defineString('FORJA_ADMIN_IDS', { default: '' });
+
+// Owner IDs are emergency callable admins only. Firestore rules still require
+// forja_players/{uid}.role == 'admin' for direct client-side Firestore writes.
 const OWNER_DISCORD_IDS = new Set([
   '272372054526001152',
 ]);
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function getConfiguredForjaAdminIds() {
+  return new Set(
+    FORJA_ADMIN_IDS.value()
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean)
+  );
+}
 
 async function assertForjaAdmin(request, db) {
   const uid = request.auth?.uid;
@@ -34,7 +47,7 @@ async function assertForjaAdmin(request, db) {
     throw new HttpsError('unauthenticated', 'User must be authenticated');
   }
 
-  if (OWNER_DISCORD_IDS.has(uid)) return;
+  if (OWNER_DISCORD_IDS.has(uid) || getConfiguredForjaAdminIds().has(uid)) return;
 
   const playerSnap = await db.doc(`forja_players/${uid}`).get();
   if (!playerSnap.exists || playerSnap.data()?.role !== 'admin') {

@@ -570,8 +570,9 @@ export function processTurnAction(
   const nextTurn = nextLobby.turnOrder[nextLobby.turn];
   if (nextTurn) {
     if (nextTurn.target === 'GOD' && currentTurn.target === 'MAP') {
-      if (nextLobby.seriesMaps.length > 0) {
-        nextLobby.selectedMap = nextLobby.seriesMaps[nextLobby.currentGame - 1];
+      const currentMapIndex = nextLobby.currentGame - 1;
+      if (currentMapIndex >= 0 && currentMapIndex < nextLobby.seriesMaps.length) {
+        nextLobby.selectedMap = nextLobby.seriesMaps[currentMapIndex];
       }
     }
     nextLobby.phase = phaseAfterDraftQueue(nextLobby.turnOrder, nextLobby.turn, nextLobby.config.teamSize);

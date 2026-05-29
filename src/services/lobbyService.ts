@@ -23,7 +23,8 @@ import {
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { Lobby, LobbyConfig, PickEntry, ChatMessage, LobbySummary, LobbyIndex, DraftTimestampRead } from '../types';
 import { ForjaLiveMatchSummary, ForjaLiveMatchesSummaryDoc } from '../features/forja/types';
-import { updateCachedLiveMatchesSummary } from '../features/forja/services/forjaService';
+import { invalidateForjaOfficialMatchesCache, updateCachedLiveMatchesSummary } from '../features/forja/services/forjaService';
+import { forjaLobbyToLiveMatchSummary, isOfficialForjaLobbyData, sortForjaLiveMatches } from '../features/forja/forjaMatchSummary';
 import { PLAYER_COLORS, MCL_ROUND_MAPS } from '../constants';
 import { getMCLPicks, getMCLTeamOrder, shouldUseGame2MclOrder } from '../data/draft';
 
@@ -90,30 +91,11 @@ export function removeLobbySummary(summaries: LobbySummary[], lobbyId: string): 
 }
 
 function isOfficialForjaLobby(lobby: Lobby): boolean {
-  return lobby.config?.preset === 'FORJA' && (lobby.config.isOfficialForjaMatch === true || !!lobby.config.forjaTeamA);
+  return isOfficialForjaLobbyData(lobby);
 }
 
 export function lobbyToForjaLiveMatchSummary(lobby: Lobby): ForjaLiveMatchSummary {
-  return {
-    id: lobby.id,
-    name: lobby.config?.name ?? 'Partida',
-    status: lobby.status ?? 'waiting',
-    scoreA: lobby.scoreA ?? 0,
-    scoreB: lobby.scoreB ?? 0,
-    stage: lobby.config?.tournamentStage ?? 'GROUP',
-    scheduledDate: lobby.config?.scheduledDate as ForjaLiveMatchSummary['scheduledDate'],
-    scheduledTime: lobby.config?.scheduledTime,
-    streamerUrl: lobby.config?.streamerUrl,
-    externalLink: lobby.config?.externalDraftLink ?? '',
-    config: {
-      name: lobby.config?.name ?? 'Partida',
-      forjaTeamA: lobby.config?.forjaTeamA,
-      forjaTeamB: lobby.config?.forjaTeamB,
-      forjaGroupId: lobby.config?.forjaGroupId,
-      tournamentStage: lobby.config?.tournamentStage,
-      externalLink: lobby.config?.externalDraftLink ?? '',
-    },
-  };
+  return forjaLobbyToLiveMatchSummary(lobby);
 }
 
 export function upsertForjaLiveMatchSummary(
@@ -122,12 +104,7 @@ export function upsertForjaLiveMatchSummary(
 ): ForjaLiveMatchSummary[] {
   const next = matches.filter((item) => item.id !== match.id);
   next.push(match);
-  return [...next].sort((left, right) => {
-    const leftTs = getMillis(left.scheduledDate ?? 0);
-    const rightTs = getMillis(right.scheduledDate ?? 0);
-    if (leftTs === rightTs) return left.name.localeCompare(right.name);
-    return leftTs - rightTs;
-  });
+  return sortForjaLiveMatches(next);
 }
 
 export function removeForjaLiveMatchSummary(matches: ForjaLiveMatchSummary[], lobbyId: string): ForjaLiveMatchSummary[] {
@@ -461,6 +438,7 @@ export const lobbyService = {
       }), { merge: true });
     });
     updateCachedLiveMatchesSummary({ matches: nextMatches });
+    invalidateForjaOfficialMatchesCache();
   },
 
   async removeLobbyFromPublicMetadata(id: string): Promise<void> {
@@ -491,6 +469,7 @@ export const lobbyService = {
       }), { merge: true });
     });
     updateCachedLiveMatchesSummary({ matches: nextMatches });
+    invalidateForjaOfficialMatchesCache();
   },
 
   async refreshLobbyIndex(): Promise<void> {
@@ -507,6 +486,12 @@ export const lobbyService = {
 
       const snap = await getDocs(q);
       const normalizedLobbies = snap.docs.map((snapshot) => normalizeLobbyData({ id: snapshot.id, ...snapshot.data() } as Lobby));
+      const forjaQ = query(
+        collection(db, 'lobbies'),
+        where('config.preset', '==', 'FORJA')
+      );
+      const forjaSnap = await getDocs(forjaQ);
+      const normalizedForjaLobbies = forjaSnap.docs.map((snapshot) => normalizeLobbyData({ id: snapshot.id, ...snapshot.data() } as Lobby));
       const summaries = normalizedLobbies
         .map(d => {
           if (!isLobbyEligibleForPublicList(d)) return null;
@@ -515,7 +500,7 @@ export const lobbyService = {
         .filter((l): l is LobbySummary => l !== null)
         .slice(0, PUBLIC_LOBBIES_PAGE_SIZE);
 
-      const liveMatches = normalizedLobbies
+      const liveMatches = normalizedForjaLobbies
         .filter((lobby) => isOfficialForjaLobby(lobby))
         .map((lobby) => lobbyToForjaLiveMatchSummary(lobby));
 
@@ -530,6 +515,7 @@ export const lobbyService = {
         updated_at: now(),
       }), { merge: true });
       updateCachedLiveMatchesSummary({ matches: liveMatches });
+      invalidateForjaOfficialMatchesCache();
 
     } catch (err) {
       console.error("[Lobby Index] Erro ao atualizar ├¡ndice:", err);

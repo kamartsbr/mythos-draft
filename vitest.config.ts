@@ -8,6 +8,7 @@ export default defineConfig({
     environment: 'node',
     // Inclui tipagem automática de expect, it, describe etc.
     globals: true,
+    include: ['src/**/*.{test,spec}.{ts,tsx,js,jsx}'],
     // Relatório limpo com diff colorido
     reporters: ['verbose'],
     coverage: {

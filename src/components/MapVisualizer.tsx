@@ -1,8 +1,8 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowRight, Clock } from 'lucide-react';
-import { Lobby, MapInfo, PickEntry, GameResult } from '../types';
-import { MAPS, MAJOR_GODS } from '../constants';
+import { Lobby, PickEntry, GameResult } from '../types';
+import { getMapById, getMajorGodById } from '../constants';
 import { cn } from '../lib/utils';
 import { resolveDraftPick, resolveGameResultPicks } from '../domain/draft/visuals/resolveDraftPick';
 import { MCL_FORMAT } from '../domain/draft/formats/mcl.format';
@@ -21,7 +21,7 @@ interface MapVisualizerProps {
 
 export const MapVisualizer: React.FC<MapVisualizerProps> = ({ lobby, isVisible, isCaptain1, isCaptain2, game, selectedPositionId, t, timeLeft }) => {
   const mapId = game ? game.mapId : lobby.selectedMap;
-  const selectedMap = MAPS.find(m => m.id.toLowerCase() === (mapId || '').toLowerCase());
+  const selectedMap = getMapById(mapId);
   const mapRef = React.useRef<HTMLDivElement>(null);
 
   if (!selectedMap || !selectedMap.positions) {
@@ -105,7 +105,7 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ lobby, isVisible, 
               }
             }
 
-          const god = godId ? MAJOR_GODS.find(g => g.id === godId) : null;
+          const god = getMajorGodById(godId);
 
           return (
             <div 

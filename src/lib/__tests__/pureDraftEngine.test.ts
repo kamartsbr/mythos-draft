@@ -275,6 +275,7 @@ describe('pureDraftEngine > processTurnAction', () => {
 
     expect(updated.turn).toBe(1);
     expect(updated.picks[0].godId).toBe('zeus');
+    expect(updated.picks.map(p => p.playerId)).toEqual(lobby.picks.map(p => p.playerId));
     expect(updated.picks[0].turnIndex).toBe(0);
     expect(updated.replayLog).toHaveLength(1);
     expect(updated.replayLog[0]).toMatchObject({
@@ -518,6 +519,7 @@ describe('pureDraftEngine > processReportAction', () => {
     expect(step2.selectedMap).toBeNull();
     expect(step2.picks[0].godId).toBeNull(); // Reset god selections for next game
     expect(step2.picks[1].godId).toBeNull();
+    expect(step2.picks.map(p => p.playerId)).toEqual([1, 2]);
     expect(step2.history).toHaveLength(1);
     expect(step2.history[0]).toMatchObject({
       gameNumber: 1,
@@ -526,6 +528,32 @@ describe('pureDraftEngine > processReportAction', () => {
       picksA: ['zeus'],
       picksB: ['isis'],
     });
+  });
+
+  it('Scenario C2: Should keep history chronological across multiple report-score transitions', () => {
+    const game1 = createDraftedLobby('reporting');
+    const game1VoteA = processReportAction(game1, 'A', 'A', 1000);
+    const advanced = processReportAction(game1VoteA, 'A', 'B', 2000);
+
+    const game2: Lobby = {
+      ...advanced,
+      status: 'drafting',
+      phase: 'reporting',
+      selectedMap: 'tundra',
+      picks: [
+        { playerId: 1, godId: 'poseidon', team: 'A', color: 'red', position: 'corner' },
+        { playerId: 2, godId: 'set', team: 'B', color: 'blue', position: 'corner' },
+      ],
+      reportVoteA: null,
+      reportVoteB: null,
+    };
+
+    const game2VoteA = processReportAction(game2, 'B', 'A', 3000);
+    const afterGame2 = processReportAction(game2VoteA, 'B', 'B', 4000);
+
+    expect(afterGame2.history.map(entry => entry.gameNumber)).toEqual([1, 2]);
+    expect(afterGame2.history.map(entry => entry.mapId)).toEqual(['oasis', 'tundra']);
+    expect(afterGame2.history.map(entry => entry.winner)).toEqual(['A', 'B']);
   });
 
   // Cenário D: Resultado finaliza a série
@@ -584,6 +612,45 @@ describe('pureDraftEngine > processReportAction', () => {
     expect(p1?.isRandom).toBe(false);
     expect(p1?.turnIndex).toBeUndefined();
     expect(p1?.playerName).toBe('P1');
+  });
+
+  it('Scenario E2: MCL Group Stage preserves a prefilled Game 3 map during next-game setup', () => {
+    const lobby = createDraftedLobby('reporting');
+    lobby.config = createConfig({
+      preset: 'MCL',
+      seriesType: '3G',
+    });
+    lobby.currentGame = 2;
+    lobby.seriesMaps = ['oasis', 'marsh', 'ghost_lake'];
+    lobby.selectedMap = 'marsh';
+
+    const step1 = processReportAction(lobby, 'B', 'A', 1000);
+    const step2 = processReportAction(step1, 'B', 'B', 2000);
+
+    expect(step2.currentGame).toBe(3);
+    expect(step2.selectedMap).toBe('ghost_lake');
+    expect(step2.picks.map(p => p.playerId)).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it('Scenario E3: FORJA non-official Game 3 keeps the system map turn and does not swap slot ids', () => {
+    const lobby = createDraftedLobby('reporting');
+    lobby.config = createConfig({
+      preset: 'FORJA',
+      tournamentStage: 'GROUP',
+      seriesType: '3G',
+      hasMap3RandomRoll: true,
+    });
+    lobby.currentGame = 2;
+    lobby.seriesMaps = ['oasis', 'marsh', 'ghost_lake'];
+    lobby.selectedMap = 'marsh';
+
+    const step1 = processReportAction(lobby, 'A', 'A', 1000);
+    const step2 = processReportAction(step1, 'A', 'B', 2000);
+
+    expect(step2.currentGame).toBe(3);
+    expect(step2.selectedMap).toBe('ghost_lake');
+    expect(step2.turnOrder[0]).toMatchObject({ player: 'ADMIN', action: 'PICK', target: 'MAP' });
+    expect(step2.picks.map(p => p.playerId)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
   it('Scenario F: MCL Playoffs per-game god bans reset when advancing to the next game', () => {

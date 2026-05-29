@@ -1,7 +1,8 @@
-import { LobbyConfig, DraftTurn, Lobby, PickEntry, DraftActionOptions } from '../types';
+import { LobbyConfig, DraftTurn, Lobby, DraftActionOptions } from '../types';
 import { getMCLPicks, getMCLTeamOrder, shouldUseGame2MclOrder } from '../data/draft';
-import { MAPS } from '../data/maps';
-import { MAJOR_GODS } from '../data/gods';
+import { MAPS, MAPS_BY_ID } from '../data/maps';
+import { MAJOR_GODS, MAJOR_GODS_BY_ID } from '../data/gods';
+import { phaseAfterDraftQueue } from '../domain/draft/rules/phaseTransitions';
 
 /**
  * Compute deterministic, immutable map and god draft turn sequences for the specified game and configuration.
@@ -339,18 +340,18 @@ export function processTurnAction(
   const applyAction = (id: string, turn: DraftTurn, team: 'A' | 'B', tPlayerId?: number, pName?: string): boolean => {
     if (turn.action === 'BAN') {
       if (turn.target === 'MAP') {
-        if (!MAPS.some(map => map.id === id)) return false;
+        if (!MAPS_BY_ID[id]) return false;
         if (nextLobby.mapBans.includes(id)) return false;
         if (nextLobby.seriesMaps.includes(id)) return false;
         nextLobby.mapBans.push(id);
       } else {
-        if (!MAJOR_GODS.some(god => god.id === id)) return false;
+        if (!MAJOR_GODS_BY_ID[id]) return false;
         if (nextLobby.bans.includes(id)) return false;
         nextLobby.bans.push(id);
       }
     } else if (turn.action === 'PICK') {
       if (turn.target === 'MAP') {
-        if (!MAPS.some(map => map.id === id)) return false;
+        if (!MAPS_BY_ID[id]) return false;
         if (nextLobby.mapBans.includes(id)) return false;
         if (nextLobby.seriesMaps.includes(id)) return false;
         if (nextLobby.mapPool && nextLobby.mapPool.includes(id)) return false;
@@ -393,7 +394,7 @@ export function processTurnAction(
         }
       } else {
         // God PICK
-        if (!MAJOR_GODS.some(god => god.id === id)) return false;
+        if (!MAJOR_GODS_BY_ID[id]) return false;
         const alreadyPickedByTeam = nextLobby.picks.some(p => p.team === team && p.godId === id);
         const alreadyPickedByAnyone = nextLobby.picks.some(p => p.godId === id);
         if (turn.modifier === 'EXCLUSIVE' && alreadyPickedByAnyone) return false;
@@ -568,23 +569,18 @@ export function processTurnAction(
 
   const nextTurn = nextLobby.turnOrder[nextLobby.turn];
   if (nextTurn) {
-    if (nextTurn.target === 'MAP') {
-      nextLobby.phase = nextTurn.action === 'BAN' ? 'map_ban' : 'map_pick';
-    } else {
-      if (currentTurn.target === 'MAP') {
-        if (nextLobby.seriesMaps.length > 0) {
-          nextLobby.selectedMap = nextLobby.seriesMaps[nextLobby.currentGame - 1];
-        }
+    if (nextTurn.target === 'GOD' && currentTurn.target === 'MAP') {
+      const currentMapIndex = nextLobby.currentGame - 1;
+      if (currentMapIndex >= 0 && currentMapIndex < nextLobby.seriesMaps.length) {
+        nextLobby.selectedMap = nextLobby.seriesMaps[currentMapIndex];
       }
-      nextLobby.phase = nextTurn.action === 'BAN' ? 'god_ban' : 'god_pick';
     }
+    nextLobby.phase = phaseAfterDraftQueue(nextLobby.turnOrder, nextLobby.turn, nextLobby.config.teamSize);
   } else {
-    if (nextLobby.config.teamSize === 1) {
-      nextLobby.phase = 'ready_picker';
+    nextLobby.phase = phaseAfterDraftQueue(nextLobby.turnOrder, nextLobby.turn, nextLobby.config.teamSize);
+    if (nextLobby.phase === 'ready_picker') {
       nextLobby.readyA = false;
       nextLobby.readyB = false;
-    } else {
-      nextLobby.phase = 'post_draft';
     }
     nextLobby.timerStart = null;
     nextLobby.turnEndsAt = null;

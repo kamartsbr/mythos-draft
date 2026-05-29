@@ -108,6 +108,21 @@ export const MAPS: MapInfo[] = [
   { id: 'senjogahara', name: 'Senjōgahara', image: 'https://static.wikia.nocookie.net/ageofempires/images/3/3c/Senjogahara_icon_AoMR.png/revision/latest?cb=20251004175039', isRanked: true, positions: DEFAULT_POSITIONS },
 ];
 
+export const MAPS_BY_ID: Record<string, MapInfo> = MAPS.reduce<Record<string, MapInfo>>((acc, map) => {
+  acc[map.id] = map;
+  return acc;
+}, {});
+
+const MAPS_BY_LOWER_ID: Record<string, MapInfo> = MAPS.reduce<Record<string, MapInfo>>((acc, map) => {
+  acc[map.id.toLowerCase()] = map;
+  return acc;
+}, {});
+
+export function getMapById(mapId: string | null | undefined): MapInfo | undefined {
+  if (!mapId) return undefined;
+  return MAPS_BY_ID[mapId] ?? MAPS_BY_LOWER_ID[mapId.toLowerCase()];
+}
+
 export const FORJA_MAP_POOL = [
   'anatolia', 'elysium', 'ghost_lake', 'gold_rush', 'marsh', 
   'mediterranean', 'megalopolis', 'oasis', 'tundra', 'valley_of_kings',

@@ -22,6 +22,8 @@ import { MAJOR_GODS } from '../../../data/gods';
 import { db } from '../../../firebase';
 import { collection, query, where, getDocs, doc, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { cn } from '../../../lib/utils';
+import { toSafeExternalUrl } from '../../../lib/safeExternalUrl';
+import { getForjaAvatarUrl } from '../utils/avatar';
 
 // ─── Tipos locais ─────────────────────────────────────────────────────────────
 
@@ -77,12 +79,12 @@ function resolveScheduledDate(value: ForjaLiveMatchSummary['scheduledDate']): Da
 
 function MemberRow({ member, isCaptain }: { member: ForjaPlayer; isCaptain: boolean }) {
   const [imgErr, setImgErr] = useState(false);
-  const fallback = `https://cdn.discordapp.com/embed/avatars/${(parseInt(member.discord_id.slice(-1)) || 0) % 6}.png`;
+  const avatarUrl = getForjaAvatarUrl(member.avatar_url, member.discord_id);
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
       <img
-        src={imgErr || !member.avatar_url ? fallback : member.avatar_url}
+        src={imgErr ? getForjaAvatarUrl(null, member.discord_id) : avatarUrl}
         onError={() => setImgErr(true)}
         alt={member.nick}
         referrerPolicy="no-referrer"
@@ -270,6 +272,7 @@ function MatchConfrontationCard({ lobby, isAdmin, onEdit, onDelete, teams, playe
   const isCompleted = lobby.status === 'completed' || lobby.status === 'finished';
   const scoreA = lobby.scoreA ?? lobby.teamAScore ?? 0;
   const scoreB = lobby.scoreB ?? lobby.teamBScore ?? 0;
+  const safeExternalLink = toSafeExternalUrl(lobby.externalLink);
 
   return (
     <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-6 flex flex-col justify-between gap-5 hover:border-amber-500/30 transition-all group relative overflow-hidden">
@@ -342,9 +345,9 @@ function MatchConfrontationCard({ lobby, isAdmin, onEdit, onDelete, teams, playe
               Lobby →
             </a>
           )}
-          {lobby.externalLink && (
+          {safeExternalLink && (
             <a
-              href={lobby.externalLink.startsWith('http') ? lobby.externalLink : `https://${lobby.externalLink}`}
+              href={safeExternalLink}
               target="_blank"
               rel="noreferrer"
               className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-black uppercase tracking-wider transition-all"
@@ -394,6 +397,7 @@ function MatchConfrontationCard({ lobby, isAdmin, onEdit, onDelete, teams, playe
  */
 function MatchCountdownCard({ match, isAdmin, onEdit }: { match: ForjaLiveMatchSummary; isAdmin?: boolean; onEdit?: (m: ForjaLiveMatchSummary) => void }) {
   const [timeLeft, setTimeLeft] = useState<string>('');
+  const safeStreamerUrl = toSafeExternalUrl(match.streamerUrl);
 
   const targetDate = useMemo(() => {
     if (!match.scheduledDate) return null;
@@ -485,9 +489,9 @@ function MatchCountdownCard({ match, isAdmin, onEdit }: { match: ForjaLiveMatchS
       </div>
 
       <div className="flex items-center gap-2 w-full md:w-auto">
-        {match.streamerUrl && (
+        {safeStreamerUrl && (
           <a 
-            href={match.streamerUrl.startsWith('http') ? match.streamerUrl : `https://${match.streamerUrl}`}
+            href={safeStreamerUrl}
             target="_blank" 
             rel="noreferrer"
             className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-[#9146FF]/10 hover:bg-[#9146FF] text-[#9146FF] hover:text-white border border-[#9146FF]/20 px-4 py-2 rounded-lg text-xs font-black transition-all"

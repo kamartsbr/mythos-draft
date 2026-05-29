@@ -13,10 +13,12 @@ Use this skill before editing or reviewing Firebase/Firestore-backed code in Myt
 3. Confirm writes use `serverTimestamp()` for production timestamps.
 4. Confirm upserts preserve `setDoc(..., { merge: true })` where existing data must survive.
 5. Confirm cleanup/delete paths are scoped to creator/admin-owned test or target data.
-6. Report Firestore impact, security impact, and rollback risk.
+6. Confirm public/client-created documents have bounded schemas in rules.
+7. Report Firestore impact, security impact, read/write economy impact, and rollback risk.
 
 ## Hard Rules
 - Do not introduce schema migration unless the user explicitly requests it.
 - Prefer additive optional fields with defaults for old lobbies.
 - Do not use local mock mode for real cross-browser sync validation.
 - Do not log secrets, tokens, Discord auth payloads, or private profile data.
+- Do not rely on Firestore rules to protect Admin SDK Cloud Function writes; callable/onRequest functions need explicit authorization checks.

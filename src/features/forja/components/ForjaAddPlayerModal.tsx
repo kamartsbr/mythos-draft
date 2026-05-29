@@ -6,9 +6,8 @@
 
 import React, { useState } from 'react';
 import { adminRegisterPlayer, parseAomProfileId } from '../services/forjaService';
+import { fetchAomProfileForPlayer } from '../services/aomProfileService';
 import { AVAILABILITY_LABELS } from '../forjaUtils';
-
-const FUNCTIONS_BASE_URL = 'https://us-central1-boxwood-plating-368522.cloudfunctions.net';
 
 interface Props {
   discordUserId: string;
@@ -68,21 +67,14 @@ export default function ForjaAddPlayerModal({ discordUserId, discordUsername, on
     setFetchError(null);
     setFetchedProfile(null);
     try {
-      const { getFunctions, httpsCallable } = await import('firebase/functions');
-      const functions = getFunctions();
-      const fetchAomProfile = httpsCallable(functions, 'fetchaomprofile');
-
-      const result = await fetchAomProfile({ id: profileId });
-      const json = result.data as any;
-      if (json.isError) throw new Error(json.message || 'Erro na API.');
-
-      const elo_efetivo = Math.round((json.elo_1v1 + json.elo_tg) / 2) || 0;
+      const profile = await fetchAomProfileForPlayer(profileId);
+      const elo_efetivo = Math.round((profile.elo_1v1 + profile.elo_tg) / 2) || 0;
       setFetchedProfile({
-        elo_1v1:     json.elo_1v1  ?? 0,
-        elo_tg:      json.elo_tg   ?? 0,
+        elo_1v1:     profile.elo_1v1,
+        elo_tg:      profile.elo_tg,
         elo_efetivo: elo_efetivo,
-        avatar_url:  json.avatar_url ?? null,
-        top_gods:    Array.isArray(json.top_gods) ? json.top_gods.slice(0, 5) : [],
+        avatar_url:  profile.avatar_url,
+        top_gods:    profile.top_gods,
       });
     } catch (e: any) {
       setFetchError(e?.message || 'Não foi possível buscar o perfil.');

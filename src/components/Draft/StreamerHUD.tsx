@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Lobby, PickEntry, Substitution } from '../../types';
 import { lobbyService } from '../../services/lobbyService';
-import { MAPS, MAJOR_GODS, TRANSLATIONS } from '../../constants';
+import { getMapById, getMajorGodById, TRANSLATIONS } from '../../constants';
 import { cn } from '../../lib/utils';
 import { Loader2, Eye, EyeOff, Settings2, ChevronLeft, ChevronRight, Trophy, Clock, X, RefreshCw, UserPlus, UserMinus, User } from 'lucide-react';
 import { useTimer } from '../../hooks/useTimer';
@@ -188,7 +188,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
         ? [{ godId: lobby.pickerVoteB, team: 'B', playerName: (lobby.teamBName || lobby.captain2Name) || 'Guest', playerId: 1 }]
         : teamBPicks);
 
-  const getGod = (godId: string | null) => MAJOR_GODS.find(g => g.id === godId);
+  const getGod = (godId: string | null) => getMajorGodById(godId);
 
   const isMyTeamTurn = (team: 'A' | 'B') => {
     if (isViewingHistory) return false;
@@ -797,7 +797,8 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
               className="w-full flex justify-center gap-8 pb-12"
             >
               {(Array.isArray(lobby.seriesMaps) ? lobby.seriesMaps : Object.values(lobby.seriesMaps || {})).map((mapId, idx) => {
-                const map = MAPS.find(m => m.id === mapId);
+                const mapIdText = typeof mapId === 'string' ? mapId : null;
+                const map = getMapById(mapIdText);
                 const isPlayed = idx < (manualMode ? displayGameIdx : lobby.currentGame - 1);
                 const isCurrent = idx === (manualMode ? displayGameIdx : lobby.currentGame - 1);
                 const winner = lobby.history?.[idx]?.winner;

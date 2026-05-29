@@ -13,10 +13,12 @@ Use this skill for any change that can alter draft state or turn flow.
 3. Check turn order for Game 1, a middle game, and final game.
 4. Check map bans, map picks, god bans, god picks, ready/report transitions, and next-game reset.
 5. Verify replay log and history remain chronological.
-6. State exact side effects prevented before finalizing.
+6. Model complex changes as a state machine: allowed states, transitions, guards, timeout behavior, reconnect behavior, and side effects.
+7. State exact side effects prevented before finalizing.
 
 ## Red Flags
 - Swapping `playerId` values.
 - Mutating visual order in persisted state.
 - Resetting bans/picks/history inconsistently between games.
 - Fixing one preset by changing shared logic without checking the others.
+- Letting the client decide an authoritative result without server/rules validation.

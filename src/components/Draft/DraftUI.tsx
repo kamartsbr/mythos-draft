@@ -15,7 +15,7 @@ import { DraftReplay } from './DraftReplay';
 import { SpectatorSummary } from './SpectatorSummary';
 import { Chat } from './Chat';
 import { cn } from '../../lib/utils';
-import { MAPS } from '../../constants';
+import { getMapById } from '../../constants';
 
 interface DraftUIProps {
   lobby: Lobby;
@@ -124,7 +124,7 @@ export function DraftUI(props: DraftUIProps) {
   const seriesMapsList = useMemo(() => (Array.isArray(lobby.seriesMaps) ? lobby.seriesMaps : Object.values(lobby.seriesMaps || {})) as string[], [lobby.seriesMaps]);
 
   const mapElements = useMemo(() => seriesMapsList.map((mapId, idx) => {
-    const map = MAPS.find(m => m.id.toLowerCase() === (mapId || '').toLowerCase());
+    const map = getMapById(mapId);
     const isCurrent = lobby.currentGame === idx + 1;
     const history = Array.isArray(lobby.history) ? lobby.history : [];
     const canView = history && history[idx];

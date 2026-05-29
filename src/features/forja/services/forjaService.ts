@@ -19,6 +19,11 @@ import {
   ForjaLiveMatchSummary, ForjaLiveMatchesSummaryDoc,
 } from '../types';
 import { FORJA_MAP_POOL } from '../../../data/maps';
+import { fetchAomProfileForPlayer, type AomApiResult } from './aomProfileService';
+import { getDiscordDefaultAvatarUrl } from '../utils/avatar';
+
+export { fetchAomProfileForPlayer } from './aomProfileService';
+export type { AomApiResult } from './aomProfileService';
 
 const PLAYERS_COL  = 'forja_players';
 const TEAMS_COL    = 'forja_teams';
@@ -388,43 +393,6 @@ export async function updatePlayerAdminFields(
 
   if (Object.keys(payload).length === 0) return;
   await updateDoc(doc(db, PLAYERS_COL, discordId), payload);
-}
-
-/**
- * Resultado da consulta à API do AoM para um jogador.
- */
-export interface AomApiResult {
-  elo_1v1: number;
-  elo_tg: number;
-  top_gods: Array<{ god: string; winRate: number; playRate: number }>;
-  alias: string;
-  avatar_url: string | null;
-}
-
-/**
- * Consulta a API do AoM (/api/forja/fetch-aom-profile) para um jogador
- * e retorna os dados sem salvar. O Admin decide o que aplicar.
- */
-export async function fetchAomProfileForPlayer(profileId: number): Promise<AomApiResult> {
-  const url = `https://us-central1-boxwood-plating-368522.cloudfunctions.net/fetchaomprofile?id=${profileId}`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? `Erro ${res.status} ao consultar API`);
-  }
-  
-  const json = await res.json();
-  if (!json.success || !json.data) {
-    throw new Error(json.error ?? 'Erro inesperado no retorno da API');
-  }
-  
-  return {
-    elo_1v1: json.data.elo_1v1,
-    elo_tg: json.data.elo_tg,
-    top_gods: json.data.top_gods,
-    alias: json.data.alias || String(profileId),
-    avatar_url: json.data.avatar_url,
-  };
 }
 
 /**
@@ -1058,8 +1026,7 @@ export async function adminRegisterPlayer(params: {
     throw new Error(`Jogador com Discord ID ${discordId} já está inscrito.`);
   }
 
-  // Avatar placeholder do CDN do Discord
-  const defaultAvatar = `https://cdn.discordapp.com/embed/avatars/${parseInt(discordId.slice(-1)) % 6}.png`;
+  const defaultAvatar = getDiscordDefaultAvatarUrl(discordId);
 
   const player: Omit<import('../types').ForjaPlayer, 'discord_id'> = {
     aom_profile_id:     aomProfileId,

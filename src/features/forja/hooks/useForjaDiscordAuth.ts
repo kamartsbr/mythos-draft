@@ -19,6 +19,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ForjaDiscordUser } from '../types';
 import { subscribeToForjaPlayer } from '../services/forjaService';
+import { getDiscordAvatarUrl } from '../utils/avatar';
 
 const STORAGE_KEY = 'forja_discord_user';
 const ADMIN_DISCORD_IDS_KEY = 'VITE_FORJA_ADMIN_IDS'; // ex: "123,456"
@@ -49,14 +50,6 @@ function buildDiscordOAuthUrl(): string {
     `&response_type=code` +
     `&scope=${scopes}`
   );
-}
-
-function getAvatarUrl(user: { id: string; avatar: string | null }): string {
-  if (user.avatar) {
-    return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128`;
-  }
-  const defaultIdx = (parseInt(user.id) % 6).toString();
-  return `https://cdn.discordapp.com/embed/avatars/${defaultIdx}.png`;
 }
 
 // IDs hardcoded como fallback de segurança (independem do .env)
@@ -129,7 +122,7 @@ async function authenticateDiscordWithFirebase(code: string): Promise<ForjaDisco
       discord_id:    discordUser.id,
       username:      discordUser.username,
       discriminator: '0', // Discord migrou para Pomelo (sem discriminator)
-      avatar_url:    getAvatarUrl(discordUser),
+      avatar_url:    getDiscordAvatarUrl(discordUser),
     };
   } catch (error) {
     console.error("Erro na autenticação Discord -> Firebase:", error);

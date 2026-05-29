@@ -6,8 +6,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ForjaDiscordUser, ForjaRegistrationForm, AomProfileData } from '../types';
 import { parseAomProfileId, registerForjaPlayer, isPlayerRegistered, isPlayerBanned } from '../services/forjaService';
+import { fetchAomProfileForPlayer, toAomProfileData } from '../services/aomProfileService';
 import { useForjaContent } from '../hooks/useForjaContent';
 import { useForjaSettings } from '../hooks/useForjaSettings';
+import { getForjaAvatarUrl } from '../utils/avatar';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const AVAILABILITY_OPTIONS = [
@@ -62,30 +64,8 @@ function useAomProfileVerify() {
   const verify = useCallback(async (profileId: number) => {
     setLoading(true); setError(null); setData(null);
     try {
-      // Use Firebase Functions httpsCallable
-      const { getFunctions, httpsCallable } = await import('firebase/functions');
-      const functions = getFunctions();
-      const fetchAomProfile = httpsCallable(functions, 'fetchaomprofile');
-
-      const result = await fetchAomProfile({ id: profileId });
-      const json = result.data as any;
-
-      if (!json || json.isError) throw new Error(json?.message ?? 'Perfil não encontrado');
-
-      // Calculate effective ELO
-      const elo_efetivo = Math.round((json.elo_1v1 + json.elo_tg) / 2) || 0;
-
-      // Mapeia o retorno da API para o formato que o Form espera
-      setData({
-        profile_id: profileId,
-        avatar_url: json.avatar_url,
-        elo_1v1: json.elo_1v1,
-        elo_tg: json.elo_tg,
-        elo_efetivo: elo_efetivo,
-        top_gods: json.top_gods,
-        alias: null,
-        verified: false
-      });
+      const profile = await fetchAomProfileForPlayer(profileId);
+      setData(toAomProfileData(profileId, profile));
     } catch (e: any) {
       const msg = e.message === 'Failed to fetch' 
         ? 'Servidor de stats indisponível no momento'
@@ -218,12 +198,9 @@ function RulesAccordion() {
  */
 function ProfilePreview({ data, discordAvatar }: { data: any; discordAvatar: string }) {
   const [imgErr, setImgErr] = useState(false);
-  const getAvatarFallback = () => {
-    if (discordAvatar) return discordAvatar;
-    const defaultD = `https://cdn.discordapp.com/embed/avatars/${parseInt(String(data?.profile_id || 0).slice(-1)) % 6}.png`;
-    return defaultD;
-  };
-  const src = (!imgErr && data?.avatar_url) ? data.avatar_url : getAvatarFallback();
+  const src = (!imgErr && data?.avatar_url)
+    ? data.avatar_url
+    : getForjaAvatarUrl(discordAvatar, data?.profile_id);
 
   return (
     <div className="forja-reg-profile-preview">
@@ -659,26 +636,8 @@ export default function ForjaRegistrationModal({ isOpen, onClose, discordUser, o
       
       if (profileId) {
         try {
-          // Fallback obrigatório: timeout ou erro na Cloud Function ignora silenciosamente
-          const { getFunctions, httpsCallable } = await import('firebase/functions');
-          const functions = getFunctions();
-          const fetchAomProfile = httpsCallable(functions, 'fetchaomprofile');
-
-          const result = await fetchAomProfile({ id: profileId });
-          const json = result.data as any;
-          if (json && !json.isError) {
-              const elo_efetivo = Math.round((json.elo_1v1 + json.elo_tg) / 2) || 0;
-              finalData = {
-                profile_id: profileId,
-                avatar_url: json.avatar_url,
-                elo_1v1: json.elo_1v1,
-                elo_tg: json.elo_tg,
-                elo_efetivo: elo_efetivo,
-                top_gods: json.top_gods,
-                alias: null,
-                verified: false
-              };
-          }
+          const profile = await fetchAomProfileForPlayer(profileId);
+          finalData = toAomProfileData(profileId, profile);
         } catch (fetchError) {
           console.warn('[Forja] Erro silencioso ao buscar dados adicionais no cadastro:', fetchError);
         }

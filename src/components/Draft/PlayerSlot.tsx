@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { User, Shield, Dices } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { PickEntry } from '../../types';
-import { MAJOR_GODS } from '../../constants';
+import { getMajorGodById } from '../../constants';
 
 interface PlayerSlotProps {
   pick: PickEntry;
@@ -37,8 +37,8 @@ interface PlayerSlotProps {
  * @returns The React element representing the player slot UI
  */
 export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, hoveredGodId, timeLeft, timerDuration, visualColor, visualOrder }: PlayerSlotProps) {
-  const committedGod = pick.godId ? MAJOR_GODS.find(g => g.id === pick.godId) : undefined;
-  const previewGod = !pick.godId && isCurrentTurn && hoveredGodId ? MAJOR_GODS.find(g => g.id === hoveredGodId) : undefined;
+  const committedGod = getMajorGodById(pick.godId);
+  const previewGod = !pick.godId && isCurrentTurn ? getMajorGodById(hoveredGodId) : undefined;
   const god = committedGod || previewGod;
   const isHovered = Boolean(previewGod);
 

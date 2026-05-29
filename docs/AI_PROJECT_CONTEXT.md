@@ -2,6 +2,8 @@
 
 > **Para IAs:** Este documento é a fonte da verdade sobre o projeto. Leia-o inteiro antes de qualquer implementação. Ele contém armadilhas conhecidas, padrões obrigatórios e decisões de arquitetura críticas.
 
+> **Atualizacao 2026-05-28 / branch `feature/engine-rework-ux-polish`:** leia tambem `docs/BRANCH_AUDIT_2026-05-28.md`. Nesta branch, a auth Discord da Forja usa troca server-side por Firebase custom token, `request.auth.uid` deve ser o Discord ID apos login, `fetchaomprofile` e `updateEloSnapshot` sao callable functions, e `updateEloSnapshot` exige autorizacao admin server-side.
+
 ---
 
 ## 1. O QUE É O PROJETO

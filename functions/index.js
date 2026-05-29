@@ -22,8 +22,25 @@ const TARGET_ORIGIN = 'https://mythosdraft.com';
 
 const DISCORD_CLIENT_SECRET = defineSecret('DISCORD_CLIENT_SECRET');
 const DISCORD_CLIENT_ID = defineSecret('DISCORD_CLIENT_ID');
+const OWNER_DISCORD_IDS = new Set([
+  '272372054526001152',
+]);
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function assertForjaAdmin(request, db) {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  if (OWNER_DISCORD_IDS.has(uid)) return;
+
+  const playerSnap = await db.doc(`forja_players/${uid}`).get();
+  if (!playerSnap.exists || playerSnap.data()?.role !== 'admin') {
+    throw new HttpsError('permission-denied', 'Forja admin permission required');
+  }
+}
 
 /**
  * Perform an HTTP GET and retry on HTTP 429 (Too Many Requests) using incremental backoff.
@@ -105,6 +122,8 @@ async function fetchVercelData(profileId, nick = null) {
 // --- FUNÇÃO 1: Snapshot (Uso do Admin) ---
 exports.updateEloSnapshot = onCall({ timeoutSeconds: 540, memory: "256MiB", secrets: [VERCEL_API_KEY] }, async (request) => {
   const db = getFirestore("mythosdraft-prod");
+  await assertForjaAdmin(request, db);
+
   const snapshot = await db.collection("forja_players").get();
   
   const players = snapshot.docs

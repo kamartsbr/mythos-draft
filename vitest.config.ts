@@ -6,6 +6,7 @@ export default defineConfig({
   test: {
     // Simula um ambiente de browser (necessário para importações de módulos React)
     environment: 'node',
+    include: ['src/**/*.{test,spec}.{ts,tsx,js,jsx}'],
     // Inclui tipagem automática de expect, it, describe etc.
     globals: true,
     // Relatório limpo com diff colorido

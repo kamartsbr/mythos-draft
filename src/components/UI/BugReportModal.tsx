@@ -16,21 +16,23 @@ export function BugReportModal({ isOpen, onClose, t, lobbyId }: BugReportModalPr
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!description.trim()) return;
 
     setIsSubmitting(true);
+    setSubmitError(null);
     
     try {
       await addDoc(collection(db, 'bug_reports'), {
-        lobbyId,
-        description,
+        lobbyId: lobbyId.slice(0, 128),
+        description: description.trim().slice(0, 2000),
         timestamp: serverTimestamp(),
-        userAgent: navigator.userAgent,
+        userAgent: navigator.userAgent.slice(0, 512),
         status: 'new',
-        url: window.location.href
+        url: window.location.href.slice(0, 1024)
       });
 
       setIsSubmitting(false);
@@ -45,14 +47,7 @@ export function BugReportModal({ isOpen, onClose, t, lobbyId }: BugReportModalPr
     } catch (error) {
       console.error('Error submitting bug report:', error);
       setIsSubmitting(false);
-      // Fallback success to not frustrate user if it's a minor network blip, 
-      // but in a real app we'd show an error.
-      setIsSuccess(true);
-      setTimeout(() => {
-        setIsSuccess(false);
-        setDescription('');
-        onClose();
-      }, 3000);
+      setSubmitError(t.reportFailed || 'Could not send the report. Please try again.');
     }
   };
 
@@ -131,8 +126,14 @@ export function BugReportModal({ isOpen, onClose, t, lobbyId }: BugReportModalPr
                       placeholder={t.bugPlaceholder || "What happened? (e.g., 'The timer froze during Game 2')"}
                       className="w-full h-48 bg-slate-950 border-2 border-slate-800 rounded-3xl p-6 text-slate-200 focus:outline-none focus:border-amber-500/50 transition-all resize-none placeholder:text-slate-800 text-sm leading-relaxed shadow-inner"
                       required
+                      maxLength={2000}
                       autoFocus
                     />
+                    {submitError && (
+                      <p className="text-xs font-bold text-red-400" role="alert">
+                        {submitError}
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex items-start gap-4 p-5 bg-amber-500/5 border border-amber-500/10 rounded-3xl">

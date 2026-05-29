@@ -19,6 +19,7 @@ import {
   ForjaLiveMatchSummary, ForjaLiveMatchesSummaryDoc,
 } from '../types';
 import { FORJA_MAP_POOL } from '../../../data/maps';
+import { forjaLobbyToLiveMatchSummary, isOfficialForjaLobbyData, sortForjaLiveMatches } from '../forjaMatchSummary';
 
 const PLAYERS_COL  = 'forja_players';
 const TEAMS_COL    = 'forja_teams';
@@ -30,6 +31,7 @@ const FORJA_SESSION_CACHE_PREFIX = 'mythos_forja_cache_';
 const FORJA_SHORT_CACHE_MS = 5 * 60 * 1000;
 const FORJA_LONG_CACHE_MS = 15 * 60 * 1000;
 const FORJA_LIVE_MATCHES_DOC = 'live_matches_summary';
+const FORJA_OFFICIAL_MATCHES_CACHE_KEY = 'official_matches';
 
 type SessionCacheEnvelope<T> = {
   expiresAt: number;
@@ -688,6 +690,46 @@ export function updateCachedLiveMatchesSummary(data: ForjaLiveMatchesSummaryDoc 
   } else {
     clearSessionCache('live_matches_summary');
   }
+}
+
+export let cachedOfficialMatches: ForjaLiveMatchSummary[] | null = null;
+export let officialMatchesPromise: Promise<ForjaLiveMatchSummary[]> | null = null;
+
+export function invalidateForjaOfficialMatchesCache(): void {
+  cachedOfficialMatches = null;
+  officialMatchesPromise = null;
+  clearSessionCache(FORJA_OFFICIAL_MATCHES_CACHE_KEY);
+}
+
+export async function getForjaOfficialMatchesOnce(): Promise<ForjaLiveMatchSummary[]> {
+  if (cachedOfficialMatches) return cachedOfficialMatches;
+  const cachedSession = readSessionCache<ForjaLiveMatchSummary[]>(FORJA_OFFICIAL_MATCHES_CACHE_KEY);
+  if (cachedSession) {
+    cachedOfficialMatches = cachedSession;
+    officialMatchesPromise = Promise.resolve(cachedSession);
+    return cachedSession;
+  }
+
+  if (!officialMatchesPromise) {
+    officialMatchesPromise = getDocs(query(collection(db, 'lobbies'), where('config.preset', '==', 'FORJA')))
+      .then((snap) => {
+        const matches = sortForjaLiveMatches(
+          snap.docs
+            .map((snapshot) => ({ id: snapshot.id, ...snapshot.data() }))
+            .filter((lobby) => isOfficialForjaLobbyData(lobby))
+            .map((lobby) => forjaLobbyToLiveMatchSummary(lobby))
+        );
+        writeSessionCache(FORJA_OFFICIAL_MATCHES_CACHE_KEY, matches, FORJA_SHORT_CACHE_MS);
+        return matches;
+      })
+      .catch((error) => {
+        console.error('Erro ao buscar partidas oficiais Forja', error);
+        return [];
+      });
+  }
+
+  cachedOfficialMatches = await officialMatchesPromise;
+  return cachedOfficialMatches;
 }
 
 

@@ -118,6 +118,7 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
   const teamMapPicks = optimisticBans
     .filter(step => step.action === 'PICK' && step.target === 'MAP' && step.player === team && step.gameNumber === lobby.currentGame);
 
+  // hasPerMapBans intentionally ignores banCount: it means exactly one fresh god ban per team each game.
   const godBanSlotCount = lobby.config.hasPerMapBans
     ? 1
     : (lobby.config.hasBans ? lobby.config.banCount : 0);

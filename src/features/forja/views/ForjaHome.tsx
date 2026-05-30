@@ -14,7 +14,7 @@ import {
   getForjaLiveMatchesSummaryOnce,
   getForjaOfficialMatchesOnce,
 } from '../services/forjaService';
-import { mergeForjaLiveMatches, resolveForjaMatchDateTime } from '../forjaMatchSummary';
+import { formatForjaDateInputValue, mergeForjaLiveMatches, resolveForjaMatchDateTime } from '../forjaMatchSummary';
 import { FORJA_MAP_POOL, getMCLPicks } from '../../../constants';
 import { LobbyConfig, Lobby } from '../../../types';
 import { lobbyService, generateId, lobbyToForjaLiveMatchSummary, upsertForjaLiveMatchSummary, removeForjaLiveMatchSummary } from '../../../services/lobbyService';
@@ -49,13 +49,6 @@ const PLAYOFF_FORMAT_LABEL: Record<string, string> = {
 };
 
 const UPCOMING_MATCH_LIMIT = 6;
-
-function formatDateInputValue(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
 
 /**
  * Renders a team member row with avatar, nickname, and an optional captain badge.
@@ -617,9 +610,10 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
       const scheduledTime = (form.elements.namedItem('time') as HTMLInputElement).value;
       const streamerUrl = (form.elements.namedItem('streamer') as HTMLInputElement).value;
 
-      const [year, month, day] = scheduledDate.split('-').map(Number);
-      const [hours, minutes] = (scheduledTime || '00:00').split(':').map(Number);
-      const finalDate = new Date(year, month - 1, day, hours, minutes);
+      const finalDate = resolveForjaMatchDateTime(scheduledDate, scheduledTime);
+      if (!finalDate) {
+        throw new Error('Data da partida invalida.');
+      }
 
       await updateDoc(lobbyRef, {
         'config.scheduledDate': finalDate,
@@ -699,9 +693,7 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
       captainB_discordId: teamB?.captain_id,
       scheduledDate: (() => {
         if (!scheduledDate) return null;
-        const [year, month, day] = scheduledDate.split('-').map(Number);
-        const [hours, minutes] = (scheduledTime || '00:00').split(':').map(Number);
-        return new Date(year, month - 1, day, hours, minutes);
+        return resolveForjaMatchDateTime(scheduledDate, scheduledTime);
       })(),
       scheduledTime: scheduledTime || null,
       streamerUrl: streamerUrl || null,
@@ -852,7 +844,13 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
   // Cold summary fetch
   useEffect(() => {
     let isMounted = true;
-    Promise.all([getForjaLiveMatchesSummaryOnce(), getForjaOfficialMatchesOnce({ forceRefresh: true })])
+    Promise.all([
+      getForjaLiveMatchesSummaryOnce(),
+      getForjaOfficialMatchesOnce().catch((err) => {
+        console.error('Erro ao buscar partidas oficiais Forja', err);
+        return [];
+      }),
+    ])
       .then(([summary, officialMatches]) => {
         if (!isMounted) return;
         const summaryMatches = Array.isArray(summary?.matches) ? summary.matches : [];
@@ -1436,10 +1434,11 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
                   name="date"
                   type="date"
                   defaultValue={(() => {
-                    const sd = editingMatch.scheduledDate;
-                    if (typeof sd === 'string') return sd;
-                    const d = resolveForjaMatchDateTime(sd, editingMatch.scheduledTime);
-                    if (d) return formatDateInputValue(d);
+                    const d = resolveForjaMatchDateTime(
+                      editingMatch.scheduledDate,
+                      editingMatch.scheduledTime
+                    );
+                    if (d) return formatForjaDateInputValue(d);
                     return '';
                   })()}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-amber-500"

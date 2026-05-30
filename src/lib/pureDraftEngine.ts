@@ -6,19 +6,22 @@ import { phaseAfterDraftQueue } from '../domain/draft/rules/phaseTransitions';
 
 const timestampToMillis = (value: unknown): number | null => {
   if (typeof value === 'number') {
-    return value;
+    if (!Number.isFinite(value)) return null;
+    return value < 10000000000 ? value * 1000 : value;
   }
   if (typeof value === 'string') {
     const parsed = new Date(value).getTime();
-    return Number.isNaN(parsed) ? null : parsed;
+    return Number.isFinite(parsed) ? parsed : null;
   }
   if (value instanceof Date) {
-    return value.getTime();
+    const parsed = value.getTime();
+    return Number.isFinite(parsed) ? parsed : null;
   }
   if (value && typeof value === 'object' && 'toMillis' in value) {
     const toMillis = (value as { toMillis?: () => number }).toMillis;
     if (typeof toMillis === 'function') {
-      return toMillis.call(value);
+      const parsed = toMillis.call(value);
+      return Number.isFinite(parsed) ? parsed : null;
     }
   }
   return null;
@@ -299,7 +302,7 @@ export function processTurnAction(
   // Timer Check
   let isTimerExpired = false;
   const turnEndTime = timestampToMillis(lobby.turnEndsAt);
-  if (turnEndTime !== null) {
+  if (turnEndTime !== null && Number.isFinite(turnEndTime)) {
     isTimerExpired = currentTimeMs >= turnEndTime + 1000;
   } else {
     const startTime = timestampToMillis(lobby.timerStart);

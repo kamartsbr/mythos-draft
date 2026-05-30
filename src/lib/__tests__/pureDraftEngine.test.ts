@@ -395,7 +395,7 @@ describe('pureDraftEngine > processTurnAction', () => {
   it('Scenario D2: Should reject expired manual picks instead of replacing them with random actions', () => {
     const mapLobby = createBaseLobby('drafting');
     mapLobby.phase = 'map_pick';
-    mapLobby.timerStart = 1000;
+    mapLobby.timerStart = 1;
     mapLobby.turnOrder = [
       { player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' }
     ];
@@ -404,7 +404,7 @@ describe('pureDraftEngine > processTurnAction', () => {
     expect(() => processTurnAction(mapLobby, 'ghost_lake', 'A', undefined, undefined, { isRandom: true }, 63_000)).toThrow("Turn timed out");
 
     const godLobby = createBaseLobby('drafting');
-    godLobby.timerStart = 1000;
+    godLobby.timerStart = 1;
     godLobby.picks = [
       { playerId: 1, godId: null, team: 'A', color: 'red', position: 'corner', playerName: 'PlayerOne' }
     ];
@@ -416,8 +416,8 @@ describe('pureDraftEngine > processTurnAction', () => {
   it('Scenario D3: Should use turnEndsAt as the authoritative timer boundary when present', () => {
     const lobby = createBaseLobby('drafting');
     lobby.phase = 'map_pick';
-    lobby.timerStart = 1000;
-    lobby.turnEndsAt = 120_000;
+    lobby.timerStart = 1;
+    lobby.turnEndsAt = 120;
     lobby.turnOrder = [
       { player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' }
     ];

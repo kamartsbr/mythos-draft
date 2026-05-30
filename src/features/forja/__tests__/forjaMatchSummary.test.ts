@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatForjaDateInputValue,
   forjaLobbyToLiveMatchSummary,
   isOfficialForjaLobbyData,
   mergeForjaLiveMatches,
@@ -109,21 +110,21 @@ describe('FORJA match summary helpers', () => {
     expect(parsed?.getTime()).toBe(1800000000500);
   });
 
-  it('combines a local scheduled date string with the saved time', () => {
+  it('combines a scheduled date string with the saved BRT time', () => {
     const parsed = resolveForjaMatchDateTime('2026-05-30', '22:30');
 
-    expect(parsed?.getFullYear()).toBe(2026);
-    expect(parsed?.getMonth()).toBe(4);
-    expect(parsed?.getDate()).toBe(30);
-    expect(parsed?.getHours()).toBe(22);
-    expect(parsed?.getMinutes()).toBe(30);
+    expect(parsed?.toISOString()).toBe('2026-05-31T01:30:00.000Z');
+  });
+
+  it('formats date inputs from the BRT tournament day', () => {
+    expect(formatForjaDateInputValue(new Date('2026-05-31T01:30:00.000Z'))).toBe('2026-05-30');
   });
 
   it('applies scheduled time to cached Firestore timestamp objects', () => {
     const parsed = resolveForjaMatchDateTime({ seconds: 1800000000, nanoseconds: 0 }, '22:30');
 
-    expect(parsed?.getHours()).toBe(22);
-    expect(parsed?.getMinutes()).toBe(30);
+    expect(parsed?.getUTCHours()).toBe(1);
+    expect(parsed?.getUTCMinutes()).toBe(30);
   });
 
   it('lets fresh official lobby data override stale compact summaries', () => {
@@ -185,5 +186,32 @@ describe('FORJA match summary helpers', () => {
     ]);
 
     expect(ordered.map((match) => match.id)).toEqual(['early', 'late']);
+  });
+
+  it('sorts same-day matches by scheduled time before name', () => {
+    const ordered = sortForjaLiveMatches([
+      {
+        id: 'late-alpha',
+        name: 'Alpha',
+        status: 'waiting',
+        scoreA: 0,
+        scoreB: 0,
+        stage: 'GROUP',
+        scheduledDate: '2026-05-30',
+        scheduledTime: '22:30',
+      },
+      {
+        id: 'early-zulu',
+        name: 'Zulu',
+        status: 'waiting',
+        scoreA: 0,
+        scoreB: 0,
+        stage: 'GROUP',
+        scheduledDate: '2026-05-30',
+        scheduledTime: '20:00',
+      },
+    ]);
+
+    expect(ordered.map((match) => match.id)).toEqual(['early-zulu', 'late-alpha']);
   });
 });

@@ -674,21 +674,20 @@ export function invalidateForjaOfficialMatchesCache(): void {
 }
 
 async function fetchOfficialForjaMatches(): Promise<ForjaLiveMatchSummary[]> {
-  return getDocs(query(collection(db, 'lobbies'), where('config.preset', '==', 'FORJA')))
-    .then((snap) => {
-      const matches = sortForjaLiveMatches(
-        snap.docs
-          .map((snapshot) => ({ id: snapshot.id, ...snapshot.data() }))
-          .filter((lobby) => isOfficialForjaLobbyData(lobby))
-          .map((lobby) => forjaLobbyToLiveMatchSummary(lobby))
-      );
-      writeSessionCache(FORJA_OFFICIAL_MATCHES_CACHE_KEY, matches, FORJA_SHORT_CACHE_MS);
-      return matches;
-    })
-    .catch((error) => {
-      console.error('Erro ao buscar partidas oficiais Forja', error);
-      return [];
-    });
+  try {
+    const snap = await getDocs(query(collection(db, 'lobbies'), where('config.preset', '==', 'FORJA')));
+    const matches = sortForjaLiveMatches(
+      snap.docs
+        .map((snapshot) => ({ id: snapshot.id, ...snapshot.data() }))
+        .filter((lobby) => isOfficialForjaLobbyData(lobby))
+        .map((lobby) => forjaLobbyToLiveMatchSummary(lobby))
+    );
+    writeSessionCache(FORJA_OFFICIAL_MATCHES_CACHE_KEY, matches, FORJA_SHORT_CACHE_MS);
+    return matches;
+  } catch (error) {
+    console.error('Erro ao buscar partidas oficiais Forja', error);
+    throw error;
+  }
 }
 
 export async function getForjaOfficialMatchesOnce(options: ForjaReadOptions = {}): Promise<ForjaLiveMatchSummary[]> {
@@ -703,13 +702,17 @@ export async function getForjaOfficialMatchesOnce(options: ForjaReadOptions = {}
   }
 
   if (options.forceRefresh) {
-    cachedOfficialMatches = await fetchOfficialForjaMatches();
-    officialMatchesPromise = Promise.resolve(cachedOfficialMatches);
-    return cachedOfficialMatches;
+    const matches = await fetchOfficialForjaMatches();
+    cachedOfficialMatches = matches;
+    officialMatchesPromise = Promise.resolve(matches);
+    return matches;
   }
 
   if (!officialMatchesPromise) {
-    officialMatchesPromise = fetchOfficialForjaMatches();
+    officialMatchesPromise = fetchOfficialForjaMatches().catch((error) => {
+      officialMatchesPromise = null;
+      throw error;
+    });
   }
 
   cachedOfficialMatches = await officialMatchesPromise;

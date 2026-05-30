@@ -3,6 +3,46 @@ import { Lobby, DraftActionOptions } from '../types';
 import { MAPS, MAJOR_GODS } from '../constants';
 import { getServerTime } from '../lib/serverTime';
 
+const timestampToMillis = (value: unknown): number | null => {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return null;
+    return value < 10000000000 ? value * 1000 : value;
+  }
+  if (typeof value === 'string') {
+    const parsed = new Date(value).getTime();
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (value instanceof Date) {
+    const parsed = value.getTime();
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (value && typeof value === 'object' && 'toMillis' in value) {
+    const toMillis = (value as { toMillis?: () => number }).toMillis;
+    if (typeof toMillis === 'function') {
+      const parsed = toMillis.call(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+  }
+  if (value && typeof value === 'object' && 'toDate' in value) {
+    const toDate = (value as { toDate?: () => Date }).toDate;
+    if (typeof toDate === 'function') {
+      const parsed = toDate.call(value).getTime();
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+  }
+  return null;
+};
+
+const resolveTurnEndTime = (lobby: Lobby): number | null => {
+  const explicitEndTime = timestampToMillis(lobby.turnEndsAt);
+  if (explicitEndTime !== null) return explicitEndTime;
+
+  const startTime = timestampToMillis(lobby.timerStart);
+  if (startTime === null) return null;
+
+  return startTime + ((lobby.config?.timerDuration || 60) * 1000);
+};
+
 /**
  * Manage and expose the lobby draft countdown and trigger automatic draft actions when the timer elapses.
  *
@@ -71,10 +111,6 @@ export function useTimer(
       return;
     }
 
-    if (isProcessing.current) return;
-
-    // Retry logic: If we triggered for this turn but it failed (turn hasn't changed), 
-    // allow retry after 5 seconds to prevent permanent stall.
     const nowMs = Date.now();
 
     if (isProcessing.current) return;
@@ -85,48 +121,36 @@ export function useTimer(
       return;
     }
 
-    // 🔥 SOLUÇÃO: Timer Absoluto (Sincronização Perfeita)
-    // Usamos o 'turnEndsAt' persistido no Firestore como fonte única da verdade.
-    let endTime: number;
-    const tea = currentLobby.turnEndsAt;
-    
-    if (tea && typeof (tea as any).toMillis === 'function') {
-      endTime = (tea as any).toMillis();
-    } else if (tea && typeof (tea as any).toDate === 'function') {
-      endTime = (tea as any).toDate().getTime();
-    } else if (typeof tea === 'number') {
-      endTime = tea < 10000000000 ? tea * 1000 : tea;
-    } else {
-      // Fallback para lógica antiga caso turnEndsAt não exista (migração)
-      let startTime: number;
-      const ts = currentLobby.timerStart;
-      if (ts && typeof (ts as any).toMillis === 'function') {
-        startTime = (ts as any).toMillis();
-      } else if (typeof ts === 'number') {
-        startTime = ts < 10000000000 ? ts * 1000 : ts;
-      } else {
-        startTime = Date.now();
-      }
-      const duration = currentLobby.config?.timerDuration || 60;
-      endTime = startTime + (duration * 1000);
+    // Prefer the persisted turnEndsAt boundary; fall back to timerStart for old lobbies.
+    const endTime = resolveTurnEndTime(currentLobby);
+    if (endTime === null) {
+      setTimeLeft(null);
+      return;
     }
-
     const duration = currentLobby.config?.timerDuration || 60;
     const nowServer = await getServerTime();
     const latestLobby = lobbyRef.current;
+    const latestEndTime = latestLobby ? resolveTurnEndTime(latestLobby) : null;
     if (
       !latestLobby ||
       latestLobby.id !== currentLobby.id ||
       latestLobby.currentGame !== currentLobby.currentGame ||
       latestLobby.turn !== currentLobby.turn ||
-      latestLobby.phase !== currentLobby.phase
+      latestLobby.phase !== currentLobby.phase ||
+      latestLobby.status !== currentLobby.status ||
+      Boolean(latestLobby.isPaused) !== Boolean(currentLobby.isPaused) ||
+      timestampToMillis(latestLobby.turnEndsAt) !== timestampToMillis(currentLobby.turnEndsAt) ||
+      timestampToMillis(latestLobby.timerStart) !== timestampToMillis(currentLobby.timerStart) ||
+      latestEndTime === null ||
+      latestEndTime !== endTime
     ) {
       return;
     }
 
-    const msRemaining = endTime - nowServer;
+    const activeEndTime = latestEndTime;
+    const msRemaining = activeEndTime - nowServer;
     const remaining = Math.max(0, Math.ceil(msRemaining / 1000));
-    const elapsed = Math.max(0, (nowServer - (endTime - (duration * 1000))) / 1000);
+    const elapsed = Math.max(0, (nowServer - (activeEndTime - (duration * 1000))) / 1000);
 
     // Protection: if the calculated time is suspiciously large (e.g. > 1 hour),
     // it likely indicates a clock sync issue or a corrupted timestamp.

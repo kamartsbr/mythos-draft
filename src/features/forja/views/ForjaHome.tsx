@@ -14,7 +14,7 @@ import {
   getForjaLiveMatchesSummaryOnce,
   getForjaOfficialMatchesOnce,
 } from '../services/forjaService';
-import { mergeForjaLiveMatches } from '../forjaMatchSummary';
+import { mergeForjaLiveMatches, resolveForjaMatchDateTime } from '../forjaMatchSummary';
 import { FORJA_MAP_POOL, getMCLPicks } from '../../../constants';
 import { LobbyConfig, Lobby } from '../../../types';
 import { lobbyService, generateId, lobbyToForjaLiveMatchSummary, upsertForjaLiveMatchSummary, removeForjaLiveMatchSummary } from '../../../services/lobbyService';
@@ -48,22 +48,13 @@ const PLAYOFF_FORMAT_LABEL: Record<string, string> = {
   double_elim: 'Eliminação Dupla',
 };
 
-function resolveScheduledDate(value: ForjaLiveMatchSummary['scheduledDate']): Date | null {
-  if (!value) return null;
-  if (typeof value === 'string') {
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-  if (typeof value === 'number') {
-    return new Date(value);
-  }
-  if (value instanceof Date) {
-    return value;
-  }
-  if (typeof value === 'object' && typeof value.toDate === 'function') {
-    return value.toDate();
-  }
-  return null;
+const UPCOMING_MATCH_LIMIT = 6;
+
+function formatDateInputValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 /**
@@ -400,26 +391,7 @@ function MatchCountdownCard({ match, isAdmin, onEdit }: { match: ForjaLiveMatchS
   const safeStreamerUrl = toSafeExternalUrl(match.streamerUrl);
 
   const targetDate = useMemo(() => {
-    if (!match.scheduledDate) return null;
-    
-    // 🔥 ULTIMATE TIMEZONE FIX: Split matemático para garantir fuso local sem conversão UTC
-    if (typeof match.scheduledDate === 'string') {
-      const parts = match.scheduledDate.split('-').map(Number);
-      if (parts.length !== 3) return resolveScheduledDate(match.scheduledDate);
-      const [year, month, day] = parts;
-      const [hour, minute] = (match.scheduledTime || '00:00').split(':').map(Number);
-      return new Date(year, month - 1, day, hour, minute);
-    }
-
-    // Se for Timestamp do Firebase, pegamos os componentes para reconstruir em local
-    const d = resolveScheduledDate(match.scheduledDate);
-    if (!d) return null;
-    if (match.scheduledTime) {
-      const [hh, mm] = match.scheduledTime.split(':').map(Number);
-      return new Date(d.getFullYear(), d.getMonth(), d.getDate(), hh, mm);
-    }
-
-    return d;
+    return resolveForjaMatchDateTime(match.scheduledDate, match.scheduledTime);
   }, [match.scheduledDate, match.scheduledTime]);
 
   useEffect(() => {
@@ -660,8 +632,14 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
       setLobbies(prev => prev.map(l => l.id === editingMatch.id ? { 
         ...l, 
         scheduledDate: finalDate,
-        scheduledTime, 
-        streamerUrl 
+        scheduledTime,
+        streamerUrl,
+        config: {
+          ...l.config,
+          scheduledDate: finalDate,
+          scheduledTime,
+          streamerUrl,
+        },
       } : l));
 
       setEditingMatch(null);
@@ -874,11 +852,11 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
   // Cold summary fetch
   useEffect(() => {
     let isMounted = true;
-    Promise.all([getForjaLiveMatchesSummaryOnce(), getForjaOfficialMatchesOnce()])
+    Promise.all([getForjaLiveMatchesSummaryOnce(), getForjaOfficialMatchesOnce({ forceRefresh: true })])
       .then(([summary, officialMatches]) => {
         if (!isMounted) return;
         const summaryMatches = Array.isArray(summary?.matches) ? summary.matches : [];
-        setLobbies(mergeForjaLiveMatches(officialMatches, summaryMatches));
+        setLobbies(mergeForjaLiveMatches(summaryMatches, officialMatches));
         setDataLoaded(true);
       })
       .catch((err) => {
@@ -933,22 +911,12 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
   const totalPlayers = rankedPlayers.filter(p => !p.is_reserve).length;
   const isRegistered = rankedPlayers.some(p => p.discord_id === discordUser?.discord_id);
 
-  // Upcoming lobbies (não finalizados, máx 3)
+  // Upcoming lobbies (não finalizados, máx 6)
   const upcoming = lobbies
     .filter(l => l.status !== 'completed' && l.status !== 'finished')
     .sort((a, b) => {
-      const getMs = (l: any) => {
-        if (!l.scheduledDate) return Number.MAX_SAFE_INTEGER;
-        if (typeof l.scheduledDate === 'number') return l.scheduledDate;
-        if (l.scheduledDate?.toMillis) return l.scheduledDate.toMillis();
-
-        if (typeof l.scheduledDate === 'string') {
-          const [year, month, day] = l.scheduledDate.split('-').map(Number);
-          const [hour, minute] = (l.scheduledTime || '00:00').split(':').map(Number);
-          const parsed = new Date(year, month - 1, day, hour, minute).getTime();
-          return isNaN(parsed) ? Number.MAX_SAFE_INTEGER : parsed;
-        }
-        return Number.MAX_SAFE_INTEGER;
+      const getMs = (l: ForjaLiveMatchSummary) => {
+        return resolveForjaMatchDateTime(l.scheduledDate, l.scheduledTime)?.getTime() ?? Number.MAX_SAFE_INTEGER;
       };
 
       const aMs = getMs(a);
@@ -962,7 +930,7 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
 
       return aMs - bMs;
     })
-    .slice(0, 3);
+    .slice(0, UPCOMING_MATCH_LIMIT);
 
   return (
     <section className="forja-view forja-view--home">
@@ -1470,8 +1438,8 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
                   defaultValue={(() => {
                     const sd = editingMatch.scheduledDate;
                     if (typeof sd === 'string') return sd;
-                    const d = resolveScheduledDate(sd);
-                    if (d) return d.toISOString().split('T')[0];
+                    const d = resolveForjaMatchDateTime(sd, editingMatch.scheduledTime);
+                    if (d) return formatDateInputValue(d);
                     return '';
                   })()}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-amber-500"

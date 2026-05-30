@@ -150,7 +150,7 @@ export function DraftBoard(props: DraftBoardProps) {
   if (viewGameIndex !== null) {
     return (
       <div className="flex-1 flex flex-col md:grid md:grid-cols-12 overflow-y-auto md:overflow-hidden custom-scrollbar">
-        <div className="order-2 md:order-1 col-span-12 md:col-span-3 border-t md:border-t-0 md:border-r border-slate-900 md:max-h-[calc(100vh-280px)] md:overflow-y-auto custom-scrollbar">
+        <div className="order-2 md:order-1 col-span-12 md:col-span-3 border-t md:border-t-0 md:border-r border-slate-900 md:h-full md:min-h-0 md:overflow-hidden">
           <TeamColumn 
             team="A" 
             lobby={lobby} 
@@ -184,7 +184,7 @@ export function DraftBoard(props: DraftBoardProps) {
             myTeam={props.myTeam || null}
           />
         </div>
-        <div className="order-3 col-span-12 md:col-span-3 border-t md:border-t-0 md:border-l border-slate-900 md:max-h-[calc(100vh-280px)] md:overflow-y-auto custom-scrollbar">
+        <div className="order-3 col-span-12 md:col-span-3 border-t md:border-t-0 md:border-l border-slate-900 md:h-full md:min-h-0 md:overflow-hidden">
           <TeamColumn 
             team="B" 
             lobby={lobby} 
@@ -736,7 +736,7 @@ export function DraftBoard(props: DraftBoardProps) {
         </AnimatePresence>
 
         {/* Team A */}
-        <div className="order-2 md:order-1 col-span-12 md:col-span-3 border-t md:border-t-0 md:border-r border-slate-900 md:max-h-[calc(100vh-280px)] md:overflow-y-auto custom-scrollbar">
+        <div className="order-2 md:order-1 col-span-12 md:col-span-3 border-t md:border-t-0 md:border-r border-slate-900 md:h-full md:min-h-0 md:overflow-hidden">
           <TeamColumn 
             team="A" 
             lobby={lobby} 
@@ -766,7 +766,7 @@ export function DraftBoard(props: DraftBoardProps) {
         </div>
 
         {/* Team B */}
-        <div className="order-3 col-span-12 md:col-span-3 border-t md:border-t-0 md:border-l border-slate-900 md:max-h-[calc(100vh-280px)] md:overflow-y-auto custom-scrollbar">
+        <div className="order-3 col-span-12 md:col-span-3 border-t md:border-t-0 md:border-l border-slate-900 md:h-full md:min-h-0 md:overflow-hidden">
           <TeamColumn 
             team="B" 
             lobby={lobby} 
@@ -814,7 +814,7 @@ export function DraftBoard(props: DraftBoardProps) {
       </AnimatePresence>
 
       {/* Team A */}
-      <div className="order-2 md:order-1 col-span-12 md:col-span-3 border-t md:border-t-0 md:border-r border-slate-900 md:max-h-[calc(100vh-280px)] md:overflow-y-auto custom-scrollbar">
+      <div className="order-2 md:order-1 col-span-12 md:col-span-3 border-t md:border-t-0 md:border-r border-slate-900 md:h-full md:min-h-0 md:overflow-hidden">
         <TeamColumn 
           team="A" 
           lobby={lobby} 
@@ -960,7 +960,7 @@ export function DraftBoard(props: DraftBoardProps) {
       </div>
 
       {/* Team B */}
-      <div className="order-3 col-span-12 md:col-span-3 border-t md:border-t-0 md:border-l border-slate-900 md:max-h-[calc(100vh-280px)] md:overflow-y-auto custom-scrollbar">
+      <div className="order-3 col-span-12 md:col-span-3 border-t md:border-t-0 md:border-l border-slate-900 md:h-full md:min-h-0 md:overflow-hidden">
         <TeamColumn 
           team="B" 
           lobby={lobby} 

@@ -25,6 +25,12 @@ const createConfig = (overrides: Partial<LobbyConfig>): LobbyConfig => ({
   ...overrides,
 });
 
+const turnSignature = (turn: ReturnType<typeof calculateNextTurnOrder>['godOrder'][number]) => ({
+  player: turn.player,
+  action: turn.action,
+  target: turn.target,
+});
+
 describe('pureDraftEngine > calculateNextTurnOrder', () => {
   // Scenario A: Preset MCL or FORJA, Game 1
   it('Scenario A: MCL/FORJA Preset, Game 1 should start with Team A and generate standard structure', () => {
@@ -161,6 +167,25 @@ describe('pureDraftEngine > calculateNextTurnOrder', () => {
     expect(mapOrder).toHaveLength(0);
   });
 
+  it('Scenario D0: MCL Playoffs Game 1 inserts host and guest god bans before god picks', () => {
+    const config = createConfig({
+      preset: 'MCL_PLAYOFFS',
+      hasPerMapBans: true,
+      seriesType: 'BO5',
+    });
+
+    const { mapOrder, godOrder } = calculateNextTurnOrder(config, 1, null);
+
+    expect(mapOrder).toEqual([
+      { player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' },
+    ]);
+    expect(godOrder.slice(0, 3).map(turnSignature)).toEqual([
+      { player: 'A', action: 'BAN', target: 'GOD' },
+      { player: 'B', action: 'BAN', target: 'GOD' },
+      { player: 'A', action: 'PICK', target: 'GOD' },
+    ]);
+  });
+
   it('Scenario D: MCL Playoffs Game 2 should let the previous loser pick map, ban first, and pick first', () => {
     const config = createConfig({
       preset: 'MCL_PLAYOFFS',
@@ -177,6 +202,41 @@ describe('pureDraftEngine > calculateNextTurnOrder', () => {
     expect(afterGuestWin.mapOrder[0].player).toBe('A');
     expect(afterGuestWin.godOrder[0]).toMatchObject({ player: 'A', action: 'BAN' });
     expect(afterGuestWin.godOrder.find(turn => turn.action === 'PICK')?.player).toBe('A');
+  });
+
+  it('Scenario D2: MCL Playoffs final predetermined map still has per-map god bans before god picks', () => {
+    const config = createConfig({
+      preset: 'MCL_PLAYOFFS',
+      hasPerMapBans: true,
+      seriesType: 'BO5',
+    });
+
+    const { mapOrder, godOrder } = calculateNextTurnOrder(config, 5, 'A');
+
+    expect(mapOrder).toHaveLength(0);
+    expect(godOrder.slice(0, 3).map(turnSignature)).toEqual([
+      { player: 'B', action: 'BAN', target: 'GOD' },
+      { player: 'A', action: 'BAN', target: 'GOD' },
+      { player: 'B', action: 'PICK', target: 'GOD' },
+    ]);
+  });
+
+  it('Scenario D3: MCL Playoffs stale config still prefers per-map bans over generic ban settings', () => {
+    const config = createConfig({
+      preset: 'MCL_PLAYOFFS',
+      hasPerMapBans: true,
+      hasBans: true,
+      banCount: 0,
+      seriesType: 'BO5',
+    });
+
+    const { godOrder } = calculateNextTurnOrder(config, 1, null);
+
+    expect(godOrder.slice(0, 3).map(turnSignature)).toEqual([
+      { player: 'A', action: 'BAN', target: 'GOD' },
+      { player: 'B', action: 'BAN', target: 'GOD' },
+      { player: 'A', action: 'PICK', target: 'GOD' },
+    ]);
   });
 
   it('Scenario E: MCL Tiebreaker should follow MCL group-stage parity with ban phase added', () => {
@@ -351,6 +411,21 @@ describe('pureDraftEngine > processTurnAction', () => {
 
     expect(() => processTurnAction(godLobby, 'huitzilopochtli', 'A', 1, 'PlayerOne', undefined, 63_000)).toThrow("Turn timed out");
     expect(() => processTurnAction(godLobby, 'huitzilopochtli', 'A', 1, 'PlayerOne', { isRandom: true }, 63_000)).toThrow("Turn timed out");
+  });
+
+  it('Scenario D3: Should use turnEndsAt as the authoritative timer boundary when present', () => {
+    const lobby = createBaseLobby('drafting');
+    lobby.phase = 'map_pick';
+    lobby.timerStart = 1000;
+    lobby.turnEndsAt = 120_000;
+    lobby.turnOrder = [
+      { player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' }
+    ];
+
+    const updated = processTurnAction(lobby, 'oasis', 'A', undefined, undefined, undefined, 63_000);
+    expect(updated.selectedMap).toBe('oasis');
+
+    expect(() => processTurnAction(lobby, 'oasis', 'A', undefined, undefined, undefined, 121_000)).toThrow("Turn timed out");
   });
 
   // Scenario E: Auto-pick MAP on timeout or null actionId
@@ -653,6 +728,32 @@ describe('pureDraftEngine > processReportAction', () => {
     expect(step2.picks.map(p => p.playerId)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
+  it('Scenario E4: FORJA official Game 3 admin override finishes with the final score for standings', () => {
+    const lobby = createDraftedLobby('reporting');
+    lobby.config = createConfig({
+      preset: 'FORJA',
+      tournamentStage: 'GROUP',
+      isOfficialForjaMatch: true,
+      forjaTeamA: 'team-a',
+      forjaTeamB: 'team-b',
+      forjaGroupId: 'B',
+      seriesType: '3G',
+    });
+    lobby.currentGame = 3;
+    lobby.scoreA = 1;
+    lobby.scoreB = 1;
+    lobby.selectedMap = 'ghost_lake';
+
+    const result = processReportAction(lobby, 'A', 'A', 1000, { isAdminOverride: true });
+
+    expect(result.status).toBe('finished');
+    expect(result.phase).toBe('finished');
+    expect(result.scoreA).toBe(2);
+    expect(result.scoreB).toBe(1);
+    expect(result.history.map(entry => entry.gameNumber)).toEqual([3]);
+    expect(result.history[0]).toMatchObject({ mapId: 'ghost_lake', winner: 'A' });
+  });
+
   it('Scenario F: MCL Playoffs per-game god bans reset when advancing to the next game', () => {
     const lobby = createDraftedLobby('reporting');
     lobby.config = createConfig({
@@ -661,12 +762,33 @@ describe('pureDraftEngine > processReportAction', () => {
       seriesType: 'BO5',
     });
     lobby.bans = ['zeus'];
+    lobby.replayLog = [
+      {
+        gameNumber: 1,
+        turnIndex: 1,
+        player: 'A',
+        action: 'BAN',
+        target: 'GOD',
+        id: 'zeus',
+        timestamp: '1970-01-01T00:00:01.000Z',
+      },
+      {
+        gameNumber: 1,
+        turnIndex: 2,
+        player: 'B',
+        action: 'BAN',
+        target: 'GOD',
+        id: 'isis',
+        timestamp: '1970-01-01T00:00:02.000Z',
+      },
+    ];
 
     const step1 = processReportAction(lobby, 'A', 'A', 1000);
     const step2 = processReportAction(step1, 'A', 'B', 2000);
 
     expect(step2.currentGame).toBe(2);
     expect(step2.bans).toHaveLength(0);
+    expect(step2.replayLog.map(entry => entry.id)).toEqual(['zeus', 'isis']);
     expect(step2.turnOrder[0]).toMatchObject({ player: 'B', action: 'PICK', target: 'MAP' });
     expect(step2.turnOrder[1]).toMatchObject({ player: 'B', action: 'BAN', target: 'GOD' });
   });

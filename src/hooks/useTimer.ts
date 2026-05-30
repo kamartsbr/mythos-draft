@@ -113,7 +113,19 @@ export function useTimer(
 
     const duration = currentLobby.config?.timerDuration || 60;
     const nowServer = await getServerTime();
-    const remaining = Math.max(0, Math.floor((endTime - nowServer) / 1000));
+    const latestLobby = lobbyRef.current;
+    if (
+      !latestLobby ||
+      latestLobby.id !== currentLobby.id ||
+      latestLobby.currentGame !== currentLobby.currentGame ||
+      latestLobby.turn !== currentLobby.turn ||
+      latestLobby.phase !== currentLobby.phase
+    ) {
+      return;
+    }
+
+    const msRemaining = endTime - nowServer;
+    const remaining = Math.max(0, Math.ceil(msRemaining / 1000));
     const elapsed = Math.max(0, (nowServer - (endTime - (duration * 1000))) / 1000);
 
     // Protection: if the calculated time is suspiciously large (e.g. > 1 hour),
@@ -137,7 +149,7 @@ export function useTimer(
       return;
     }
     
-    const shouldTimeoutNow = remaining === 0 || elapsed >= duration;
+    const shouldTimeoutNow = msRemaining <= 0 || elapsed >= duration;
 
     if (shouldTimeoutNow) {
       isProcessing.current = true;

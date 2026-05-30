@@ -57,9 +57,11 @@ export function PickBanPanel({
   const [showSnakeWarning, setShowSnakeWarning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingMapId, setPendingMapId] = useState<string | null>(null);
+  const [pendingGodBanId, setPendingGodBanId] = useState<string | null>(null);
 
   useEffect(() => {
     setPendingMapId(null);
+    setPendingGodBanId(null);
   }, [lobby.turn, lobby.phase, lobby.selectedMap]);
 
   useEffect(() => {
@@ -110,6 +112,7 @@ export function PickBanPanel({
   };
   
   const currentTurn = lobby.turnOrder[lobby.turn];
+  const isTurnExpired = timeLeft !== null && !Number.isNaN(timeLeft) && timeLeft <= 0;
 
   const selectedPositionId = useMemo(() => {
     if (lobby.phase !== 'god_pick') return undefined;
@@ -130,11 +133,13 @@ export function PickBanPanel({
   useEffect(() => {
     if (!isMyTurn) {
       setSelectedGodId(null);
+      setPendingGodBanId(null);
     }
   }, [isMyTurn]);
 
   useEffect(() => {
     setSelectedGodId(null);
+    setPendingGodBanId(null);
   }, [lobby.turn]);
 
   useEffect(() => {
@@ -264,7 +269,7 @@ export function PickBanPanel({
   const mapGridElements = useMemo(() => availableMaps.map(map => {
     const isBanned = isMapBanned(map.id);
     const isPicked = isMapPicked(map.id);
-    const isDisabled = isBanned || isPicked || !isMyTurn;
+    const isDisabled = isBanned || isPicked || !isMyTurn || isTurnExpired;
 
     return (
       <motion.button
@@ -343,13 +348,14 @@ export function PickBanPanel({
         )}
       </motion.button>
     );
-  }), [availableMaps, isMyTurn, lobby.mapBans, lobby.seriesMaps, optimisticAction, t.mapNames, handleAction, pendingMapId]);
+  }), [availableMaps, isMyTurn, isTurnExpired, lobby.mapBans, lobby.seriesMaps, optimisticAction, t.mapNames, handleAction, pendingMapId]);
 
   const godGridElements = useMemo(() => filteredGods.map(god => {
     const isBanned = isGodBanned(god.id);
     const isPicked = isGodPicked(god.id);
     const isPickedByMyTeam = isGodPickedByMyTeam(god.id);
-    const isDisabled = isBanned || (lobby.config.isExclusive && isPicked) || isPickedByMyTeam || !isMyTurn;
+    const isDisabled = isBanned || (lobby.config.isExclusive && isPicked) || isPickedByMyTeam || !isMyTurn || isTurnExpired;
+    const isPendingGodBan = pendingGodBanId === god.id;
 
     return (
       <motion.button
@@ -363,6 +369,8 @@ export function PickBanPanel({
           if (isDisabled) return;
           if ((lobby.config.preset === 'MCL' || lobby.config.preset === 'FORJA' || lobby.config.preset === 'MCL_PLAYOFFS' || lobby.config.preset === 'MCL_TIEBREAKER') && lobby.phase === 'god_pick') {
             setSelectedGodId(prev => prev === god.id ? null : god.id);
+          } else if (lobby.phase === 'god_ban') {
+            setPendingGodBanId(prev => prev === god.id ? null : god.id);
           } else {
             handleAction(god.id);
           }
@@ -373,6 +381,7 @@ export function PickBanPanel({
           "relative aspect-square rounded-xl overflow-hidden border transition-all duration-300 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500",
           isBanned ? "border-red-600 shadow-[0_0_10px_rgba(220,38,38,0.4)]" :
           (isPicked && lobby.config.isExclusive) || isPickedByMyTeam ? "border-blue-900/50 opacity-40 grayscale" :
+          isPendingGodBan ? "border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.5)] scale-105" :
           selectedGodId === god.id ? "border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)] scale-105" :
           isMyTurn ? "border-slate-800 hover:border-amber-500 shadow-lg hover:shadow-amber-500/10" :
           "border-slate-800 opacity-60 grayscale"
@@ -434,7 +443,11 @@ export function PickBanPanel({
         </AnimatePresence>
       </motion.button>
     );
-  }), [filteredGods, isMyTurn, lobby.bans, lobby.picks, lobby.config.isExclusive, lobby.config.preset, lobby.phase, selectedGodId, optimisticAction, handleAction]);
+  }), [filteredGods, isMyTurn, isTurnExpired, lobby.bans, lobby.picks, lobby.config.isExclusive, lobby.config.preset, lobby.phase, selectedGodId, pendingGodBanId, optimisticAction, handleAction]);
+
+  const pendingGodBan = pendingGodBanId
+    ? MAJOR_GODS.find(god => god.id === pendingGodBanId)
+    : null;
 
   if (isViewingHistory && historyGame) {
     const gameMap = MAPS.find(m => m.id.toLowerCase() === (historyGame.mapId || '').toLowerCase());
@@ -665,7 +678,7 @@ export function PickBanPanel({
         </div>
 
         {/* Confirm Map Pick Button */}
-        {isMyTurn && pendingMapId && (
+        {isMyTurn && pendingMapId && !isTurnExpired && (
           <div className="mt-6 flex justify-center shrink-0">
             <motion.button
               data-testid="confirm-map-pick"
@@ -688,7 +701,7 @@ export function PickBanPanel({
   }
 
   return (
-    <div className="flex flex-col h-full p-4 md:p-8 relative overflow-hidden">
+    <div className="flex flex-col h-full p-4 md:p-6 relative overflow-hidden">
       {/* Phase Transition Overlay */}
       <AnimatePresence>
         {showPhaseTransition && (
@@ -730,8 +743,8 @@ export function PickBanPanel({
       </AnimatePresence>
 
       {lobby.selectedMap && (
-        <div className="mb-4 flex flex-col items-center bg-slate-900/20 px-3 py-5 rounded-2xl border border-slate-900/40 shrink-0 w-full">
-          <div className="w-[min(630px,65vw)] mx-auto shrink-0 overflow-visible rounded-2xl flex items-center justify-center">
+        <div className="mb-3 flex flex-col items-center bg-slate-900/20 px-3 py-3 rounded-2xl border border-slate-900/40 shrink-0 w-full">
+          <div className="w-[min(550px,56vw)] mx-auto shrink-0 overflow-visible rounded-2xl flex items-center justify-center">
             <MapVisualizer 
               lobby={lobby} 
               isVisible={() => true} 
@@ -840,6 +853,40 @@ export function PickBanPanel({
           {godGridElements}
         </div>
       </div>
+
+      {/* Confirm God Ban Button */}
+      {lobby.phase === 'god_ban' && isMyTurn && (
+        <div className="sticky bottom-0 left-0 right-0 mt-3 p-3 bg-slate-950/90 border border-red-500/30 rounded-2xl backdrop-blur-md z-[20] shadow-2xl">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="min-w-0 text-center sm:text-left">
+              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-red-400">
+                {t.godBanPhase || 'God Ban Phase'}
+              </div>
+              <div className="text-xs font-bold text-slate-400 truncate">
+                {pendingGodBan ? (pendingGodBan.name || pendingGodBan.id) : (t.selectGodFirst || 'Select a God first')}
+              </div>
+            </div>
+            <button
+              data-testid="confirm-god-ban"
+              disabled={!pendingGodBanId || isTurnExpired}
+              onClick={() => {
+                if (!pendingGodBanId || isTurnExpired) return;
+                handleAction(pendingGodBanId);
+                setPendingGodBanId(null);
+              }}
+              className={cn(
+                "w-full sm:w-auto px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
+                pendingGodBanId && !isTurnExpired
+                  ? "bg-red-500 hover:bg-red-400 text-white shadow-lg shadow-red-500/20"
+                  : "bg-slate-900 border border-slate-800 text-slate-600 cursor-not-allowed"
+              )}
+            >
+              <X className="w-4 h-4" />
+              {t.confirmGodBan || 'Confirm God Ban'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* MCL / FORJA Player Selection */}
       {(lobby.config.preset === 'MCL' || lobby.config.preset === 'FORJA' || lobby.config.preset === 'MCL_PLAYOFFS' || lobby.config.preset === 'MCL_TIEBREAKER') && currentTurn?.target === 'GOD' && currentTurn?.action === 'PICK' && isMyTurn && (

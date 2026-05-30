@@ -67,7 +67,7 @@ export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, ho
       animate={{ opacity: 1, x: 0 }}
       style={{ order: visualOrder ?? 1 }}
       className={cn(
-        "relative group h-24 rounded-2xl overflow-hidden border transition-all duration-500",
+        "relative group h-20 rounded-2xl overflow-hidden border transition-all duration-500",
         isCurrentTurn 
           ? "border-amber-500 shadow-[0_0_25px_rgba(245,158,11,0.4)] bg-amber-500/10 ring-2 ring-amber-500/20" 
           : "border-slate-800 bg-slate-900/40 hover:border-slate-700"
@@ -90,10 +90,10 @@ export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, ho
         </motion.div>
       )}
 
-      <div className="relative z-10 h-full flex items-center px-4 gap-4">
+      <div className="relative z-10 h-full flex items-center px-3 gap-3">
         {/* Player Color Indicator */}
         <div 
-          className="w-2 h-14 rounded-full shadow-lg transition-colors duration-500"
+          className="w-2 h-12 rounded-full shadow-lg transition-colors duration-500"
           style={{ backgroundColor: showColor ? (visualColor ?? pick.color) : '#1e293b', opacity: isHovered ? 0.5 : 1 }}
         />
 
@@ -113,14 +113,14 @@ export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, ho
             )}
           </div>
           <h3 className={cn(
-            "text-xl font-black truncate drop-shadow-md transition-colors duration-500",
+            "text-lg font-black truncate drop-shadow-md transition-colors duration-500",
             (god || !preset || preset !== 'MCL') ? "text-white" : "text-slate-700",
             isHovered && "text-slate-400"
           )}>
             {displayName}
           </h3>
           <p className={cn(
-            "text-xs font-black uppercase tracking-widest flex items-center gap-1",
+            "text-[11px] font-black uppercase tracking-widest flex items-center gap-1",
             god && !isHovered ? "text-amber-500" : "text-slate-600"
           )}>
             {god ? god.name : t.selecting}
@@ -130,7 +130,7 @@ export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, ho
 
         {/* God Icon */}
         <div className={cn(
-          "w-16 h-16 rounded-2xl border-2 overflow-hidden transition-all duration-500 relative shadow-2xl",
+          "w-14 h-14 rounded-xl border-2 overflow-hidden transition-all duration-500 relative shadow-2xl",
           god ? "border-amber-500/50 rotate-0 scale-100" : "border-slate-800 rotate-12 scale-90 bg-slate-950 flex items-center justify-center",
           isHovered && "opacity-60 border-dashed"
         )}>

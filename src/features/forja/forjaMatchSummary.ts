@@ -9,20 +9,53 @@ type ForjaLobbySummarySource = {
   config?: Partial<LobbyConfig> | null;
 };
 
-function getForjaDateMillis(value: ForjaLiveMatchSummary['scheduledDate'] | undefined): number {
-  if (!value) return 0;
-  if (typeof value === 'number') return value < 10000000000 ? value * 1000 : value;
+export function resolveForjaDateValue(value: ForjaLiveMatchSummary['scheduledDate'] | undefined): Date | null {
+  if (!value) return null;
+  if (typeof value === 'number') return new Date(value < 10000000000 ? value * 1000 : value);
   if (typeof value === 'string') {
-    const parsed = new Date(value).getTime();
-    return Number.isNaN(parsed) ? 0 : parsed;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
-  if (value instanceof Date) return value.getTime();
-  if (typeof value.toMillis === 'function') return value.toMillis();
+  if (value instanceof Date) return value;
+  if (typeof value.toMillis === 'function') return new Date(value.toMillis());
   if (typeof value.toDate === 'function') {
     const date = value.toDate();
-    return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+    return Number.isNaN(date.getTime()) ? null : date;
   }
-  return 0;
+  if (typeof value === 'object' && typeof value.seconds === 'number') {
+    const millis = (value.seconds * 1000) + Math.floor((value.nanoseconds ?? 0) / 1000000);
+    const date = new Date(millis);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  return null;
+}
+
+export function resolveForjaMatchDateTime(
+  scheduledDate: ForjaLiveMatchSummary['scheduledDate'] | undefined,
+  scheduledTime?: string | null
+): Date | null {
+  if (!scheduledDate) return null;
+
+  if (typeof scheduledDate === 'string') {
+    const parts = scheduledDate.split('-').map(Number);
+    if (parts.length === 3 && parts.every(Number.isFinite)) {
+      const [year, month, day] = parts;
+      const [hour, minute] = (scheduledTime || '00:00').split(':').map(Number);
+      return new Date(year, month - 1, day, hour || 0, minute || 0);
+    }
+  }
+
+  const date = resolveForjaDateValue(scheduledDate);
+  if (!date) return null;
+  if (scheduledTime) {
+    const [hour, minute] = scheduledTime.split(':').map(Number);
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour || 0, minute || 0);
+  }
+  return date;
+}
+
+function getForjaDateMillis(value: ForjaLiveMatchSummary['scheduledDate'] | undefined): number {
+  return resolveForjaDateValue(value)?.getTime() ?? 0;
 }
 
 export function isOfficialForjaLobbyData(lobby: unknown): boolean {
@@ -52,6 +85,9 @@ export function forjaLobbyToLiveMatchSummary(lobby: ForjaLobbySummarySource): Fo
       forjaGroupId: config.forjaGroupId,
       tournamentStage: config.tournamentStage,
       externalLink: config.externalDraftLink ?? '',
+      scheduledDate: config.scheduledDate as ForjaLiveMatchSummary['scheduledDate'],
+      scheduledTime: config.scheduledTime,
+      streamerUrl: config.streamerUrl,
     },
   };
 }

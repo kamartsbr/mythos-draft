@@ -176,6 +176,7 @@ export function useDraftConfig() {
         newConfig.seriesType = defaultPlayoffsPhase.seriesType;
         newConfig.customGameCount = defaultPlayoffsPhase.gameCount;
         newConfig.mapBanCount = 0;
+        newConfig.hasBans = false;
         newConfig.banCount = 0;
         newConfig.acePick = false;
         newConfig.isExclusive = false;

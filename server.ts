@@ -173,7 +173,7 @@ async function startServer() {
   });
 
   const publicOrigin = 'https://mythosdraft.com';
-  app.get(/^\/forja(?:\/.*)?$/, (_req, res) => {
+  app.get(/^\/forja(?:\/.*)?$/, (_req, res, next) => {
     const meta = {
       title: 'Forja de Hefesto - Mythos Draft',
       description: 'O maior torneio 3v3 de Age of Mythology: Retold da comunidade BR/PT. Inscreva-se e forje seu legado!',
@@ -188,6 +188,10 @@ async function startServer() {
         const html = fs.readFileSync(indexPath, 'utf-8');
         return res.type('html').send(injectShareMeta(html, meta));
       }
+    }
+
+    if (isDev) {
+      return next();
     }
 
     res.type('html').send(renderSharePage(meta));

@@ -124,6 +124,9 @@ export interface ForjaLiveMatchSummary {
     forjaGroupId?: string;
     tournamentStage?: string;
     externalLink?: string;
+    scheduledDate?: FirestoreTimestamp;
+    scheduledTime?: string;
+    streamerUrl?: string;
   };
 }
 

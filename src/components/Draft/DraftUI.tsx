@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Dices } from 'lucide-react';
 import { useTimer } from '../../hooks/useTimer';
-import { useSoundNotifications } from '../../hooks/useSoundNotifications';
 import { soundService } from '../../services/soundService';
 import { Lobby } from '../../types';
 import { DraftHeader } from './DraftHeader';
@@ -86,7 +85,6 @@ interface DraftUIProps {
 export function DraftUI(props: DraftUIProps) {
   const { lobby, isCaptain1, isCaptain2, handleAction, handlePickerAction, t, setLobbyId, onHome, error, setError, getShareableUrl, updateRoster, clearSubs, requestReset, respondReset, showBugModal, setShowBugModal, forceStartDraft } = props;
   const { timeLeft } = useTimer(lobby, isCaptain1, isCaptain2, handleAction, handlePickerAction);
-  useSoundNotifications(lobby, timeLeft, isCaptain1, isCaptain2);
   
   const [viewGameIndex, setViewGameIndex] = useState<number | null>(null);
   const [showReplay, setShowReplay] = useState(false);

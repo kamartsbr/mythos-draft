@@ -401,6 +401,10 @@ export function LobbyCreation({
                             customGameCount: defaultPlayoffsPhase.gameCount,
                             mclPlayoffsPhase: defaultPlayoffsPhase.id,
                             playoffsLastMap: defaultPlayoffsPhase.finalMap,
+                            hasBans: false,
+                            banCount: 0,
+                            hasPerMapBans: true,
+                            godBanScope: 'PER_MAP',
                           }));
                         }}
                         className={cn(

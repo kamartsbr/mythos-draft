@@ -4,6 +4,29 @@ import { MAPS, MAPS_BY_ID } from '../data/maps';
 import { MAJOR_GODS, MAJOR_GODS_BY_ID } from '../data/gods';
 import { phaseAfterDraftQueue } from '../domain/draft/rules/phaseTransitions';
 
+const timestampToMillis = (value: unknown): number | null => {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return null;
+    return value < 10000000000 ? value * 1000 : value;
+  }
+  if (typeof value === 'string') {
+    const parsed = new Date(value).getTime();
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (value instanceof Date) {
+    const parsed = value.getTime();
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (value && typeof value === 'object' && 'toMillis' in value) {
+    const toMillis = (value as { toMillis?: () => number }).toMillis;
+    if (typeof toMillis === 'function') {
+      const parsed = toMillis.call(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+  }
+  return null;
+};
+
 /**
  * Compute deterministic, immutable map and god draft turn sequences for the specified game and configuration.
  *
@@ -138,7 +161,22 @@ export function calculateNextTurnOrder(
     (usesLoserPriority && gameNumber > 1 && lastWinner === 'A');
 
   // God Ban Phase
-  if (cfg.hasBans && (cfg.godBanScope !== 'SERIES' || gameNumber === 1)) {
+  if (cfg.hasPerMapBans) {
+    godOrder.push({
+      player: startsWithB ? 'B' : 'A',
+      action: 'BAN',
+      target: 'GOD',
+      modifier: 'GLOBAL',
+      execution: 'NORMAL',
+    });
+    godOrder.push({
+      player: startsWithB ? 'A' : 'B',
+      action: 'BAN',
+      target: 'GOD',
+      modifier: 'GLOBAL',
+      execution: 'NORMAL',
+    });
+  } else if (cfg.hasBans && (cfg.godBanScope !== 'SERIES' || gameNumber === 1)) {
     for (let i = 0; i < (cfg.banCount || 0); i++) {
       godOrder.push({
         player: startsWithB ? 'B' : 'A',
@@ -155,22 +193,6 @@ export function calculateNextTurnOrder(
         execution: 'NORMAL',
       });
     }
-  } else if (cfg.hasPerMapBans) {
-    // FORJA Playoffs: 1 Ban of God per team before picking on each map
-    godOrder.push({
-      player: startsWithB ? 'B' : 'A',
-      action: 'BAN',
-      target: 'GOD',
-      modifier: 'GLOBAL',
-      execution: 'NORMAL',
-    });
-    godOrder.push({
-      player: startsWithB ? 'A' : 'B',
-      action: 'BAN',
-      target: 'GOD',
-      modifier: 'GLOBAL',
-      execution: 'NORMAL',
-    });
   }
 
   // God Pick Phase
@@ -279,22 +301,13 @@ export function processTurnAction(
 
   // Timer Check
   let isTimerExpired = false;
-  if (lobby.timerStart) {
-    let startTime: number;
-    if (typeof lobby.timerStart === 'number') {
-      startTime = lobby.timerStart;
-    } else if (typeof lobby.timerStart === 'string') {
-      startTime = new Date(lobby.timerStart).getTime();
-    } else if (lobby.timerStart && typeof (lobby.timerStart as any).toMillis === 'function') {
-      startTime = (lobby.timerStart as any).toMillis();
-    } else if (lobby.timerStart instanceof Date) {
-      startTime = lobby.timerStart.getTime();
-    } else {
-      startTime = currentTimeMs;
-    }
-    const elapsed = (currentTimeMs - startTime) / 1000;
+  const turnEndTime = timestampToMillis(lobby.turnEndsAt);
+  if (turnEndTime !== null && Number.isFinite(turnEndTime)) {
+    isTimerExpired = currentTimeMs >= turnEndTime + 1000;
+  } else {
+    const startTime = timestampToMillis(lobby.timerStart);
     const duration = lobby.config.timerDuration || 60;
-    if (elapsed >= duration + 1) {
+    if (startTime !== null && currentTimeMs >= startTime + (duration + 1) * 1000) {
       isTimerExpired = true;
     }
   }

@@ -174,6 +174,13 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
   const gameGodBans = replayLog.filter(
     (entry) => entry.action === 'BAN' && entry.target === 'GOD' && entry.gameNumber === currentGameNumber
   );
+  const gameGodBansByTeam = {
+    A: gameGodBans.filter((entry) => entry.player === 'A'),
+    B: gameGodBans.filter((entry) => entry.player === 'B'),
+  };
+  const getTeamLabel = (team: 'A' | 'B') => team === 'A'
+    ? ((lobby.teamAName || lobby.captain1Name) || t.teamA || 'TEAM A')
+    : ((lobby.teamBName || lobby.captain2Name) || t.teamB || 'TEAM B');
 
   // For 1v1, if we are in a match phase, we only want to show the currently selected gods
   const displayPicksA = isViewingHistory && historyGame
@@ -760,22 +767,33 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                 <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">
                   {t.godBans || 'GOD BANS'} · {t.game || 'GAME'} {currentGameNumber}
                 </div>
-                <div className="flex items-center gap-2 overflow-x-auto">
-                  {gameGodBans.map((ban, idx) => {
-                    const bannedGod = getGod(ban.id);
-                    const teamLabel = ban.player === 'A'
-                      ? ((lobby.teamAName || lobby.captain1Name) || t.teamA || 'TEAM A')
-                      : ((lobby.teamBName || lobby.captain2Name) || t.teamB || 'TEAM B');
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {(['A', 'B'] as const).map((team) => {
+                    const teamBans = gameGodBansByTeam[team];
+                    if (teamBans.length === 0) return null;
+
                     return (
-                      <div key={`${ban.id}-${idx}`} className="flex items-center gap-2 bg-slate-900/70 border border-slate-800 rounded-xl px-2 py-1.5 shrink-0">
-                        <div className="w-8 h-8 rounded-lg overflow-hidden border border-red-500/40 bg-slate-900">
-                          {bannedGod?.image ? (
-                            <img src={bannedGod.image} alt={bannedGod.name} className="w-full h-full object-cover grayscale" referrerPolicy="no-referrer" />
-                          ) : null}
+                      <div key={team} className="min-w-0 bg-slate-900/60 border border-slate-800 rounded-xl px-3 py-2">
+                        <div className="text-[8px] font-black uppercase tracking-[0.18em] text-slate-500 mb-2 truncate">
+                          {getTeamLabel(team)}
                         </div>
-                        <div className="leading-tight">
-                          <div className="text-[9px] font-black uppercase text-red-400">{bannedGod?.name || ban.id}</div>
-                          <div className="text-[8px] font-bold uppercase text-slate-500">{teamLabel}</div>
+                        <div className="flex items-center gap-2 overflow-x-auto">
+                          {teamBans.map((ban, idx) => {
+                            const bannedGod = getGod(ban.id);
+                            return (
+                              <div key={`${team}-${ban.id}-${idx}`} className="flex items-center gap-2 bg-slate-950/70 border border-red-500/20 rounded-xl px-2 py-1.5 shrink-0">
+                                <div className="w-8 h-8 rounded-lg overflow-hidden border border-red-500/40 bg-slate-900">
+                                  {bannedGod?.image ? (
+                                    <img src={bannedGod.image} alt={bannedGod.name} className="w-full h-full object-cover grayscale" referrerPolicy="no-referrer" />
+                                  ) : null}
+                                </div>
+                                <div className="leading-tight">
+                                  <div className="text-[9px] font-black uppercase text-red-400">{bannedGod?.name || ban.id}</div>
+                                  <div className="text-[8px] font-bold uppercase text-slate-500">{t.banned || 'BANNED'}</div>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     );

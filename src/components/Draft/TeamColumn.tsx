@@ -117,6 +117,11 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
   
   const teamMapPicks = optimisticBans
     .filter(step => step.action === 'PICK' && step.target === 'MAP' && step.player === team && step.gameNumber === lobby.currentGame);
+
+  // hasPerMapBans intentionally ignores banCount: it means exactly one fresh god ban per team each game.
+  const godBanSlotCount = lobby.config.hasPerMapBans
+    ? 1
+    : (lobby.config.hasBans ? lobby.config.banCount : 0);
   
   const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT' || (lobby.captain1 && lobby.captain1 === lobby.captain2);
   const isMyTeam = IS_DEV || (team === 'A' && isCaptain1) || (team === 'B' && isCaptain2);
@@ -125,7 +130,7 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
 
   return (
     <div className={cn(
-      "flex flex-col gap-6 h-full p-6",
+      "flex flex-col gap-4 h-full p-5",
       team === 'A' ? "border-r border-slate-900" : "border-l border-slate-900"
     )}>
       {/* Team Header */}
@@ -134,10 +139,10 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
         team === 'B' && "flex-row-reverse text-right"
       )}>
         <div className={cn(
-          "w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg",
+          "w-10 h-10 rounded-xl flex items-center justify-center shadow-lg",
           team === 'A' ? "bg-blue-500/20 text-blue-400" : "bg-red-500/20 text-red-400"
         )}>
-          {team === 'A' ? <Shield className="w-6 h-6" /> : <Sword className="w-6 h-6" />}
+          {team === 'A' ? <Shield className="w-5 h-5" /> : <Sword className="w-5 h-5" />}
         </div>
         <div>
           <div className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1">
@@ -151,7 +156,7 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
 
       {/* Active Roster List (Shown during God Draft for team sizes > 1) */}
       {lobby.config.teamSize > 1 && lobby.phase.startsWith('god_') && (
-        <div className="space-y-2 mb-2">
+        <div className="space-y-1.5 mb-1">
           <div className={cn(
             "flex items-center gap-2 mb-1",
             team === 'B' && "flex-row-reverse"
@@ -162,7 +167,7 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
             <div className="h-px flex-1 bg-slate-900/50" />
           </div>
           
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-1.5">
             {(team === 'A' ? (lobby.teamAPlayers || []) : (lobby.teamBPlayers || [])).map((player, i) => (
               <div key={i} className={cn("flex items-center gap-2", team === 'B' && "flex-row-reverse text-right")}>
                 <span className="w-6 h-6 rounded-md bg-slate-900/50 flex items-center justify-center border border-slate-800">
@@ -229,7 +234,7 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
       </AnimatePresence>
 
       {/* Bans Section */}
-      {(lobby.config.hasBans || lobby.config.mapBanCount > 0) && (
+      {(godBanSlotCount > 0 || lobby.config.mapBanCount > 0) && (
         <div className="space-y-4">
           {/* Map Bans */}
           {lobby.config.mapBanCount > 0 && (
@@ -291,7 +296,7 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
           )}
 
           {/* God Bans */}
-          {lobby.config.hasBans && (
+          {godBanSlotCount > 0 && (
             <div className="space-y-2">
               <div className={cn(
                 "flex items-center gap-2 mb-1",
@@ -304,7 +309,7 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
                 "flex gap-2",
                 team === 'B' && "flex-row-reverse"
               )}>
-                {Array.from({ length: lobby.config.banCount }).map((_, i) => {
+                {Array.from({ length: godBanSlotCount }).map((_, i) => {
                   const banStep = teamGodBans[i];
                   const banId = banStep?.id;
                   const god = MAJOR_GODS.find(g => g.id === banId);
@@ -316,7 +321,7 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
                       animate={god ? { scale: 1, rotate: 0, filter: 'grayscale(100%)' } : {}}
                       transition={{ type: "spring", damping: 10 }}
                       className={cn(
-                        "w-28 h-28 rounded-3xl border-2 overflow-hidden transition-all duration-500 relative",
+                        "w-24 h-24 rounded-2xl border-2 overflow-hidden transition-all duration-500 relative",
                         god ? "border-red-500/50 opacity-40" : "border-slate-800 bg-slate-950 flex items-center justify-center"
                       )}
                     >
@@ -356,7 +361,7 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
       )}
 
       {/* Players Section */}
-      <div className="flex-1 space-y-4 overflow-y-auto pr-2 custom-scrollbar">
+      <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1 custom-scrollbar">
         {/* Picks Section */}
         <div className={cn(
           "flex items-center gap-2 mb-2",
@@ -370,7 +375,7 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
           <div className="flex flex-wrap gap-3">
             {sortedPicks.map((pick, idx) => {
               const turn = lobby.turnOrder[lobby.turn];
-              const isGodTurn = turn?.target === 'GOD';
+              const isGodTurn = turn?.target === 'GOD' && turn?.action === 'PICK';
               const isTeamTurn = turn?.player === team || turn?.player === 'BOTH';
               
               // Find the first player in this team who hasn't picked a god yet
@@ -421,10 +426,10 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
             })}
           </div>
         ) : (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3">
             {sortedPicks.map((pick, idx) => {
               const turn = lobby.turnOrder[lobby.turn];
-              const isGodTurn = turn?.target === 'GOD';
+              const isGodTurn = turn?.target === 'GOD' && turn?.action === 'PICK';
               const isTeamTurn = turn?.player === team || turn?.player === 'BOTH';
               
               // Find the first player in this team who hasn't picked a god yet

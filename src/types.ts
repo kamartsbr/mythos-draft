@@ -8,6 +8,9 @@ export type God = {
   name: string;
   culture: 'Greek' | 'Egyptian' | 'Norse' | 'Atlantean' | 'Japanese' | 'Chinese' | 'Aztec';
   image: string;
+  focus?: string;
+  powers?: string[];
+  minorGods?: string[];
 };
 
 export type MapPosition = {
@@ -25,12 +28,12 @@ export type MapInfo = {
 };
 
 export type LobbyStatus = 'waiting' | 'drafting' | 'finished' | 'INCOMPLETE';
-export type DraftPhase = 'waiting' | 'ready' | 'setup' | 'roster_edit' | 'drafting' | 'map_ban' | 'map_pick' | 'god_ban' | 'god_pick' | 'ready_picker' | 'god_picker' | 'revealing' | 'post_draft' | 'reporting' | 'finished';
+export type DraftPhase = 'waiting' | 'ready' | 'setup' | 'roster_edit' | 'drafting' | 'map_ban' | 'map_pick' | 'god_ban' | 'god_pick' | 'ready_picker' | 'god_picker' | 'revealing' | 'post_draft' | 'reporting' | 'finished' | 'coin_toss';
 
-export type TurnAction = 'PICK' | 'BAN' | 'SNIPE' | 'STEAL' | 'REVEAL';
+export type TurnAction = 'PICK' | 'BAN' | 'SNIPE' | 'STEAL' | 'REVEAL' | 'COIN_TOSS';
 export type TurnModifier = 'GLOBAL' | 'EXCLUSIVE' | 'NONEXCLUSIVE';
 export type TurnExecution = 'NORMAL' | 'PARALLEL' | 'HIDDEN' | 'AS_OPPONENT';
-export type TurnTarget = 'GOD' | 'MAP';
+export type TurnTarget = 'GOD' | 'MAP' | 'COIN';
 
 export type DraftTurn = {
   player: 'A' | 'B' | 'BOTH' | 'ADMIN';
@@ -265,6 +268,7 @@ export type Lobby = {
   hoveredGodIdA?: string | null;
   hoveredGodIdB?: string | null;
   turnEndsAt?: DraftTimestampWrite;
+  coinWinner?: 'A' | 'B' | null;
 };
 
 export type ChatMessage = {

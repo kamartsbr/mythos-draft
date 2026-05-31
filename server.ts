@@ -1,4 +1,5 @@
 import express from 'express'; 
+import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { initializeApp } from 'firebase/app';
@@ -121,6 +122,16 @@ async function startServer() {
   // Porta 8080 obrigatória para Google Cloud Run
   const PORT = process.env.PORT || 8080;
 
+  const apiLimiter = rateLimit({
+    windowMs: 1 * 60 * 1000, // 1 minute
+    max: 60, // Limit each IP to 60 requests per `window`
+    message: { ok: false, message: 'Too many requests, please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  app.use('/api/', apiLimiter);
+
   // Health check simples sem tipos nomeados para evitar erro de import
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', mode: isProd ? 'production' : 'development' });
@@ -164,6 +175,11 @@ async function startServer() {
         return res.status(404).json({ ok: false, message: 'Lobby not found' });
       }
       const raw = snap.data();
+      delete raw.discordWebhookUrl;
+      delete raw.adminId;
+      delete raw.spectators;
+      delete raw.discordMessageId;
+      
       const lobby = serializeFirestoreValue(raw) as Record<string, unknown>;
       return res.json({ ok: true, lobby: { id: snap.id, ...lobby } });
     } catch (e) {

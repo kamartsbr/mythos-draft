@@ -290,14 +290,16 @@ export function PresetBuilder({ onSave, onClose, t }: PresetBuilderProps) {
                       </div>
                       <div className="flex-1 flex flex-col">
                         <span className="text-[10px] font-black text-white uppercase tracking-widest">
-                          {step.action === 'BAN' ? t.banned : t.picked} {step.target === 'MAP' ? t.mapPhase : t.godPickPhase}
+                          {step.action === 'COIN_TOSS' ? 'Virtual Coin Toss' : step.action === 'BAN' ? t.banned : t.picked} {step.target === 'COIN' ? '' : step.target === 'MAP' ? t.mapPhase : t.godPickPhase}
                         </span>
-                        <span className={cn(
-                          "text-[9px] font-bold uppercase tracking-tighter",
-                          step.player === 'A' ? "text-blue-500" : step.player === 'B' ? "text-red-500" : "text-amber-500"
-                        )}>
-                          {step.player === 'A' ? t.roleHost : step.player === 'B' ? t.roleGuest : t.bothTeams}
-                        </span>
+                        {step.action !== 'COIN_TOSS' && (
+                          <span className={cn(
+                            "text-[9px] font-bold uppercase tracking-tighter",
+                            step.player === 'A' ? "text-blue-500" : step.player === 'B' ? "text-red-500" : "text-amber-500"
+                          )}>
+                            {step.player === 'A' ? t.roleHost : step.player === 'B' ? t.roleGuest : t.bothTeams}
+                          </span>
+                        )}
                       </div>
                       <button 
                         onClick={() => removeStep(idx)}
@@ -358,6 +360,12 @@ export function PresetBuilder({ onSave, onClose, t }: PresetBuilderProps) {
                   className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-[10px] font-black text-slate-300 uppercase tracking-widest flex items-center justify-center gap-2"
                 >
                   <Sword className="w-3 h-3" /> {t.guestPickGod}
+                </button>
+                <button 
+                  onClick={() => addStep('COIN_TOSS', 'COIN', 'ADMIN')}
+                  className="col-span-2 px-4 py-2 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/40 rounded-xl text-[10px] font-black text-amber-500 uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
+                >
+                  <Settings2 className="w-3 h-3" /> Virtual Coin Toss
                 </button>
               </div>
             </div>

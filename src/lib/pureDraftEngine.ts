@@ -440,6 +440,56 @@ export function processTurnAction(
       if (snipeIndex !== -1) {
         nextLobby.picks[snipeIndex].godId = null;
       }
+    } else if (turn.action === 'COIN_TOSS') {
+      if (!nextLobby.coinWinner && turn.player === 'ADMIN') {
+        // First part of coin toss: roll the winner
+        nextLobby.coinWinner = Math.random() < 0.5 ? 'A' : 'B';
+        // DO NOT log replay for the roll yet, or log it as the roll event
+        nextLobby.replayLog.push({
+          gameNumber: nextLobby.currentGame,
+          turnIndex: nextLobby.turn,
+          player: 'ADMIN',
+          action: 'COIN_TOSS',
+          target: 'COIN',
+          id: `WINNER_${nextLobby.coinWinner}`,
+          timestamp: new Date(currentTimeMs).toISOString(),
+        });
+        nextLobby.timerStart = currentTimeMs;
+        const duration = nextLobby.config.timerDuration || 60;
+        nextLobby.turnEndsAt = currentTimeMs + (duration * 1000);
+        return false; // returning false from applyAction normally throws, wait, we need to return a special value or handle it outside applyAction.
+      } else if (nextLobby.coinWinner && (id === 'KEEP' || id === 'SWAP')) {
+        if (team !== nextLobby.coinWinner) return false;
+        
+        if (id === 'SWAP') {
+          // Swap teams
+          const tempCaptain1 = nextLobby.captain1;
+          const tempCaptain1Name = nextLobby.captain1Name;
+          const tempTeamAPlayers = nextLobby.teamAPlayers;
+
+          nextLobby.captain1 = nextLobby.captain2;
+          nextLobby.captain1Name = nextLobby.captain2Name;
+          nextLobby.teamAPlayers = nextLobby.teamBPlayers;
+
+          nextLobby.captain2 = tempCaptain1;
+          nextLobby.captain2Name = tempCaptain1Name;
+          nextLobby.teamBPlayers = tempTeamAPlayers;
+        }
+
+        nextLobby.replayLog.push({
+          gameNumber: nextLobby.currentGame,
+          turnIndex: nextLobby.turn,
+          player: nextLobby.coinWinner,
+          action: 'COIN_TOSS',
+          target: 'COIN',
+          id,
+          timestamp: new Date(currentTimeMs).toISOString(),
+        });
+
+        nextLobby.coinWinner = null;
+        return true;
+      }
+      return false;
     }
 
     nextLobby.replayLog.push({
@@ -567,6 +617,55 @@ export function processTurnAction(
     nextLobby.hiddenActions = [];
   } else if (currentTurn.execution === 'HIDDEN') {
     nextLobby.hiddenActions.push({ turnIndex: nextLobby.turn, actionId, targetPlayerId, playerName });
+  } else if (currentTurn.action === 'COIN_TOSS') {
+    if (!nextLobby.coinWinner && currentTurn.player === 'ADMIN') {
+      nextLobby.coinWinner = Math.random() < 0.5 ? 'A' : 'B';
+      nextLobby.replayLog.push({
+        gameNumber: nextLobby.currentGame,
+        turnIndex: nextLobby.turn,
+        player: 'ADMIN',
+        action: 'COIN_TOSS',
+        target: 'COIN',
+        id: `WINNER_${nextLobby.coinWinner}`,
+        timestamp: new Date(currentTimeMs).toISOString(),
+      });
+      nextLobby.timerStart = currentTimeMs;
+      const duration = nextLobby.config.timerDuration || 60;
+      nextLobby.turnEndsAt = currentTimeMs + (duration * 1000);
+      nextLobby.phase = 'coin_toss';
+      nextLobby.lastActivityAt = currentTimeMs;
+      return nextLobby; // Do not advance turn yet
+    } else if (nextLobby.coinWinner && (actionId === 'KEEP' || actionId === 'SWAP')) {
+      if (executionTeam !== nextLobby.coinWinner) throw new Error("Not your turn");
+      
+      if (actionId === 'SWAP') {
+        const tempCaptain1 = nextLobby.captain1;
+        const tempCaptain1Name = nextLobby.captain1Name;
+        const tempTeamAPlayers = nextLobby.teamAPlayers;
+
+        nextLobby.captain1 = nextLobby.captain2;
+        nextLobby.captain1Name = nextLobby.captain2Name;
+        nextLobby.teamAPlayers = nextLobby.teamBPlayers;
+
+        nextLobby.captain2 = tempCaptain1;
+        nextLobby.captain2Name = tempCaptain1Name;
+        nextLobby.teamBPlayers = tempTeamAPlayers;
+      }
+
+      nextLobby.replayLog.push({
+        gameNumber: nextLobby.currentGame,
+        turnIndex: nextLobby.turn,
+        player: nextLobby.coinWinner,
+        action: 'COIN_TOSS',
+        target: 'COIN',
+        id: actionId,
+        timestamp: new Date(currentTimeMs).toISOString(),
+      });
+
+      nextLobby.coinWinner = null;
+    } else {
+      throw new Error("Invalid action for coin toss");
+    }
   } else {
     const success = applyAction(actionId, currentTurn, executionTeam, targetPlayerId, playerName);
     if (!success) {

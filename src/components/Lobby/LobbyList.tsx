@@ -1,4 +1,4 @@
-import { Eye, Users, ChevronRight, Info, Trash2, Search } from 'lucide-react';
+import { Eye, Users, ChevronRight, Info, Trash2, Search, RefreshCw, Loader2 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { LobbySummary } from '../../types';
 import { cn } from '../../lib/utils';
@@ -13,12 +13,16 @@ interface LobbyListProps {
   onClearAll?: () => void;
   onLoadMore?: () => void;
   hasMore?: boolean;
+  onFetchLobbies?: () => void;
+  isLoadingLobbies?: boolean;
+  hasBeenFetched?: boolean;
 }
 
 /**
  * Render a searchable list of lobbies with optional admin controls (clear, delete) and load-more support.
  *
- * Renders a header banner, a search input that filters the provided lobbies by id, name, or captain names, a scrollable list of lobby rows (each row invokes `onJoin` when clicked), and an informational footer. When `isAdmin` and corresponding callbacks are provided, shows admin actions for clearing history and deleting individual lobbies.
+ * Lobbies are NOT loaded automatically — the user must click "Browse Recent Drafts" to fetch them,
+ * saving Firestore reads. A refresh button allows re-fetching without page reload.
  *
  * @param lobbies - Array of lobby summaries to display/search; assumed to be pre-sorted/limited when no search is active
  * @param t - Translation/label object used for UI text and confirmations
@@ -28,9 +32,12 @@ interface LobbyListProps {
  * @param onClearAll - Optional. Called when admin clears all history
  * @param onLoadMore - Optional. Called when the "load more" button is clicked
  * @param hasMore - Controls visibility of the "load more" button when true
+ * @param onFetchLobbies - Called to fetch lobbies on demand
+ * @param isLoadingLobbies - Whether lobbies are currently being fetched
+ * @param hasBeenFetched - Whether lobbies have been fetched at least once
  * @returns A JSX element representing the lobby list UI
  */
-export function LobbyList({ lobbies, t, isAdmin, onJoin, onDelete, onClearAll, onLoadMore, hasMore }: LobbyListProps) {
+export function LobbyList({ lobbies, t, isAdmin, onJoin, onDelete, onClearAll, onLoadMore, hasMore, onFetchLobbies, isLoadingLobbies, hasBeenFetched }: LobbyListProps) {
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredLobbies = useMemo(() => {
@@ -57,6 +64,11 @@ export function LobbyList({ lobbies, t, isAdmin, onJoin, onDelete, onClearAll, o
     if (pub.status === 'finished') {
       return <span className="text-green-500 font-bold uppercase tracking-widest text-xs">{t.draftComplete}</span>;
     }
+
+    // Show "waiting" status for lobbies with only 1 captain
+    if (!pub.captain1 || !pub.captain2) {
+      return <span className="text-amber-500 font-bold uppercase tracking-widest text-xs">{t.waitingForOpponent || "WAITING"}</span>;
+    }
     
     const lastActivity = getMillis(pub.lastActivityAt) || getMillis(pub.createdAt) || Date.now();
     const isAbandoned = (Date.now() - lastActivity) > 2 * 60 * 60 * 1000;
@@ -67,6 +79,8 @@ export function LobbyList({ lobbies, t, isAdmin, onJoin, onDelete, onClearAll, o
     
     return <span className="text-blue-500 font-bold uppercase tracking-widest text-xs">{t.draftingInProgress}</span>;
   };
+
+  const showEmptyState = !hasBeenFetched && lobbies.length === 0;
 
   return (
     <div className="mythic-card overflow-hidden h-full flex flex-col">
@@ -87,15 +101,28 @@ export function LobbyList({ lobbies, t, isAdmin, onJoin, onDelete, onClearAll, o
             </div>
             {t.spectate}
           </h2>
-          {isAdmin && onClearAll && (
-            <button 
-              onClick={onClearAll}
-              className="p-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all flex items-center gap-2 text-xs font-black uppercase tracking-widest backdrop-blur-sm"
-            >
-              <Trash2 className="w-4 h-4" />
-              {t.clearHistory || "Limpar Tudo"}
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {/* Refresh button — visible after first fetch */}
+            {hasBeenFetched && onFetchLobbies && (
+              <button
+                onClick={onFetchLobbies}
+                disabled={isLoadingLobbies}
+                className="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white transition-all backdrop-blur-sm disabled:opacity-50"
+                title={t.refreshLobbies || "Refresh"}
+              >
+                <RefreshCw className={cn("w-4 h-4", isLoadingLobbies && "animate-spin")} />
+              </button>
+            )}
+            {isAdmin && onClearAll && (
+              <button 
+                onClick={onClearAll}
+                className="p-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all flex items-center gap-2 text-xs font-black uppercase tracking-widest backdrop-blur-sm"
+              >
+                <Trash2 className="w-4 h-4" />
+                {t.clearHistory || "Limpar Tudo"}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -113,12 +140,41 @@ export function LobbyList({ lobbies, t, isAdmin, onJoin, onDelete, onClearAll, o
         </div>
 
         <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar flex-1">
-          {filteredLobbies.length === 0 ? (
+          {/* Loading spinner */}
+          {isLoadingLobbies && (
+            <div className="text-center py-12">
+              <Loader2 className="w-8 h-8 text-blue-500 mx-auto mb-3 animate-spin" />
+              <p className="text-slate-500 text-sm font-bold uppercase tracking-widest">{t.loading || "Loading..."}</p>
+            </div>
+          )}
+
+          {/* Not yet fetched — show browse button */}
+          {!isLoadingLobbies && showEmptyState && (
+            <div className="text-center py-12 border border-dashed border-slate-800 rounded-2xl">
+              <Eye className="w-12 h-12 text-slate-700 mx-auto mb-4" />
+              <p className="text-slate-400 text-sm mb-6">{t.lobbyListHidden || "Lobby list is hidden to save resources."}</p>
+              {onFetchLobbies && (
+                <button
+                  onClick={onFetchLobbies}
+                  className="px-6 py-3 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-400 hover:bg-blue-500 hover:text-white transition-all font-black text-sm uppercase tracking-widest flex items-center gap-2 mx-auto"
+                >
+                  <Eye className="w-4 h-4" />
+                  {t.browseRecentDrafts || "Browse Recent Drafts"}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Fetched but empty (or search yielded no results) */}
+          {!isLoadingLobbies && !showEmptyState && filteredLobbies.length === 0 && (
             <div className="text-center py-12 border border-dashed border-slate-800 rounded-2xl">
               <Users className="w-12 h-12 text-slate-700 mx-auto mb-4" />
               <p className="text-slate-500 text-sm">{searchTerm ? t.noResults : t.noDrafts}</p>
             </div>
-          ) : (
+          )}
+
+          {/* Lobby list */}
+          {!isLoadingLobbies && filteredLobbies.length > 0 && (
             <>
               {filteredLobbies.map(pub => (
                 <button

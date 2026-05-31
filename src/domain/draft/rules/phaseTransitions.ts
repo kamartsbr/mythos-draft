@@ -18,6 +18,7 @@ export const DRAFT_PHASE_TRANSITIONS: Record<DraftTransitionKey, DraftPhase> = {
   'god-pick': 'god_pick',
   'solo-draft-complete': 'ready_picker',
   'team-draft-complete': 'post_draft',
+  'coin-toss': 'coin_toss',
 };
 
 const TURN_PHASE_BY_TARGET: Record<DraftTurnTarget, Partial<Record<DraftTurnAction, DraftPhase>>> = {
@@ -31,6 +32,9 @@ const TURN_PHASE_BY_TARGET: Record<DraftTurnTarget, Partial<Record<DraftTurnActi
     SNIPE: DRAFT_PHASE_TRANSITIONS['god-pick'],
     STEAL: DRAFT_PHASE_TRANSITIONS['god-pick'],
     REVEAL: DRAFT_PHASE_TRANSITIONS['god-pick'],
+  },
+  COIN: {
+    COIN_TOSS: DRAFT_PHASE_TRANSITIONS['coin-toss'],
   },
 };
 

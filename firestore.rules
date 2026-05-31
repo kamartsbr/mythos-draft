@@ -13,9 +13,11 @@ service cloud.firestore {
      * Agora que request.auth.uid == discord_id, esta função é confiável.
      */
     function isAdmin() {
-      return isSignedIn()
-        && exists(/databases/$(database)/documents/forja_players/$(request.auth.uid))
-        && get(/databases/$(database)/documents/forja_players/$(request.auth.uid)).data.role == 'admin';
+      return isSignedIn() && (
+        request.auth.token.admin == true ||
+        (exists(/databases/$(database)/documents/forja_players/$(request.auth.uid))
+         && get(/databases/$(database)/documents/forja_players/$(request.auth.uid)).data.role == 'admin')
+      );
     }
 
     /**
@@ -24,6 +26,11 @@ service cloud.firestore {
     function onlyPlayerSelfServiceFields() {
       let allowed = ['profile_link', 'availability', 'catchphrase', 'nick', 'avatar_url', 'is_brazilian', 'aom_profile_id', 'aom_id'];
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
+    }
+
+    // ─── /lobby_secrets ──────────────────────────────────────────────────────
+    match /lobby_secrets/{lobbyId} {
+      allow read, write: if isAdmin();
     }
 
     // ─── /lobbies ────────────────────────────────────────────────────────────
@@ -37,11 +44,16 @@ service cloud.firestore {
         );
       }
 
+      function noAdminFieldsModified() {
+        return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['adminId', 'isPermanent', 'discordWebhookUrl', 'discordMessageId']);
+      }
+
       allow read: if true;
       allow create: if isSignedIn()
                     && request.resource.data.adminId == request.auth.uid;
       allow update: if isParticipantOrAdmin(resource)
-                    && resource.data.status != 'finished';
+                    && resource.data.status != 'finished'
+                    && (isAdmin() || noAdminFieldsModified());
       allow delete: if isSignedIn() && (resource.data.adminId == request.auth.uid || isAdmin());
 
       match /messages/{messageId} {

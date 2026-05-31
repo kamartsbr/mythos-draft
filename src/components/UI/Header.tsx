@@ -24,7 +24,7 @@ interface HeaderProps {
   nickname: string;
   setNickname: (val: string) => void;
   isAdmin?: boolean;
-  authenticateAdmin?: (token: string) => boolean;
+  authenticateAdmin?: (token: string) => Promise<boolean>;
   logoutAdmin?: () => void;
 }
 
@@ -246,7 +246,7 @@ export function Header({
           {/* Discreet Admin Login Button */}
           {authenticateAdmin && (
             <button 
-              onClick={() => {
+              onClick={async () => {
                 if (isAdmin) {
                    if (window.confirm('Do you want to exit Admin mode?')) {
                       logoutAdmin?.();
@@ -255,7 +255,7 @@ export function Header({
                 }
                 const pass = window.prompt('Admin password:');
                 if (pass) {
-                   const ok = authenticateAdmin(pass);
+                   const ok = await authenticateAdmin(pass);
                    if (ok) alert('Admin mode enabled.');
                    else alert('Incorrect password.');
                 }

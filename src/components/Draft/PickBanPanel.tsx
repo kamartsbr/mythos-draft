@@ -3,11 +3,12 @@ import { Search, Info, Check, X, Shield, Sword, Map as MapIcon, Lock, Users, Clo
 import { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '../../lib/utils';
-import { Lobby, God, MapInfo } from '../../types';
+import { Lobby, God, MapInfo, DraftTurn, PickEntry } from '../../types';
 import { MAJOR_GODS, MAPS, PANTHEONS } from '../../constants';
 import { lobbyService } from '../../services/lobbyService';
 import { resolveDraftPlayerTargets } from '../../domain/draft/playerTargets';
 import { MapVisualizer } from '../MapVisualizer';
+import { Tooltip } from '../UI/Tooltip';
 import { ConfirmModal } from '../UI/ConfirmModal';
 import { DraftResultCard } from './DraftResultCard';
 import { toPng } from 'html-to-image';
@@ -272,8 +273,18 @@ export function PickBanPanel({
     const isDisabled = isBanned || isPicked || !isMyTurn || isTurnExpired;
 
     return (
-      <motion.button
+      <Tooltip
         key={map.id}
+        content={
+          <div className="flex flex-col gap-1 w-48">
+            <div className="font-black text-white text-sm uppercase">{t.mapNames?.[map.id] || map.name}</div>
+            <div className="text-[10px] text-slate-400">
+              {map.isRanked ? 'Ranked Map' : 'Casual Map'}
+            </div>
+          </div>
+        }
+      >
+        <motion.button
         data-testid="map-card"
         data-map-id={map.id}
         whileHover={!isDisabled ? { scale: 1.05, y: -4 } : {}}
@@ -347,6 +358,7 @@ export function PickBanPanel({
           </div>
         )}
       </motion.button>
+      </Tooltip>
     );
   }), [availableMaps, isMyTurn, isTurnExpired, lobby.mapBans, lobby.seriesMaps, optimisticAction, t.mapNames, handleAction, pendingMapId]);
 
@@ -358,8 +370,29 @@ export function PickBanPanel({
     const isPendingGodBan = pendingGodBanId === god.id;
 
     return (
-      <motion.button
+      <Tooltip
         key={god.id}
+        content={
+          <div className="flex flex-col gap-1 w-56 text-left">
+            <div className="font-black text-white text-sm uppercase">{god.name}</div>
+            <div className="text-xs text-amber-500 font-bold uppercase">{god.culture}</div>
+            {god.focus && <div className="text-[10px] text-slate-300 italic mb-1">{god.focus}</div>}
+            {god.powers && god.powers.length > 0 && (
+              <div className="mt-1">
+                <div className="text-[9px] font-black text-slate-500 uppercase">Major Power</div>
+                <div className="text-xs text-white">{god.powers.join(', ')}</div>
+              </div>
+            )}
+            {god.minorGods && god.minorGods.length > 0 && (
+              <div className="mt-1">
+                <div className="text-[9px] font-black text-slate-500 uppercase">Minor Gods</div>
+                <div className="text-xs text-white">{god.minorGods.join(', ')}</div>
+              </div>
+            )}
+          </div>
+        }
+      >
+        <motion.button
         data-testid="god-card"
         data-god-id={god.id}
         layoutId={`god-${god.id}`}
@@ -442,6 +475,7 @@ export function PickBanPanel({
           )}
         </AnimatePresence>
       </motion.button>
+      </Tooltip>
     );
   }), [filteredGods, isMyTurn, isTurnExpired, lobby.bans, lobby.picks, lobby.config.isExclusive, lobby.config.preset, lobby.phase, selectedGodId, pendingGodBanId, optimisticAction, handleAction]);
 
@@ -613,6 +647,66 @@ export function PickBanPanel({
               )}
             </div>
           </div>
+        </motion.div>
+        {modalsPortal}
+      </div>
+    );
+  }
+
+  if (lobby.phase === 'coin_toss') {
+    const isCoinWinner = myTeam === lobby.coinWinner;
+    const winnerName = lobby.coinWinner === 'A' 
+      ? (lobby.teamAName || lobby.captain1Name || t.roleHost)
+      : (lobby.teamBName || lobby.captain2Name || t.roleGuest);
+
+    return (
+      <div className="flex flex-col h-full p-8 items-center justify-center">
+        <motion.div 
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="bg-slate-900 border border-amber-500/30 p-8 rounded-3xl max-w-lg w-full flex flex-col items-center gap-6 shadow-2xl shadow-amber-500/10"
+        >
+          <div className="w-20 h-20 bg-amber-500/20 rounded-full flex items-center justify-center mb-2">
+            <Dices className="w-10 h-10 text-amber-500" />
+          </div>
+          
+          <div className="text-center">
+            <h2 className="text-2xl font-black text-white uppercase tracking-tight mb-2">
+              Virtual Coin Toss
+            </h2>
+            <p className="text-sm text-slate-400">
+              {t.winner || "Winner"}: <span className="text-amber-500 font-bold">{winnerName}</span>
+            </p>
+          </div>
+
+          {isCoinWinner ? (
+            <div className="flex flex-col w-full gap-3 mt-4">
+              <p className="text-xs text-center font-bold text-slate-300 uppercase mb-2">
+                Choose your side
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  onClick={() => handleAction('KEEP')}
+                  className="px-6 py-4 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-black text-white uppercase tracking-widest transition-colors border border-slate-700 hover:border-slate-500"
+                >
+                  Stay as {myTeam === 'A' ? 'Host' : 'Guest'}
+                </button>
+                <button
+                  onClick={() => handleAction('SWAP')}
+                  className="px-6 py-4 bg-amber-500 hover:bg-amber-600 rounded-xl text-xs font-black text-slate-950 uppercase tracking-widest transition-colors shadow-lg shadow-amber-500/20"
+                >
+                  Swap to {myTeam === 'A' ? 'Guest' : 'Host'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-6 px-6 py-4 bg-slate-800/50 rounded-xl border border-slate-800 w-full text-center">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2">
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                Waiting for {winnerName} to choose...
+              </p>
+            </div>
+          )}
         </motion.div>
         {modalsPortal}
       </div>

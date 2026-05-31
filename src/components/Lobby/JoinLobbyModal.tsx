@@ -68,7 +68,7 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
   const forjaTeamId = role === 'A' ? lobby.config.forjaTeamA : lobby.config.forjaTeamB;
   const forjaTeam = isOfficialForjaMatch ? teams.find(t => t.id === forjaTeamId) : null;
 
-  const { discordUser, isAdmin: isForjaAdmin } = useForjaDiscordAuth();
+  const { discordUser, isAdmin: isForjaAdmin, isLoading: isForjaAuthLoading } = useForjaDiscordAuth();
 
   const teamRoster = useMemo(() => {
     if (!forjaTeam || !rankedPlayers.length) return [];
@@ -114,10 +114,11 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Se captainA/B_discordId não está definido (ex: custom game), qualquer um pode entrar nessa vaga.
-  // A restrição só se aplica quando um capitão específico foi pré-configurado (partidas oficiais da Forja).
-  const isHostAuthorized  = !isOfficialForjaMatch || isForjaAdmin || !lobby.config.captainA_discordId || (discordUser && discordUser.discord_id === lobby.config.captainA_discordId);
-  const isGuestAuthorized = !isOfficialForjaMatch || isForjaAdmin || !lobby.config.captainB_discordId || (discordUser && discordUser.discord_id === lobby.config.captainB_discordId);
+  // Authorization: while Discord auth is loading for official Forja matches,
+  // treat slots as potentially authorized (show loading state instead of locked).
+  const isForjaAuthPending = isOfficialForjaMatch && isForjaAuthLoading;
+  const isHostAuthorized  = isForjaAuthPending || !isOfficialForjaMatch || isForjaAdmin || !lobby.config.captainA_discordId || (discordUser && discordUser.discord_id === lobby.config.captainA_discordId);
+  const isGuestAuthorized = isForjaAuthPending || !isOfficialForjaMatch || isForjaAdmin || !lobby.config.captainB_discordId || (discordUser && discordUser.discord_id === lobby.config.captainB_discordId);
 
   const canJoinA = (!lobby.captain1 || lobby.captain1 === guestId || (isOfficialForjaMatch && discordUser && discordUser.discord_id === lobby.config.captainA_discordId)) && isHostAuthorized;
   const canJoinB = (!lobby.captain2 || lobby.captain2 === guestId || (isOfficialForjaMatch && discordUser && discordUser.discord_id === lobby.config.captainB_discordId)) && isGuestAuthorized;
@@ -341,7 +342,12 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
                   <span className="text-[10px] font-black uppercase tracking-tighter">
                     {lobby.captain1 === guestId ? (lang === 'en' ? 'RE-JOIN HOST' : 'REENTRAR HOST') : t.roleHost}
                   </span>
-                  {!isHostAuthorized && isOfficialForjaMatch && (
+                  {isForjaAuthPending && isOfficialForjaMatch && (
+                    <span className="text-[8px] text-blue-400 font-bold uppercase leading-tight text-center max-w-[80px] animate-pulse">
+                      {lang === 'en' ? 'Verifying...' : 'Verificando...'}
+                    </span>
+                  )}
+                  {!isForjaAuthPending && !isHostAuthorized && isOfficialForjaMatch && (
                     <span className="text-[8px] text-amber-500 font-bold uppercase leading-tight text-center max-w-[80px]">
                       {lang === 'en' ? 'Locked for Captain' : 'Apenas para Capitão'}
                     </span>
@@ -363,7 +369,12 @@ export function JoinLobbyModal({ lobby, t, lang, setLang, nickname, setNickname,
                   <span className="text-[10px] font-black uppercase tracking-tighter">
                     {lobby.captain2 === guestId ? (lang === 'en' ? 'RE-JOIN GUEST' : 'REENTRAR CONVIDADO') : t.roleGuest}
                   </span>
-                  {!isGuestAuthorized && isOfficialForjaMatch && (
+                  {isForjaAuthPending && isOfficialForjaMatch && (
+                    <span className="text-[8px] text-blue-400 font-bold uppercase leading-tight text-center max-w-[80px] animate-pulse">
+                      {lang === 'en' ? 'Verifying...' : 'Verificando...'}
+                    </span>
+                  )}
+                  {!isForjaAuthPending && !isGuestAuthorized && isOfficialForjaMatch && (
                     <span className="text-[8px] text-amber-500 font-bold uppercase leading-tight text-center max-w-[80px]">
                       {lang === 'en' ? 'Locked for Captain' : 'Apenas para Capitão'}
                     </span>

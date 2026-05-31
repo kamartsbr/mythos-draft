@@ -27,7 +27,10 @@ export function useLobby(initialNickname: string) {
       if (user) {
         try {
           const storedId = localStorage.getItem('mythos_guest_id');
-          if (!storedId) {
+          // Always update guestId to the current Firebase user UID.
+          // This fixes the stale anonymous UID problem when a Forja player
+          // signs in via signInWithCustomToken (Discord OAuth).
+          if (!storedId || storedId !== user.uid) {
             setGuestId(user.uid);
             localStorage.setItem('mythos_guest_id', user.uid);
           } else {
@@ -62,27 +65,11 @@ export function useLobby(initialNickname: string) {
   const [isSpectator, setIsSpectator] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [publicLobbies, setPublicLobbies] = useState<LobbySummary[]>([]);
+  const [lobbyListLoading, setLobbyListLoading] = useState(false);
+  const [lobbyListFetched, setLobbyListFetched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const lastStateRef = useRef<string>('');
-
-  // Discord Trigger
-  useEffect(() => {
-    if (!lobby || !lobby.discordWebhookUrl) return;
-
-    // Only allow Captain A or Admin to trigger webhook updates to prevent multiple calls
-    if (!isCaptain1 && !isAdmin) return;
-
-    // Generate a unique fingerprint of the state that matters for Discord
-    const fingerprint = `${lobby.phase}-${lobby.turn}-${lobby.status}-${lobby.scoreA}-${lobby.scoreB}-${lobby.selectedMap}-${lobby.currentGame}`;
-    
-    if (fingerprint !== lastStateRef.current) {
-      lastStateRef.current = fingerprint;
-      import('../services/discordService').then(({ discordService }) => {
-        discordService.updateLobbyWebhook(lobby);
-      });
-    }
-  }, [lobby, isCaptain1, isAdmin]);
 
   // Admin check
   useEffect(() => {
@@ -106,11 +93,6 @@ export function useLobby(initialNickname: string) {
     
     // Clean up ?admin=
     if (url.searchParams.has('admin')) {
-      const token = url.searchParams.get('admin');
-      if (token === 'mythosadmin2026@') {
-        sessionStorage.setItem('isAdmin', 'true');
-        setIsAdmin(true);
-      }
       url.searchParams.delete('admin');
       urlChanged = true;
     }
@@ -120,13 +102,24 @@ export function useLobby(initialNickname: string) {
     }
   }, [isAuthReady, guestId, auth.currentUser?.email]);
 
-  const authenticateAdmin = useCallback((token: string) => {
-    if (token === 'mythosadmin2026@') {
+  const authenticateAdmin = useCallback(async (password: string) => {
+    try {
+      const { getFunctions, httpsCallable } = await import('firebase/functions');
+      const functions = getFunctions();
+      const authAdminPass = httpsCallable<{ password: string }, { success: boolean }>(functions, 'authenticateadminpass');
+      await authAdminPass({ password });
+      
+      if (auth.currentUser) {
+        await auth.currentUser.getIdToken(true);
+      }
+      
       sessionStorage.setItem('isAdmin', 'true');
       setIsAdmin(true);
       return true;
+    } catch (e) {
+      console.error('Admin auth failed:', e);
+      return false;
     }
-    return false;
   }, []);
 
   const logoutAdmin = useCallback(() => {
@@ -179,21 +172,19 @@ export function useLobby(initialNickname: string) {
     };
   }, [lobbyId, guestId, updatePresence]);
 
-  // Subscriptions ---
-  // Public lobbies fetch (only when no lobbyId)
-  useEffect(() => {
+  // On-demand public lobbies fetch
+  const fetchPublicLobbies = useCallback(async () => {
     if (lobbyId) return;
-
-    let isMounted = true;
-    lobbyService.getPublicLobbiesOnce()
-      .then((lobbies) => {
-        if (isMounted) {
-          setPublicLobbies(Array.isArray(lobbies) ? lobbies.slice(0, PUBLIC_LOBBIES_PAGE_SIZE) : []);
-        }
-      })
-      .catch(err => console.error("Erro ao buscar lobbies públicos:", err));
-
-    return () => { isMounted = false; };
+    setLobbyListLoading(true);
+    try {
+      const lobbies = await lobbyService.getPublicLobbiesOnce();
+      setPublicLobbies(Array.isArray(lobbies) ? lobbies.slice(0, PUBLIC_LOBBIES_PAGE_SIZE) : []);
+      setLobbyListFetched(true);
+    } catch (err) {
+      console.error("Erro ao buscar lobbies públicos:", err);
+    } finally {
+      setLobbyListLoading(false);
+    }
   }, [lobbyId]);
 
   // Lobby subscription (only when lobbyId exists)
@@ -237,7 +228,9 @@ export function useLobby(initialNickname: string) {
           const isFull = !!(data.captain1 && data.captain2);
           const isFinished = data.status === 'finished';
 
-          const shouldBeSpectator = !isC1 && !isC2 && !slotAvailable && (isFull || isFinished);
+          const isExplicitlySpectator = (Array.isArray(data.spectators) ? data.spectators : Object.values(data.spectators || {})).some((s: any) => s.id === guestId);
+
+          const shouldBeSpectator = isExplicitlySpectator || (!isC1 && !isC2 && !slotAvailable && (isFull || isFinished));
 
           setIsSpectator(shouldBeSpectator);
         }
@@ -370,6 +363,9 @@ export function useLobby(initialNickname: string) {
     authenticateAdmin,
     logoutAdmin,
     publicLobbies,
+    fetchPublicLobbies,
+    lobbyListLoading,
+    lobbyListFetched,
     error,
     setError,
     loading,

@@ -673,7 +673,7 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
       teamSize: 3,
       customGameCount: matchStage === 'GROUP' ? 3 : (matchStage === 'PLAYOFFS_BO5' ? 5 : 3),
       pickType: 'alternated',
-      isExclusive: true,
+      isExclusive: false,
       hasBans: false,
       banCount: 0,
       mapBanCount: 0,

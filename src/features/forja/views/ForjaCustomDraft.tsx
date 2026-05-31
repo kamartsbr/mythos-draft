@@ -63,7 +63,7 @@ function buildForjaConfig(
 
     // ── Picks ──────────────────────────────────────────────────────────
     pickType: 'alternated',
-    isExclusive: true,        // Um deus pickado não pode ser pickado pelo oponente
+    isExclusive: false,       // Um deus pickado PODE ser pickado pelo oponente (não exclusivo global)
 
     // ── Bans de Deuses ─────────────────────────────────────────────────
     // hasBans=false + hasPerMapBans controla bans FORJA (1 por time por mapa)

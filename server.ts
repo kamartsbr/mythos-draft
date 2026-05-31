@@ -50,6 +50,71 @@ function serializeFirestoreValue(val: unknown): unknown {
   return val;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function renderSharePage(meta: {
+  title: string;
+  description: string;
+  image: string;
+  url: string;
+}): string {
+  const safeTitle = escapeHtml(meta.title);
+  const safeDescription = escapeHtml(meta.description);
+  const safeImage = escapeHtml(meta.image);
+  const safeUrl = escapeHtml(meta.url);
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${safeTitle}</title>
+    <meta property="og:title" content="${safeTitle}" />
+    <meta property="og:description" content="${safeDescription}" />
+    <meta property="og:image" content="${safeImage}" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="${safeUrl}" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${safeTitle}" />
+    <meta name="twitter:description" content="${safeDescription}" />
+    <meta name="twitter:image" content="${safeImage}" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>`;
+}
+
+function injectShareMeta(html: string, meta: {
+  title: string;
+  description: string;
+  image: string;
+  url: string;
+}): string {
+  const replacements: Array<[RegExp, string]> = [
+    [/<title>.*?<\/title>/s, `<title>${escapeHtml(meta.title)}</title>`],
+    [/<meta property="og:title" content=".*?" \/>/s, `<meta property="og:title" content="${escapeHtml(meta.title)}" />`],
+    [/<meta property="og:description" content=".*?" \/>/s, `<meta property="og:description" content="${escapeHtml(meta.description)}" />`],
+    [/<meta property="og:image" content=".*?" \/>/s, `<meta property="og:image" content="${escapeHtml(meta.image)}" />`],
+    [/<meta property="og:url" content=".*?" \/>/s, `<meta property="og:url" content="${escapeHtml(meta.url)}" />`],
+    [/<meta name="twitter:title" content=".*?" \/>/s, `<meta name="twitter:title" content="${escapeHtml(meta.title)}" />`],
+    [/<meta name="twitter:description" content=".*?" \/>/s, `<meta name="twitter:description" content="${escapeHtml(meta.description)}" />`],
+    [/<meta name="twitter:image" content=".*?" \/>/s, `<meta name="twitter:image" content="${escapeHtml(meta.image)}" />`],
+  ];
+
+  return replacements.reduce((acc, [pattern, replacement]) => acc.replace(pattern, replacement), html);
+}
+
 async function startServer() {
   const app = express();
   
@@ -105,6 +170,31 @@ async function startServer() {
       console.error('[api/lobby] Error:', e);
       return res.status(500).json({ ok: false, message: 'Internal error' });
     }
+  });
+
+  const publicOrigin = 'https://mythosdraft.com';
+  app.get(/^\/forja(?:\/.*)?$/, (_req, res, next) => {
+    const meta = {
+      title: 'Forja de Hefesto - Mythos Draft',
+      description: 'O maior torneio 3v3 de Age of Mythology: Retold da comunidade BR/PT. Inscreva-se e forje seu legado!',
+      image: `${publicOrigin}/forja-banner.jpg`,
+      url: `${publicOrigin}/forja`,
+    };
+
+    if (isProd) {
+      const distPath = path.resolve(process.cwd(), 'dist');
+      const indexPath = path.join(distPath, 'index.html');
+      if (fs.existsSync(indexPath)) {
+        const html = fs.readFileSync(indexPath, 'utf-8');
+        return res.type('html').send(injectShareMeta(html, meta));
+      }
+    }
+
+    if (isDev) {
+      return next();
+    }
+
+    res.type('html').send(renderSharePage(meta));
   });
 
   // Lógica de Limpeza Periódica
@@ -264,7 +354,10 @@ async function startServer() {
     console.log('[Server] Mode: DEVELOPMENT');
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: process.env.DISABLE_HMR !== 'true',
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);

@@ -179,8 +179,8 @@ export function GodPicker({ lobby, isCaptain1, isCaptain2, handlePickerAction, t
           ) : (
             <div className="flex-1 flex flex-col overflow-hidden">
               {/* Added MapVisualizer to selection phase */}
-              <div className="p-4 flex justify-center">
-                <div className="w-full max-w-[200px]">
+              <div className="p-3 flex justify-center shrink-0 bg-slate-900/10 border-b border-slate-900/50">
+                <div className="w-full max-w-[280px] md:max-w-[340px] aspect-square max-h-[180px] md:max-h-[220px] overflow-hidden rounded-xl">
                   <MapVisualizer 
                     lobby={lobby} 
                     isVisible={() => true} 
@@ -193,8 +193,8 @@ export function GodPicker({ lobby, isCaptain1, isCaptain2, handlePickerAction, t
                 </div>
               </div>
               {/* God Selection Grid */}
-              <div className="flex-1 flex flex-col p-2 md:p-4 overflow-hidden">
-                <div className="flex items-center justify-between mb-2">
+              <div className="flex-1 flex flex-col p-2 md:p-3 overflow-hidden">
+                <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2">
                     <Shield className="w-3 h-3 text-amber-500" />
                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.yourPool || 'AVAILABLE GODS'}</h3>
@@ -203,7 +203,7 @@ export function GodPicker({ lobby, isCaptain1, isCaptain2, handlePickerAction, t
                     {myGodPool.length} {t.godsAvailable || 'Gods Available'}
                   </div>
                 </div>
-
+ 
                 <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
                   <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-1.5 pb-2">
                     {myGodPool.map(godId => {
@@ -211,9 +211,9 @@ export function GodPicker({ lobby, isCaptain1, isCaptain2, handlePickerAction, t
                       const isUsed = myUsedGods.includes(godId);
                       const isSelected = effectiveVote === godId;
                       const isDisabled = isUsed || !!effectiveVote || (!isCaptain1 && !isCaptain2);
-
+ 
                       if (!god) return null;
-
+ 
                       return (
                         <motion.button
                           key={godId}
@@ -258,12 +258,12 @@ export function GodPicker({ lobby, isCaptain1, isCaptain2, handlePickerAction, t
                   </div>
                 </div>
               </div>
-
+ 
               {/* MCL Player Selection */}
               {lobby.config.preset === 'MCL' && effectiveVote && !selectedPlayerId && (
-                  <div className="p-4 bg-slate-900 border-t border-slate-800">
-                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Select Player</h3>
-                    <div className="flex gap-3">
+                  <div className="sticky bottom-0 left-0 right-0 p-4 bg-slate-950/90 border-t border-slate-800 backdrop-blur-md z-[20] shadow-2xl">
+                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 text-center">Select Player</h3>
+                    <div className="flex gap-3 justify-center">
                         {(myTeam === 'A' ? lobby.teamAPlayers : lobby.teamBPlayers)?.map(p => (
                             <button 
                                 key={p.position}

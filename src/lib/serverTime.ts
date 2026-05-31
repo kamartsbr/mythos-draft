@@ -5,6 +5,42 @@ import { doc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 let syncPromise: Promise<number> | null = null;
 
 const SYNC_TIMEOUT_MS = 12_000;
+const SERVER_TIME_CACHE_KEY = 'mythos_server_time_offset';
+const SERVER_TIME_CACHE_TTL_MS = 5 * 60 * 1000;
+
+type ServerTimeCachePayload = {
+  expiresAt: number;
+  offset: number;
+};
+
+function readCachedOffset(): number | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.sessionStorage.getItem(SERVER_TIME_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ServerTimeCachePayload;
+    if (typeof parsed.offset !== 'number' || typeof parsed.expiresAt !== 'number' || parsed.expiresAt <= Date.now()) {
+      window.sessionStorage.removeItem(SERVER_TIME_CACHE_KEY);
+      return null;
+    }
+    return parsed.offset;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedOffset(offset: number): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const payload: ServerTimeCachePayload = {
+      expiresAt: Date.now() + SERVER_TIME_CACHE_TTL_MS,
+      offset,
+    };
+    window.sessionStorage.setItem(SERVER_TIME_CACHE_KEY, JSON.stringify(payload));
+  } catch {
+    // ignore cache failures
+  }
+}
 
 /**
  * Obtém o offset (diferença) entre o relógio local e o do servidor.
@@ -13,6 +49,9 @@ const SYNC_TIMEOUT_MS = 12_000;
 export async function getServerTimeOffset(): Promise<number> {
   const IS_DEV = import.meta.env.VITE_VIBE_MODE === 'DEVELOPMENT';
   if (IS_DEV) return 0;
+
+  const cachedOffset = readCachedOffset();
+  if (cachedOffset !== null) return cachedOffset;
 
   if (!syncPromise) {
     syncPromise = (async () => {
@@ -33,7 +72,7 @@ export async function getServerTimeOffset(): Promise<number> {
               unsub();
               resolve(0);
             }
-          }, 12000);
+          }, SYNC_TIMEOUT_MS);
 
           const unsub = onSnapshot(testDoc, (snapshot) => {
             const data = snapshot.data();
@@ -43,7 +82,9 @@ export async function getServerTimeOffset(): Promise<number> {
               unsub(); // Limpa o listener após obter o tempo
               const serverMs = data.timestamp.toMillis();
               const localMs = Date.now();
-              resolve(serverMs - localMs);
+              const offset = serverMs - localMs;
+              writeCachedOffset(offset);
+              resolve(offset);
             }
           }, (error) => {
             if (!isResolved) {
@@ -62,7 +103,9 @@ export async function getServerTimeOffset(): Promise<number> {
       }
     })();
   }
-  return syncPromise;
+  const offset = await syncPromise;
+  syncPromise = null;
+  return offset;
 }
 
 /**

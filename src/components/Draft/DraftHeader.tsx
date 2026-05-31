@@ -2,7 +2,6 @@ import { motion } from 'motion/react';
 import { Clock, Map as MapIcon, ChevronRight } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Lobby } from '../../types';
-import { MAPS } from '../../constants';
 
 interface DraftHeaderProps {
   lobby: Lobby;
@@ -12,7 +11,6 @@ interface DraftHeaderProps {
 
 export function DraftHeader({ lobby, timeLeft, t }: DraftHeaderProps) {
   const currentTurn = lobby.turnOrder[lobby.turn];
-  const selectedMap = MAPS.find(m => m.id.toLowerCase() === (lobby.selectedMap || '').toLowerCase());
 
   return (
     <div className="fixed top-0 left-0 right-0 md:sticky bg-slate-950 border-b border-slate-900 px-4 md:px-8 py-3 md:py-4 flex items-center justify-between z-50 shadow-md">

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Sword, Plus, ChevronRight, RefreshCw, Map as MapIcon, Trophy, Lock, Eye, Globe, Trash2, ChevronDown, ChevronUp, Shield, Scroll } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { LobbyConfig, SeriesType, TeamSize } from '../../types';
-import { MAPS, MAJOR_GODS, PANTHEONS, MCL_ROUND_MAPS, getMCLMapPool } from '../../constants';
+import { MAPS, MAJOR_GODS, PANTHEONS, MCL_ROUND_MAPS, getMCLMapPool, MCL_TIEBREAKER_MAP_POOL, MCL_PLAYOFFS_PHASES } from '../../constants';
 import { PresetBuilder } from './PresetBuilder';
 import { lobbyService } from '../../services/lobbyService';
 
@@ -71,6 +71,27 @@ export function LobbyCreation({
   const [showPresetBuilder, setShowPresetBuilder] = useState(false);
   const [communityPresets, setCommunityPresets] = useState<any[]>([]);
   const requestIdRef = useRef(0);
+  const [draftNameError, setDraftNameError] = useState<string | null>(null);
+  const draftNameInputRef = useRef<HTMLInputElement>(null);
+  const isE2ERun = import.meta.env.VITE_E2E === 'true';
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setLobbyName(e.target.value);
+    if (draftNameError && e.target.value.trim()) {
+      setDraftNameError(null);
+    }
+  };
+
+  const handleCreateClick = () => {
+    const trimmed = lobbyName.trim();
+    if (!trimmed) {
+      setDraftNameError(t.enterDraftName || "Please enter a draft name before creating the lobby.");
+      draftNameInputRef.current?.focus();
+      return;
+    }
+    setDraftNameError(null);
+    createLobby();
+  };
 
   const isCustomMode = config.preset === 'CUSTOM';
   const [isRulesExpanded, setIsRulesExpanded] = useState(false);
@@ -228,19 +249,6 @@ export function LobbyCreation({
         </AnimatePresence>
       
       <div className="space-y-6">
-        {/* Draft Name */}
-        <div>
-          <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-3 block">{t.lobbyName}</label>
-          <input 
-            type="text" 
-            maxLength={30}
-            value={lobbyName}
-            placeholder={t.lobbyNamePlaceholder}
-            onChange={(e) => setLobbyName(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-amber-500 transition-all"
-          />
-        </div>
-
         {/* Presets */}
         <div className="space-y-3">
           <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] block">{t.presets}</label>
@@ -261,6 +269,8 @@ export function LobbyCreation({
             ].map(preset => (
               <button
                 key={preset.id}
+                data-testid={`preset-${preset.id.toLowerCase()}`}
+                data-preset-id={preset.id}
                 onClick={() => applyPreset(preset.id)}
                 className={cn(
                   "py-3 px-4 rounded-xl border text-xs font-black transition-all uppercase tracking-tight flex items-center justify-start gap-4",
@@ -292,6 +302,63 @@ export function LobbyCreation({
 
 
           <AnimatePresence mode="popLayout">
+            {isE2ERun && config.preset === 'FORJA' && (
+              <motion.div
+                initial={{ height: 0, opacity: 0, marginBottom: 0 }}
+                animate={{ height: 'auto', opacity: 1, marginBottom: 16 }}
+                exit={{ height: 0, opacity: 0, marginBottom: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">
+                    E2E Forja Stage
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      data-testid="forja-stage-group"
+                      onClick={() => setConfig((prev: any) => ({
+                        ...prev,
+                        tournamentStage: 'GROUP',
+                        hasPerMapBans: false,
+                        hasMap3RandomRoll: true,
+                        isOfficialForjaMatch: false,
+                        isCustomDraft: true,
+                      }))}
+                      className={cn(
+                        "py-2 rounded-lg border text-[11px] uppercase tracking-wider font-bold transition-all",
+                        config.tournamentStage === 'GROUP'
+                          ? "bg-amber-500 border-amber-500 text-slate-950"
+                          : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700"
+                      )}
+                    >
+                      Group Stage
+                    </button>
+                    <button
+                      data-testid="forja-stage-playoffs"
+                      onClick={() => setConfig((prev: any) => ({
+                        ...prev,
+                        tournamentStage: 'PLAYOFFS',
+                        hasPerMapBans: true,
+                        hasMap3RandomRoll: true,
+                        isOfficialForjaMatch: false,
+                        isCustomDraft: true,
+                      }))}
+                      className={cn(
+                        "py-2 rounded-lg border text-[11px] uppercase tracking-wider font-bold transition-all",
+                        config.tournamentStage === 'PLAYOFFS'
+                          ? "bg-amber-500 border-amber-500 text-slate-950"
+                          : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700"
+                      )}
+                    >
+                      Playoffs
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence mode="popLayout">
             {(config.preset === 'MCL' || config.preset === 'MCL_PLAYOFFS' || config.preset === 'MCL_TIEBREAKER') && (
               <motion.div
                 initial={{ height: 0, opacity: 0, marginBottom: 0 }}
@@ -309,6 +376,7 @@ export function LobbyCreation({
                     </label>
                     <div className="grid grid-cols-3 gap-2">
                       <button
+                        data-testid="mcl-stage-group"
                         onClick={() => {
                           applyPreset('MCL');
                           setConfig((prev: any) => ({ ...prev, tournamentStage: 'GROUP' }));
@@ -323,9 +391,21 @@ export function LobbyCreation({
                         {t.mclGroupStage}
                       </button>
                       <button
+                        data-testid="mcl-stage-playoffs"
                         onClick={() => {
+                          const defaultPlayoffsPhase = MCL_PLAYOFFS_PHASES[0];
                           applyPreset('MCL_PLAYOFFS');
-                          setConfig((prev: any) => ({ ...prev, seriesType: 'BO5' }));
+                          setConfig((prev: LobbyConfig) => ({
+                            ...prev,
+                            seriesType: defaultPlayoffsPhase.seriesType,
+                            customGameCount: defaultPlayoffsPhase.gameCount,
+                            mclPlayoffsPhase: defaultPlayoffsPhase.id,
+                            playoffsLastMap: defaultPlayoffsPhase.finalMap,
+                            hasBans: false,
+                            banCount: 0,
+                            hasPerMapBans: true,
+                            godBanScope: 'PER_MAP',
+                          }));
                         }}
                         className={cn(
                           "py-2 rounded-lg border text-[11px] uppercase tracking-wider font-bold transition-all",
@@ -337,9 +417,18 @@ export function LobbyCreation({
                         {t.mclPlayoffs}
                       </button>
                       <button
+                        data-testid="mcl-stage-tiebreaker"
                         onClick={() => {
                           applyPreset('MCL_TIEBREAKER');
-                          setConfig((prev: any) => ({ ...prev, seriesType: 'BO1', hasPerMapBans: false }));
+                          setConfig((prev: LobbyConfig) => ({
+                            ...prev,
+                            seriesType: 'BO1',
+                            customGameCount: 1,
+                            hasBans: false,
+                            banCount: 0,
+                            hasPerMapBans: false,
+                            godBanScope: 'PER_MAP',
+                          }));
                         }}
                         className={cn(
                           "py-2 rounded-lg border text-[11px] uppercase tracking-wider font-bold transition-all",
@@ -363,6 +452,7 @@ export function LobbyCreation({
                       {[1, 2, 3, 4, 5, 6, 7].map(round => (
                         <button
                           key={round}
+                          data-testid={`mcl-round-${round}`}
                           onClick={() => setConfig((prev: any) => {
                             const newPantheons = round >= 5 
                               ? MAJOR_GODS.map(g => g.id) // All gods
@@ -422,37 +512,144 @@ export function LobbyCreation({
 
                   {config.preset === 'MCL_TIEBREAKER' && (
                     <div className="space-y-4">
-                      <div className="flex items-center gap-3 p-2 bg-slate-900/50 rounded-lg border border-slate-800/50">
-                        <div className="w-10 h-10 rounded overflow-hidden bg-slate-800 flex-shrink-0">
-                          <img src="/Aztlan_Oasis.webp" alt="Aztlan Oasis" className="w-full h-full object-cover" />
+                      <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-800/50 space-y-2">
+                        <div className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                          MCL Tiebreaker Custom Rules
                         </div>
-                        <div>
-                          <div className="text-xs text-slate-500 uppercase font-bold tracking-tighter">
-                            {t.predeterminedMap || "Predetermined Map"}
-                          </div>
-                          <div className="text-sm font-bold text-amber-500">
-                            Aztlan Oasis
-                          </div>
+                        <p className="text-[10px] text-slate-500 leading-relaxed">
+                          Private 3v3 tiebreaker draft with selectable series length, god ban count, ban scope, and eligible MCL maps.
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">
+                          Series
+                        </label>
+                        <div className="grid grid-cols-4 gap-2">
+                          {(['BO1', 'BO3', 'BO5', 'BO7'] as SeriesType[]).map(seriesType => {
+                            const gameCount = parseInt(seriesType.replace('BO', ''), 10);
+                            return (
+                              <button
+                                key={seriesType}
+                                data-testid={`mcl-tiebreaker-series-${seriesType.toLowerCase()}`}
+                                onClick={() => setConfig((prev: LobbyConfig) => ({
+                                  ...prev,
+                                  seriesType,
+                                  customGameCount: gameCount,
+                                }))}
+                                className={cn(
+                                  "py-2 rounded-lg border text-[11px] uppercase tracking-wider font-bold transition-all",
+                                  config.seriesType === seriesType
+                                    ? "bg-amber-500 border-amber-500 text-slate-950"
+                                    : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700"
+                                )}
+                              >
+                                {lang === 'pt' ? seriesType.replace('BO', 'MD') : seriesType}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
-                      <div className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border border-slate-800/50">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-bold text-slate-200">God Bans</span>
-                          <span className="text-[10px] text-slate-500">Enable 1 god ban per team</span>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">
+                          God Bans Per Team
+                        </label>
+                        <div className="grid grid-cols-4 gap-2">
+                          {[0, 1, 2, 3].map(banCount => (
+                            <button
+                              key={banCount}
+                              data-testid={`mcl-tiebreaker-ban-count-${banCount}`}
+                              onClick={() => setConfig((prev: LobbyConfig) => ({
+                                ...prev,
+                                hasBans: banCount > 0,
+                                banCount,
+                                hasPerMapBans: false,
+                              }))}
+                              className={cn(
+                                "py-2 rounded-lg border text-[11px] uppercase tracking-wider font-bold transition-all",
+                                (config.hasBans ? config.banCount : 0) === banCount
+                                  ? "bg-amber-500 border-amber-500 text-slate-950"
+                                  : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700"
+                              )}
+                            >
+                              {banCount}
+                            </button>
+                          ))}
                         </div>
-                        <button
-                          onClick={() => setConfig((prev: any) => ({ ...prev, hasPerMapBans: !prev.hasPerMapBans }))}
-                          className={cn(
-                            "w-12 h-6 rounded-full relative transition-colors duration-200",
-                            config.hasPerMapBans ? "bg-amber-500" : "bg-slate-700"
-                          )}
-                        >
-                          <motion.div
-                            className="w-4 h-4 bg-white rounded-full absolute top-1 shadow-sm"
-                            animate={{ left: config.hasPerMapBans ? '26px' : '4px' }}
-                            transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                          />
-                        </button>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">
+                          Ban Scope
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            data-testid="mcl-tiebreaker-ban-scope-per-map"
+                            onClick={() => setConfig((prev: LobbyConfig) => ({ ...prev, godBanScope: 'PER_MAP' }))}
+                            className={cn(
+                              "py-2 rounded-lg border text-[11px] uppercase tracking-wider font-bold transition-all",
+                              (config.godBanScope || 'PER_MAP') === 'PER_MAP'
+                                ? "bg-amber-500 border-amber-500 text-slate-950"
+                                : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700"
+                            )}
+                          >
+                            Per Map
+                          </button>
+                          <button
+                            data-testid="mcl-tiebreaker-ban-scope-series"
+                            onClick={() => setConfig((prev: LobbyConfig) => ({ ...prev, godBanScope: 'SERIES' }))}
+                            className={cn(
+                              "py-2 rounded-lg border text-[11px] uppercase tracking-wider font-bold transition-all",
+                              config.godBanScope === 'SERIES'
+                                ? "bg-amber-500 border-amber-500 text-slate-950"
+                                : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700"
+                            )}
+                          >
+                            Whole Series
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">
+                          Tiebreaker Map Pool
+                        </label>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          {MAPS.filter(m => MCL_TIEBREAKER_MAP_POOL.includes(m.id)).map(map => {
+                            const isSelected = config.allowedMaps.includes(map.id);
+                            return (
+                              <button
+                                key={map.id}
+                                data-testid="mcl-tiebreaker-map-option"
+                                data-map-id={map.id}
+                                onClick={() => setConfig((prev: LobbyConfig) => {
+                                  const isCurrentlySelected = prev.allowedMaps.includes(map.id);
+                                  if (isCurrentlySelected && prev.allowedMaps.length <= 1) {
+                                    return prev;
+                                  }
+
+                                  const allowedMaps = isCurrentlySelected
+                                    ? prev.allowedMaps.filter(id => id !== map.id)
+                                    : [...prev.allowedMaps, map.id];
+
+                                  return { ...prev, allowedMaps };
+                                })}
+                                className={cn(
+                                  "p-2 rounded-lg border text-left transition-all",
+                                  isSelected
+                                    ? "bg-amber-500/10 border-amber-500 text-amber-500"
+                                    : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700"
+                                )}
+                              >
+                                <img src={map.image} alt="" className="w-full aspect-square rounded object-cover mb-2 bg-slate-800" />
+                                <div className="text-[10px] font-black uppercase tracking-tight truncate">
+                                  {map.name}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -470,34 +667,45 @@ export function LobbyCreation({
                 className="overflow-hidden"
               >
                 <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-4">
-                  <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => setConfig((p: any) => ({ ...p, seriesType: 'BO5', customGameCount: 5 }))}
-                      className={cn("py-2 rounded-lg border text-sm font-bold transition-all", config.seriesType === 'BO5' ? "bg-amber-500 border-amber-500 text-slate-950" : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700")}
-                    >MD5</button>
-                    <button onClick={() => setConfig((p: any) => ({ ...p, seriesType: 'BO7', customGameCount: 7 }))}
-                      className={cn("py-2 rounded-lg border text-sm font-bold transition-all", config.seriesType === 'BO7' ? "bg-amber-500 border-amber-500 text-slate-950" : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700")}
-                    >MD7 (Grande Final)</button>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">MCL Playoffs Phase</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {MCL_PLAYOFFS_PHASES.map(phase => {
+                        const finalMap = MAPS.find(map => map.id === phase.finalMap);
+                        return (
+                          <button
+                            key={phase.id}
+                            data-testid="mcl-playoffs-phase"
+                            data-phase-id={phase.id}
+                            onClick={() => setConfig((prev: LobbyConfig) => ({
+                              ...prev,
+                              seriesType: phase.seriesType,
+                              customGameCount: phase.gameCount,
+                              mclPlayoffsPhase: phase.id,
+                              playoffsLastMap: phase.finalMap,
+                            }))}
+                            className={cn(
+                              "p-3 rounded-lg border text-left transition-all",
+                              config.mclPlayoffsPhase === phase.id
+                                ? "bg-amber-500/10 border-amber-500 text-amber-500"
+                                : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700"
+                            )}
+                          >
+                            <div className="text-sm font-black uppercase tracking-tight">{phase.label}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                              {phase.seriesType.replace('BO', 'MD')} • Final map: {finalMap?.name || phase.finalMap}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <p className="text-[10px] text-amber-400/80 italic text-center px-2">
-                    {t.playoffsProvisionalWarning}
-                  </p>
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Mapa do {config.seriesType === 'BO7' ? 'Game 7' : 'Game 5'} (Placeholder)</label>
-                  <div className="grid grid-cols-3 gap-1 max-h-48 overflow-y-auto">
-                    {MAPS.filter(m => config.allowedMaps.includes(m.id)).map(m => (
-                      <button
-                        key={m.id}
-                        onClick={() => setConfig((p: any) => ({ ...p, playoffsLastMap: m.id }))}
-                        className={cn("py-1 px-2 rounded border text-[10px] font-bold text-left truncate transition-all", config.playoffsLastMap === m.id ? "bg-amber-500 border-amber-500 text-slate-950" : "bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700")}
-                      >
-                        {m.name}
-                      </button>
-                    ))}
-                  </div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Predetermined Game {config.seriesType === 'BO7' ? '7' : '5'} Map</label>
                   {config.playoffsLastMap && (
                     <div className="flex items-center gap-3 p-2 bg-slate-900/50 rounded-lg border border-amber-500/20">
                       <img src={MAPS.find(m => m.id === config.playoffsLastMap)?.image} alt="" className="w-10 h-10 rounded object-cover" />
                       <div>
-                        <div className="text-[10px] text-slate-500 uppercase font-bold tracking-tighter">PLACEHOLDER — GAME {config.seriesType === 'BO7' ? '7' : '5'}</div>
+                        <div className="text-[10px] text-slate-500 uppercase font-bold tracking-tighter">PREDETERMINED GAME {config.seriesType === 'BO7' ? '7' : '5'}</div>
                         <div className="text-sm font-bold text-amber-500">{MAPS.find(m => m.id === config.playoffsLastMap)?.name}</div>
                       </div>
                     </div>
@@ -913,6 +1121,7 @@ export function LobbyCreation({
             {t.visibility}
           </label>
           <button
+            data-testid="lobby-visibility-toggle"
             onClick={() => setConfig((prev: any) => ({ ...prev, isPrivate: !prev.isPrivate }))}
             className={cn(
               "w-full py-2 rounded-lg border text-base font-bold transition-all flex items-center justify-center gap-2",
@@ -1197,8 +1406,49 @@ export function LobbyCreation({
           </div>
         )}
 
+        {/* Draft Details */}
+        <div className="p-6 bg-slate-950/40 border border-slate-900 rounded-2xl space-y-4">
+          <div className="flex items-center gap-2 mb-2 select-none">
+            <Sword className="w-4 h-4 text-amber-500" />
+            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">{lang === 'en' ? "Draft Details" : "Detalhes do Draft"}</h3>
+          </div>
+          
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">{t.lobbyName}</label>
+            <input 
+              ref={draftNameInputRef}
+              data-testid="lobby-name-input"
+              type="text" 
+              maxLength={30}
+              value={lobbyName}
+              placeholder={t.lobbyNamePlaceholder}
+              onChange={handleNameChange}
+              className={cn(
+                "w-full bg-slate-950 border rounded-xl px-4 py-3 text-sm focus:outline-none transition-all",
+                draftNameError 
+                  ? "border-red-500 ring-2 ring-red-500/20" 
+                  : "border-slate-800 focus:border-amber-500"
+              )}
+            />
+            {draftNameError && (
+              <p className="text-xs font-bold uppercase tracking-wider text-red-400 mt-1 select-none animate-pulse">
+                {draftNameError}
+              </p>
+            )}
+          </div>
+
+          <div className="text-[10px] font-black uppercase tracking-widest text-center select-none pt-1">
+            {lobbyName.trim() ? (
+              <span className="text-green-500">Ready to create lobby</span>
+            ) : (
+              <span className="text-amber-500/80">Draft name required before creating lobby</span>
+            )}
+          </div>
+        </div>
+
         <button
-          onClick={createLobby}
+          data-testid="create-lobby-button"
+          onClick={handleCreateClick}
           className="w-full py-5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black mythic-text text-lg shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-3 group active:scale-[0.98]"
         >
           {t.createBtn}

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { LobbyConfig, SeriesType, TeamSize } from '../types';
-import { MAPS, MAJOR_GODS, RANKED_MAP_POOL, MCL_ROUND_MAPS, MCL_MAP_POOL, getMCLMapPool, FORJA_MAP_POOL } from '../constants';
+import { LobbyConfig } from '../types';
+import { MAPS, MAJOR_GODS, RANKED_MAP_POOL, MCL_ROUND_MAPS, getMCLMapPool, getMCLPlayoffsMapPool, MCL_TIEBREAKER_MAP_POOL, MCL_PLAYOFFS_PHASES, FORJA_MAP_POOL } from '../constants';
 
 /**
  * Manage lobby draft configuration state, saved presets, preset application, field-locking logic, and persistence to localStorage.
@@ -169,12 +169,14 @@ export function useDraftConfig() {
         newConfig.timerDuration = 60;
         newConfig.mapTurnOrder = [];
       } else if (preset === 'MCL_PLAYOFFS') {
-        newConfig.allowedMaps = getMCLMapPool(7); // full MCL pool with all round maps
+        const defaultPlayoffsPhase = MCL_PLAYOFFS_PHASES[0];
+        newConfig.allowedMaps = getMCLPlayoffsMapPool(); // full MCL playoffs pool with extra tiebreaker-eligible maps
         newConfig.allowedPantheons = MAJOR_GODS.map(g => g.id); // all gods
         newConfig.teamSize = 3;
-        newConfig.seriesType = 'BO5';           // default MD5, switchable to BO7 in UI
-        newConfig.customGameCount = 5;
+        newConfig.seriesType = defaultPlayoffsPhase.seriesType;
+        newConfig.customGameCount = defaultPlayoffsPhase.gameCount;
         newConfig.mapBanCount = 0;
+        newConfig.hasBans = false;
         newConfig.banCount = 0;
         newConfig.acePick = false;
         newConfig.isExclusive = false;
@@ -182,13 +184,15 @@ export function useDraftConfig() {
         newConfig.firstMapRandom = false;
         newConfig.loserPicksNextMap = false;    // handled internally by engine branch
         newConfig.hasPerMapBans = true;         // 1 ban per team per game
+        newConfig.godBanScope = 'PER_MAP';
         newConfig.tournamentStage = 'PLAYOFFS';
+        newConfig.mclPlayoffsPhase = defaultPlayoffsPhase.id;
         newConfig.timerDuration = 60;
         newConfig.mapTurnOrder = [];
         newConfig.godTurnOrder = [];
-        newConfig.playoffsLastMap = '';         // cleared, user must select in UI
+        newConfig.playoffsLastMap = defaultPlayoffsPhase.finalMap;
       } else if (preset === 'MCL_TIEBREAKER') {
-        newConfig.allowedMaps = ['aztlan_oasis'];
+        newConfig.allowedMaps = MCL_TIEBREAKER_MAP_POOL;
         newConfig.allowedPantheons = MAJOR_GODS.map(g => g.id);
         newConfig.teamSize = 3;
         newConfig.seriesType = 'BO1';
@@ -200,7 +204,9 @@ export function useDraftConfig() {
         newConfig.pickType = 'alternated';
         newConfig.firstMapRandom = false;
         newConfig.loserPicksNextMap = false;
-        newConfig.hasPerMapBans = false; // By default no bans, can be toggled in UI
+        newConfig.hasBans = false;
+        newConfig.hasPerMapBans = false;
+        newConfig.godBanScope = 'PER_MAP';
         newConfig.tournamentStage = 'TIEBREAKER';
         newConfig.timerDuration = 60;
         newConfig.mapTurnOrder = [];
@@ -227,9 +233,9 @@ export function useDraftConfig() {
     }
 
     if (config.preset === 'MCL' || config.preset === 'FORJA' || config.preset === 'MCL_PLAYOFFS' || config.preset === 'MCL_TIEBREAKER') {
-      let lockedFields = ['seriesType', 'customGameCount', 'mapBanCount', 'banCount', 'isExclusive', 'pickType', 'teamSize', 'mapTurnOrder', 'firstMapRandom', 'loserPicksNextMap', 'acePick', 'tournamentStage', 'hasPerMapBans'];
+      let lockedFields = ['seriesType', 'customGameCount', 'mapBanCount', 'banCount', 'isExclusive', 'pickType', 'teamSize', 'mapTurnOrder', 'firstMapRandom', 'loserPicksNextMap', 'acePick', 'tournamentStage', 'hasPerMapBans', 'godBanScope'];
       if (config.preset === 'MCL_TIEBREAKER') {
-        lockedFields = lockedFields.filter(f => f !== 'hasPerMapBans');
+        lockedFields = lockedFields.filter(f => !['seriesType', 'customGameCount', 'banCount', 'hasPerMapBans', 'godBanScope'].includes(f));
       }
       return lockedFields.includes(field);
     }

@@ -2,6 +2,35 @@ import { describe, it, expect } from 'vitest';
 import { calculateNextTurnOrder, processTurnAction, processReportAction } from '../pureDraftEngine';
 import { LobbyConfig, Lobby } from '../../types';
 
+const createConfig = (overrides: Partial<LobbyConfig>): LobbyConfig => ({
+  name: 'Test Lobby',
+  preset: 'CUSTOM',
+  teamSize: 3,
+  hasBans: false,
+  banCount: 0,
+  isExclusive: false,
+  isPrivate: false,
+  allowedPantheons: ['greek', 'egyptian', 'norse'],
+  allowedMaps: ['oasis', 'tundra', 'marsh'],
+  pickType: 'alternated',
+  timerDuration: 60,
+  mapBanCount: 0,
+  loserPicksNextMap: false,
+  firstMapRandom: false,
+  acePick: false,
+  acePickHidden: false,
+  mapTurnOrder: [],
+  godTurnOrder: [],
+  seriesType: 'BO5',
+  ...overrides,
+});
+
+const turnSignature = (turn: ReturnType<typeof calculateNextTurnOrder>['godOrder'][number]) => ({
+  player: turn.player,
+  action: turn.action,
+  target: turn.target,
+});
+
 describe('pureDraftEngine > calculateNextTurnOrder', () => {
   // Scenario A: Preset MCL or FORJA, Game 1
   it('Scenario A: MCL/FORJA Preset, Game 1 should start with Team A and generate standard structure', () => {
@@ -137,6 +166,98 @@ describe('pureDraftEngine > calculateNextTurnOrder', () => {
     // When loserPicksNextMap is true, Game 2+ maps are chosen out-of-band before god draft
     expect(mapOrder).toHaveLength(0);
   });
+
+  it('Scenario D0: MCL Playoffs Game 1 inserts host and guest god bans before god picks', () => {
+    const config = createConfig({
+      preset: 'MCL_PLAYOFFS',
+      hasPerMapBans: true,
+      seriesType: 'BO5',
+    });
+
+    const { mapOrder, godOrder } = calculateNextTurnOrder(config, 1, null);
+
+    expect(mapOrder).toEqual([
+      { player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' },
+    ]);
+    expect(godOrder.slice(0, 3).map(turnSignature)).toEqual([
+      { player: 'A', action: 'BAN', target: 'GOD' },
+      { player: 'B', action: 'BAN', target: 'GOD' },
+      { player: 'A', action: 'PICK', target: 'GOD' },
+    ]);
+  });
+
+  it('Scenario D: MCL Playoffs Game 2 should let the previous loser pick map, ban first, and pick first', () => {
+    const config = createConfig({
+      preset: 'MCL_PLAYOFFS',
+      hasPerMapBans: true,
+      seriesType: 'BO5',
+    });
+
+    const afterHostWin = calculateNextTurnOrder(config, 2, 'A');
+    expect(afterHostWin.mapOrder[0].player).toBe('B');
+    expect(afterHostWin.godOrder[0]).toMatchObject({ player: 'B', action: 'BAN' });
+    expect(afterHostWin.godOrder.find(turn => turn.action === 'PICK')?.player).toBe('B');
+
+    const afterGuestWin = calculateNextTurnOrder(config, 2, 'B');
+    expect(afterGuestWin.mapOrder[0].player).toBe('A');
+    expect(afterGuestWin.godOrder[0]).toMatchObject({ player: 'A', action: 'BAN' });
+    expect(afterGuestWin.godOrder.find(turn => turn.action === 'PICK')?.player).toBe('A');
+  });
+
+  it('Scenario D2: MCL Playoffs final predetermined map still has per-map god bans before god picks', () => {
+    const config = createConfig({
+      preset: 'MCL_PLAYOFFS',
+      hasPerMapBans: true,
+      seriesType: 'BO5',
+    });
+
+    const { mapOrder, godOrder } = calculateNextTurnOrder(config, 5, 'A');
+
+    expect(mapOrder).toHaveLength(0);
+    expect(godOrder.slice(0, 3).map(turnSignature)).toEqual([
+      { player: 'B', action: 'BAN', target: 'GOD' },
+      { player: 'A', action: 'BAN', target: 'GOD' },
+      { player: 'B', action: 'PICK', target: 'GOD' },
+    ]);
+  });
+
+  it('Scenario D3: MCL Playoffs stale config still prefers per-map bans over generic ban settings', () => {
+    const config = createConfig({
+      preset: 'MCL_PLAYOFFS',
+      hasPerMapBans: true,
+      hasBans: true,
+      banCount: 0,
+      seriesType: 'BO5',
+    });
+
+    const { godOrder } = calculateNextTurnOrder(config, 1, null);
+
+    expect(godOrder.slice(0, 3).map(turnSignature)).toEqual([
+      { player: 'A', action: 'BAN', target: 'GOD' },
+      { player: 'B', action: 'BAN', target: 'GOD' },
+      { player: 'A', action: 'PICK', target: 'GOD' },
+    ]);
+  });
+
+  it('Scenario E: MCL Tiebreaker should follow MCL group-stage parity with ban phase added', () => {
+    const config = createConfig({
+      preset: 'MCL_TIEBREAKER',
+      hasBans: true,
+      banCount: 1,
+      seriesType: 'BO5',
+    });
+
+    const afterHostWin = calculateNextTurnOrder(config, 2, 'A');
+    expect(afterHostWin.mapOrder[0].player).toBe('B');
+    expect(afterHostWin.godOrder[0]).toMatchObject({ player: 'B', action: 'BAN' });
+
+    const afterGuestWin = calculateNextTurnOrder(config, 2, 'B');
+    expect(afterGuestWin.mapOrder[0].player).toBe('A');
+    expect(afterGuestWin.godOrder[0]).toMatchObject({ player: 'B', action: 'BAN' });
+
+    const game3 = calculateNextTurnOrder(config, 3, 'A');
+    expect(game3.godOrder[0]).toMatchObject({ player: 'A', action: 'BAN' });
+  });
 });
 
 describe('pureDraftEngine > processTurnAction', () => {
@@ -214,6 +335,7 @@ describe('pureDraftEngine > processTurnAction', () => {
 
     expect(updated.turn).toBe(1);
     expect(updated.picks[0].godId).toBe('zeus');
+    expect(updated.picks.map(p => p.playerId)).toEqual(lobby.picks.map(p => p.playerId));
     expect(updated.picks[0].turnIndex).toBe(0);
     expect(updated.replayLog).toHaveLength(1);
     expect(updated.replayLog[0]).toMatchObject({
@@ -270,6 +392,42 @@ describe('pureDraftEngine > processTurnAction', () => {
     expect(() => processTurnAction(lobby, 'zeus', 'B')).toThrow("Not your turn");
   });
 
+  it('Scenario D2: Should reject expired manual picks instead of replacing them with random actions', () => {
+    const mapLobby = createBaseLobby('drafting');
+    mapLobby.phase = 'map_pick';
+    mapLobby.timerStart = 1;
+    mapLobby.turnOrder = [
+      { player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' }
+    ];
+
+    expect(() => processTurnAction(mapLobby, 'ghost_lake', 'A', undefined, undefined, undefined, 63_000)).toThrow("Turn timed out");
+    expect(() => processTurnAction(mapLobby, 'ghost_lake', 'A', undefined, undefined, { isRandom: true }, 63_000)).toThrow("Turn timed out");
+
+    const godLobby = createBaseLobby('drafting');
+    godLobby.timerStart = 1;
+    godLobby.picks = [
+      { playerId: 1, godId: null, team: 'A', color: 'red', position: 'corner', playerName: 'PlayerOne' }
+    ];
+
+    expect(() => processTurnAction(godLobby, 'huitzilopochtli', 'A', 1, 'PlayerOne', undefined, 63_000)).toThrow("Turn timed out");
+    expect(() => processTurnAction(godLobby, 'huitzilopochtli', 'A', 1, 'PlayerOne', { isRandom: true }, 63_000)).toThrow("Turn timed out");
+  });
+
+  it('Scenario D3: Should use turnEndsAt as the authoritative timer boundary when present', () => {
+    const lobby = createBaseLobby('drafting');
+    lobby.phase = 'map_pick';
+    lobby.timerStart = 1;
+    lobby.turnEndsAt = 120;
+    lobby.turnOrder = [
+      { player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' }
+    ];
+
+    const updated = processTurnAction(lobby, 'oasis', 'A', undefined, undefined, undefined, 63_000);
+    expect(updated.selectedMap).toBe('oasis');
+
+    expect(() => processTurnAction(lobby, 'oasis', 'A', undefined, undefined, undefined, 121_000)).toThrow("Turn timed out");
+  });
+
   // Scenario E: Auto-pick MAP on timeout or null actionId
   it('Scenario E: Should auto-pick a random map when target is MAP and actionId is null', () => {
     const lobby = createBaseLobby('drafting');
@@ -278,7 +436,7 @@ describe('pureDraftEngine > processTurnAction', () => {
     ];
     lobby.config.allowedMaps = ['oasis', 'marsh'];
     
-    const updated = processTurnAction(lobby, null as any, 'A', undefined, undefined, undefined, 1000);
+    const updated = processTurnAction(lobby, null as any, 'A', undefined, undefined, { isTimeoutAutoResolve: true }, 1000);
     
     expect(updated.selectedMap).toBeDefined();
     expect(['oasis', 'marsh']).toContain(updated.selectedMap);
@@ -295,7 +453,7 @@ describe('pureDraftEngine > processTurnAction', () => {
       { playerId: 10, godId: null, team: 'A', color: 'red', position: 'corner', playerName: 'PlayerOne' }
     ];
     
-    const updated = processTurnAction(lobby, null as any, 'A', undefined, undefined, undefined, 1000);
+    const updated = processTurnAction(lobby, null as any, 'A', undefined, undefined, { isTimeoutAutoResolve: true }, 1000);
     
     expect(updated.picks[0].godId).toBeDefined();
     expect(updated.picks[0].godId).not.toBeNull();
@@ -316,7 +474,7 @@ describe('pureDraftEngine > processTurnAction', () => {
     ];
     lobby.config.allowedPantheons = ['greek'];
     
-    const updated = processTurnAction(lobby, null as any, 'A', undefined, undefined, undefined, 1000);
+    const updated = processTurnAction(lobby, null as any, 'A', undefined, undefined, { isTimeoutAutoResolve: true }, 1000);
     
     expect(updated.bans).toHaveLength(1);
     expect(updated.bans[0]).toBeDefined();
@@ -436,6 +594,7 @@ describe('pureDraftEngine > processReportAction', () => {
     expect(step2.selectedMap).toBeNull();
     expect(step2.picks[0].godId).toBeNull(); // Reset god selections for next game
     expect(step2.picks[1].godId).toBeNull();
+    expect(step2.picks.map(p => p.playerId)).toEqual([1, 2]);
     expect(step2.history).toHaveLength(1);
     expect(step2.history[0]).toMatchObject({
       gameNumber: 1,
@@ -444,6 +603,32 @@ describe('pureDraftEngine > processReportAction', () => {
       picksA: ['zeus'],
       picksB: ['isis'],
     });
+  });
+
+  it('Scenario C2: Should keep history chronological across multiple report-score transitions', () => {
+    const game1 = createDraftedLobby('reporting');
+    const game1VoteA = processReportAction(game1, 'A', 'A', 1000);
+    const advanced = processReportAction(game1VoteA, 'A', 'B', 2000);
+
+    const game2: Lobby = {
+      ...advanced,
+      status: 'drafting',
+      phase: 'reporting',
+      selectedMap: 'tundra',
+      picks: [
+        { playerId: 1, godId: 'poseidon', team: 'A', color: 'red', position: 'corner' },
+        { playerId: 2, godId: 'set', team: 'B', color: 'blue', position: 'corner' },
+      ],
+      reportVoteA: null,
+      reportVoteB: null,
+    };
+
+    const game2VoteA = processReportAction(game2, 'B', 'A', 3000);
+    const afterGame2 = processReportAction(game2VoteA, 'B', 'B', 4000);
+
+    expect(afterGame2.history.map(entry => entry.gameNumber)).toEqual([1, 2]);
+    expect(afterGame2.history.map(entry => entry.mapId)).toEqual(['oasis', 'tundra']);
+    expect(afterGame2.history.map(entry => entry.winner)).toEqual(['A', 'B']);
   });
 
   // Cenário D: Resultado finaliza a série
@@ -460,6 +645,151 @@ describe('pureDraftEngine > processReportAction', () => {
     expect(step2.status).toBe('finished');
     expect(step2.phase).toBe('finished');
   });
+
+  it('Scenario E: MCL Group Stage Game 3 start prevents isRandom or godId leakage and clears timer', () => {
+    const config: LobbyConfig = {
+      name: 'MCL Lobby',
+      preset: 'MCL',
+      teamSize: 3,
+      hasBans: false,
+      seriesType: '3G'
+    } as LobbyConfig;
+
+    const lobby: Lobby = {
+      id: 'test',
+      config,
+      status: 'drafting',
+      phase: 'reporting',
+      currentGame: 2,
+      history: [],
+      bans: [],
+      mapBans: [],
+      seriesMaps: ['map1', 'map2'],
+      scoreA: 1,
+      scoreB: 1,
+      picks: [
+        { playerId: 1, team: 'A', position: 'corner', color: '#ef4444', godId: 'oranos', isRandom: true, turnIndex: 1, playerName: 'P1' }
+      ]
+    } as unknown as Lobby;
+
+    const step1 = processReportAction(lobby, 'A', 'A', 1000);
+    const step2 = processReportAction(step1, 'A', 'B', 2000);
+
+    expect(step2.currentGame).toBe(3);
+    expect(step2.phase).toBe('ready');
+    expect(step2.status).toBe('waiting');
+    expect(step2.timerStart).toBeNull();
+    expect(step2.turnEndsAt).toBeNull();
+
+    // Verify all picks are wiped cleanly
+    const p1 = step2.picks.find(p => p.playerId === 1);
+    expect(p1?.godId).toBeNull();
+    expect(p1?.isRandom).toBe(false);
+    expect(p1?.turnIndex).toBeUndefined();
+    expect(p1?.playerName).toBe('P1');
+  });
+
+  it('Scenario E2: MCL Group Stage preserves a prefilled Game 3 map during next-game setup', () => {
+    const lobby = createDraftedLobby('reporting');
+    lobby.config = createConfig({
+      preset: 'MCL',
+      seriesType: '3G',
+    });
+    lobby.currentGame = 2;
+    lobby.seriesMaps = ['oasis', 'marsh', 'ghost_lake'];
+    lobby.selectedMap = 'marsh';
+
+    const step1 = processReportAction(lobby, 'B', 'A', 1000);
+    const step2 = processReportAction(step1, 'B', 'B', 2000);
+
+    expect(step2.currentGame).toBe(3);
+    expect(step2.selectedMap).toBe('ghost_lake');
+    expect(step2.picks.map(p => p.playerId)).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it('Scenario E3: FORJA non-official Game 3 keeps the system map turn and does not swap slot ids', () => {
+    const lobby = createDraftedLobby('reporting');
+    lobby.config = createConfig({
+      preset: 'FORJA',
+      tournamentStage: 'GROUP',
+      seriesType: '3G',
+      hasMap3RandomRoll: true,
+    });
+    lobby.currentGame = 2;
+    lobby.seriesMaps = ['oasis', 'marsh', 'ghost_lake'];
+    lobby.selectedMap = 'marsh';
+
+    const step1 = processReportAction(lobby, 'A', 'A', 1000);
+    const step2 = processReportAction(step1, 'A', 'B', 2000);
+
+    expect(step2.currentGame).toBe(3);
+    expect(step2.selectedMap).toBe('ghost_lake');
+    expect(step2.turnOrder[0]).toMatchObject({ player: 'ADMIN', action: 'PICK', target: 'MAP' });
+    expect(step2.picks.map(p => p.playerId)).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it('Scenario E4: FORJA official Game 3 admin override finishes with the final score for standings', () => {
+    const lobby = createDraftedLobby('reporting');
+    lobby.config = createConfig({
+      preset: 'FORJA',
+      tournamentStage: 'GROUP',
+      isOfficialForjaMatch: true,
+      forjaTeamA: 'team-a',
+      forjaTeamB: 'team-b',
+      forjaGroupId: 'B',
+      seriesType: '3G',
+    });
+    lobby.currentGame = 3;
+    lobby.scoreA = 1;
+    lobby.scoreB = 1;
+    lobby.selectedMap = 'ghost_lake';
+
+    const result = processReportAction(lobby, 'A', 'A', 1000, { isAdminOverride: true });
+
+    expect(result.status).toBe('finished');
+    expect(result.phase).toBe('finished');
+    expect(result.scoreA).toBe(2);
+    expect(result.scoreB).toBe(1);
+    expect(result.history.map(entry => entry.gameNumber)).toEqual([3]);
+    expect(result.history[0]).toMatchObject({ mapId: 'ghost_lake', winner: 'A' });
+  });
+
+  it('Scenario F: MCL Playoffs per-game god bans reset when advancing to the next game', () => {
+    const lobby = createDraftedLobby('reporting');
+    lobby.config = createConfig({
+      preset: 'MCL_PLAYOFFS',
+      hasPerMapBans: true,
+      seriesType: 'BO5',
+    });
+    lobby.bans = ['zeus'];
+    lobby.replayLog = [
+      {
+        gameNumber: 1,
+        turnIndex: 1,
+        player: 'A',
+        action: 'BAN',
+        target: 'GOD',
+        id: 'zeus',
+        timestamp: '1970-01-01T00:00:01.000Z',
+      },
+      {
+        gameNumber: 1,
+        turnIndex: 2,
+        player: 'B',
+        action: 'BAN',
+        target: 'GOD',
+        id: 'isis',
+        timestamp: '1970-01-01T00:00:02.000Z',
+      },
+    ];
+
+    const step1 = processReportAction(lobby, 'A', 'A', 1000);
+    const step2 = processReportAction(step1, 'A', 'B', 2000);
+
+    expect(step2.currentGame).toBe(2);
+    expect(step2.bans).toHaveLength(0);
+    expect(step2.replayLog.map(entry => entry.id)).toEqual(['zeus', 'isis']);
+    expect(step2.turnOrder[0]).toMatchObject({ player: 'B', action: 'PICK', target: 'MAP' });
+    expect(step2.turnOrder[1]).toMatchObject({ player: 'B', action: 'BAN', target: 'GOD' });
+  });
 });
-
-

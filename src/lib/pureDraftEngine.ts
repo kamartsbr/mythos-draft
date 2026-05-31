@@ -1,7 +1,31 @@
-import { LobbyConfig, DraftTurn, Lobby, PickEntry } from '../types';
-import { getMCLPicks, getMCLTeamOrder } from '../data/draft';
-import { MAPS } from '../data/maps';
-import { MAJOR_GODS } from '../data/gods';
+import { LobbyConfig, DraftTurn, Lobby, DraftActionOptions } from '../types';
+import { getMCLPicks, getMCLTeamOrder, shouldUseGame2MclOrder } from '../data/draft';
+import { MAPS, MAPS_BY_ID } from '../data/maps';
+import { MAJOR_GODS, MAJOR_GODS_BY_ID } from '../data/gods';
+import { phaseAfterDraftQueue } from '../domain/draft/rules/phaseTransitions';
+
+const timestampToMillis = (value: unknown): number | null => {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return null;
+    return value < 10000000000 ? value * 1000 : value;
+  }
+  if (typeof value === 'string') {
+    const parsed = new Date(value).getTime();
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (value instanceof Date) {
+    const parsed = value.getTime();
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (value && typeof value === 'object' && 'toMillis' in value) {
+    const toMillis = (value as { toMillis?: () => number }).toMillis;
+    if (typeof toMillis === 'function') {
+      const parsed = toMillis.call(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+  }
+  return null;
+};
 
 /**
  * Compute deterministic, immutable map and god draft turn sequences for the specified game and configuration.
@@ -41,9 +65,9 @@ export function calculateNextTurnOrder(
       // FORJA or preset with hasMap3RandomRoll: Map 3 is system-rolled (ADMIN turn)
       mapOrder.push({ player: 'ADMIN', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
     }
-  } else if (cfg.preset === 'MCL_PLAYOFFS') {
+  } else if (cfg.preset === 'MCL_PLAYOFFS' || cfg.preset === 'MCL_TIEBREAKER') {
     const totalGames = cfg.seriesType === 'BO7' ? 7 : 5;
-    const isLastGame = gameNumber === totalGames;
+    const isLastGame = cfg.preset === 'MCL_PLAYOFFS' && gameNumber === totalGames;
 
     if (!isLastGame) {
       if (gameNumber === 1) {
@@ -124,14 +148,35 @@ export function calculateNextTurnOrder(
   }
 
   // Priority alternation (determines who acts first in bans/picks)
-  // MCL / FORJA: Game 2 starts with B.
-  // Game 3+: starts with B if lastWinner was A (the loser of previous game picks first).
+  // MCL / FORJA use the legacy fixed alternation.
+  // MCL Tiebreaker copies MCL Group Stage chronology, using game parity only.
+  // MCL Playoffs keeps loser-priority behavior.
+  const usesFixedMclPriority = cfg.preset === 'MCL' || cfg.preset === 'FORJA';
+  const usesTiebreakerParityPriority = cfg.preset === 'MCL_TIEBREAKER';
+  const usesLoserPriority = cfg.preset === 'MCL_PLAYOFFS';
   const startsWithB =
-    ((cfg.preset === 'MCL' || cfg.preset === 'FORJA' || cfg.preset === 'MCL_PLAYOFFS') && gameNumber === 2) ||
-    ((cfg.preset === 'MCL' || cfg.preset === 'FORJA' || cfg.preset === 'MCL_PLAYOFFS') && gameNumber > 2 && lastWinner === 'A');
+    (usesFixedMclPriority && gameNumber === 2) ||
+    (usesFixedMclPriority && gameNumber > 2 && lastWinner === 'A') ||
+    (usesTiebreakerParityPriority && gameNumber % 2 === 0) ||
+    (usesLoserPriority && gameNumber > 1 && lastWinner === 'A');
 
   // God Ban Phase
-  if (cfg.hasBans) {
+  if (cfg.hasPerMapBans) {
+    godOrder.push({
+      player: startsWithB ? 'B' : 'A',
+      action: 'BAN',
+      target: 'GOD',
+      modifier: 'GLOBAL',
+      execution: 'NORMAL',
+    });
+    godOrder.push({
+      player: startsWithB ? 'A' : 'B',
+      action: 'BAN',
+      target: 'GOD',
+      modifier: 'GLOBAL',
+      execution: 'NORMAL',
+    });
+  } else if (cfg.hasBans && (cfg.godBanScope !== 'SERIES' || gameNumber === 1)) {
     for (let i = 0; i < (cfg.banCount || 0); i++) {
       godOrder.push({
         player: startsWithB ? 'B' : 'A',
@@ -148,22 +193,6 @@ export function calculateNextTurnOrder(
         execution: 'NORMAL',
       });
     }
-  } else if (cfg.hasPerMapBans) {
-    // FORJA Playoffs: 1 Ban of God per team before picking on each map
-    godOrder.push({
-      player: startsWithB ? 'B' : 'A',
-      action: 'BAN',
-      target: 'GOD',
-      modifier: 'GLOBAL',
-      execution: 'NORMAL',
-    });
-    godOrder.push({
-      player: startsWithB ? 'A' : 'B',
-      action: 'BAN',
-      target: 'GOD',
-      modifier: 'GLOBAL',
-      execution: 'NORMAL',
-    });
   }
 
   // God Pick Phase
@@ -258,7 +287,7 @@ export function processTurnAction(
   actingTeam: 'A' | 'B',
   targetPlayerId?: number,
   playerName?: string,
-  options?: { isRandom?: boolean },
+  options?: DraftActionOptions,
   currentTimeMs: number = Date.now()
 ): Lobby {
   if (lobby.status !== 'drafting') {
@@ -272,22 +301,13 @@ export function processTurnAction(
 
   // Timer Check
   let isTimerExpired = false;
-  if (lobby.timerStart) {
-    let startTime: number;
-    if (typeof lobby.timerStart === 'number') {
-      startTime = lobby.timerStart;
-    } else if (typeof lobby.timerStart === 'string') {
-      startTime = new Date(lobby.timerStart).getTime();
-    } else if (lobby.timerStart && typeof (lobby.timerStart as any).toMillis === 'function') {
-      startTime = (lobby.timerStart as any).toMillis();
-    } else if (lobby.timerStart instanceof Date) {
-      startTime = lobby.timerStart.getTime();
-    } else {
-      startTime = currentTimeMs;
-    }
-    const elapsed = (currentTimeMs - startTime) / 1000;
+  const turnEndTime = timestampToMillis(lobby.turnEndsAt);
+  if (turnEndTime !== null && Number.isFinite(turnEndTime)) {
+    isTimerExpired = currentTimeMs >= turnEndTime + 1000;
+  } else {
+    const startTime = timestampToMillis(lobby.timerStart);
     const duration = lobby.config.timerDuration || 60;
-    if (elapsed >= duration + 1) {
+    if (startTime !== null && currentTimeMs >= startTime + (duration + 1) * 1000) {
       isTimerExpired = true;
     }
   }
@@ -301,8 +321,12 @@ export function processTurnAction(
     throw new Error("Not your turn");
   }
 
-  // When timer expires, ignore supplied actionId and invoke deterministic timeout logic
+  // Timer-expired manual clicks must not silently become random picks.
+  // Only the timer worker path marks actions as random and may enter auto-resolution.
   if (isTimerExpired && currentTurn.player !== 'ADMIN') {
+    if (!options?.isTimeoutAutoResolve) {
+      throw new Error("Turn timed out");
+    }
     actionId = null as any; // Force timeout pick path
   }
 
@@ -329,15 +353,18 @@ export function processTurnAction(
   const applyAction = (id: string, turn: DraftTurn, team: 'A' | 'B', tPlayerId?: number, pName?: string): boolean => {
     if (turn.action === 'BAN') {
       if (turn.target === 'MAP') {
+        if (!MAPS_BY_ID[id]) return false;
         if (nextLobby.mapBans.includes(id)) return false;
         if (nextLobby.seriesMaps.includes(id)) return false;
         nextLobby.mapBans.push(id);
       } else {
+        if (!MAJOR_GODS_BY_ID[id]) return false;
         if (nextLobby.bans.includes(id)) return false;
         nextLobby.bans.push(id);
       }
     } else if (turn.action === 'PICK') {
       if (turn.target === 'MAP') {
+        if (!MAPS_BY_ID[id]) return false;
         if (nextLobby.mapBans.includes(id)) return false;
         if (nextLobby.seriesMaps.includes(id)) return false;
         if (nextLobby.mapPool && nextLobby.mapPool.includes(id)) return false;
@@ -352,7 +379,7 @@ export function processTurnAction(
         } else {
           const emptySlotIndex = nextLobby.seriesMaps.indexOf("");
           if (emptySlotIndex !== -1) {
-            if ((nextLobby.config.preset === 'MCL' || nextLobby.config.preset === 'FORJA') && emptySlotIndex !== (nextLobby.currentGame - 1)) {
+            if ((nextLobby.config.preset === 'MCL' || nextLobby.config.preset === 'FORJA' || nextLobby.config.preset === 'MCL_PLAYOFFS' || nextLobby.config.preset === 'MCL_TIEBREAKER') && emptySlotIndex !== (nextLobby.currentGame - 1)) {
               return false;
             }
             nextLobby.seriesMaps[emptySlotIndex] = id;
@@ -375,11 +402,12 @@ export function processTurnAction(
 
         nextLobby.selectedMap = id;
 
-        if (nextLobby.config.preset === 'MCL' || nextLobby.config.preset === 'FORJA') {
+        if (nextLobby.config.preset === 'MCL' || nextLobby.config.preset === 'FORJA' || nextLobby.config.preset === 'MCL_PLAYOFFS' || nextLobby.config.preset === 'MCL_TIEBREAKER') {
           nextLobby.picks = getMCLPicks(nextLobby.currentGame);
         }
       } else {
         // God PICK
+        if (!MAJOR_GODS_BY_ID[id]) return false;
         const alreadyPickedByTeam = nextLobby.picks.some(p => p.team === team && p.godId === id);
         const alreadyPickedByAnyone = nextLobby.picks.some(p => p.godId === id);
         if (turn.modifier === 'EXCLUSIVE' && alreadyPickedByAnyone) return false;
@@ -430,6 +458,10 @@ export function processTurnAction(
   };
 
   if (actionId === null || actionId === undefined) {
+    if (!options?.isTimeoutAutoResolve && currentTurn.action !== 'REVEAL') {
+      throw new Error("Invalid action");
+    }
+
     if (currentTurn.action !== 'REVEAL') {
       if (currentTurn.target === 'MAP') {
         const allowedMaps = Array.isArray(nextLobby.config.allowedMaps) && nextLobby.config.allowedMaps.length > 0 
@@ -497,8 +529,23 @@ export function processTurnAction(
             if (targetPlayerId === undefined) {
               targetPlayerId = nextLobby.picks[pickIndex].playerId;
             }
-            if (!playerName) {
-              playerName = nextLobby.picks[pickIndex].playerName;
+            
+            const isPlaceholder = (name?: string) => !name || /^P\d+$/i.test(name) || /^Player \d+$/i.test(name);
+            
+            if (!playerName || isPlaceholder(playerName)) {
+              const teamPlayers = executionTeam === 'A' ? nextLobby.teamAPlayers : nextLobby.teamBPlayers;
+              const assignedPlayerNames = nextLobby.picks
+                .filter(p => p.team === executionTeam && p.godId !== null)
+                .map(p => p.playerName)
+                .filter(Boolean);
+              
+              const availablePlayers = teamPlayers?.filter(tp => tp.name && !assignedPlayerNames.includes(tp.name)) || [];
+              
+              if (availablePlayers.length > 0) {
+                playerName = availablePlayers[Math.floor(Math.random() * availablePlayers.length)].name;
+              } else {
+                playerName = nextLobby.picks[pickIndex].playerName || `Player ${targetPlayerId}`;
+              }
             }
           }
         }
@@ -535,23 +582,18 @@ export function processTurnAction(
 
   const nextTurn = nextLobby.turnOrder[nextLobby.turn];
   if (nextTurn) {
-    if (nextTurn.target === 'MAP') {
-      nextLobby.phase = nextTurn.action === 'BAN' ? 'map_ban' : 'map_pick';
-    } else {
-      if (currentTurn.target === 'MAP') {
-        if (nextLobby.seriesMaps.length > 0) {
-          nextLobby.selectedMap = nextLobby.seriesMaps[nextLobby.currentGame - 1];
-        }
+    if (nextTurn.target === 'GOD' && currentTurn.target === 'MAP') {
+      const currentMapIndex = nextLobby.currentGame - 1;
+      if (currentMapIndex >= 0 && currentMapIndex < nextLobby.seriesMaps.length) {
+        nextLobby.selectedMap = nextLobby.seriesMaps[currentMapIndex];
       }
-      nextLobby.phase = nextTurn.action === 'BAN' ? 'god_ban' : 'god_pick';
     }
+    nextLobby.phase = phaseAfterDraftQueue(nextLobby.turnOrder, nextLobby.turn, nextLobby.config.teamSize);
   } else {
-    if (nextLobby.config.teamSize === 1) {
-      nextLobby.phase = 'ready_picker';
+    nextLobby.phase = phaseAfterDraftQueue(nextLobby.turnOrder, nextLobby.turn, nextLobby.config.teamSize);
+    if (nextLobby.phase === 'ready_picker') {
       nextLobby.readyA = false;
       nextLobby.readyB = false;
-    } else {
-      nextLobby.phase = 'post_draft';
     }
     nextLobby.timerStart = null;
     nextLobby.turnEndsAt = null;
@@ -672,13 +714,18 @@ export function processReportAction(
         nextLobby.phase = 'finished';
       } else {
         nextLobby.phase = 'ready';
+        nextLobby.status = 'waiting';
+        nextLobby.timerStart = null;
+        nextLobby.turnEndsAt = null;
         nextLobby.currentGame++;
         nextLobby.lastWinner = finalWinner;
 
         const { mapOrder, godOrder } = calculateNextTurnOrder(lobby.config, nextLobby.currentGame, finalWinner);
         nextLobby.turnOrder = [...mapOrder, ...godOrder];
         nextLobby.turn = 0;
-        nextLobby.bans = [];
+        if (nextLobby.config.godBanScope !== 'SERIES') {
+          nextLobby.bans = [];
+        }
         nextLobby.reportVoteA = null;
         nextLobby.reportVoteB = null;
         nextLobby.reportStartAt = null;
@@ -692,14 +739,15 @@ export function processReportAction(
         nextLobby.readyA_report = false;
         nextLobby.readyB_report = false;
 
-        if (nextLobby.config.preset === 'MCL' || nextLobby.config.preset === 'FORJA' || nextLobby.config.preset === 'MCL_PLAYOFFS') {
+        if (nextLobby.config.preset === 'MCL' || nextLobby.config.preset === 'FORJA' || nextLobby.config.preset === 'MCL_PLAYOFFS' || nextLobby.config.preset === 'MCL_TIEBREAKER') {
           const nextGameMap = (nextLobby.seriesMaps || [])[nextLobby.currentGame - 1];
           if (nextGameMap && nextGameMap !== '') {
             const newMCLPicks = getMCLPicks(nextLobby.currentGame);
             const teamAPlayers = nextLobby.teamAPlayers || [];
             const teamBPlayers = nextLobby.teamBPlayers || [];
-            const teamAOrder = getMCLTeamOrder('A', nextGameMap, nextLobby.currentGame % 2 === 0);
-            const teamBOrder = getMCLTeamOrder('B', nextGameMap, nextLobby.currentGame % 2 === 0);
+            const useGame2Order = shouldUseGame2MclOrder(nextLobby.turnOrder);
+            const teamAOrder = getMCLTeamOrder('A', nextGameMap, useGame2Order);
+            const teamBOrder = getMCLTeamOrder('B', nextGameMap, useGame2Order);
 
             nextLobby.picks = newMCLPicks.map(p => {
               const existingPick = (lobby.picks || []).find(ep => ep.playerId === p.playerId);
@@ -711,11 +759,11 @@ export function processReportAction(
             });
             nextLobby.selectedMap = nextGameMap;
           } else {
-            nextLobby.picks = nextLobby.picks.map(p => ({ ...p, godId: null }));
+            nextLobby.picks = nextLobby.picks.map(p => ({ ...p, godId: null, isRandom: false, turnIndex: undefined }));
             nextLobby.selectedMap = null;
           }
         } else {
-          nextLobby.picks = nextLobby.picks.map(p => ({ ...p, godId: null }));
+          nextLobby.picks = nextLobby.picks.map(p => ({ ...p, godId: null, isRandom: false, turnIndex: undefined }));
           nextLobby.selectedMap = null;
         }
       }
@@ -729,5 +777,4 @@ export function processReportAction(
 
   return nextLobby;
 }
-
 

@@ -149,6 +149,30 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ─── /bug_reports ────────────────────────────────────────────────────────
+    // Bug reports are user-submitted diagnostics. Public users may create
+    // bounded reports, but only admins can read or modify them.
+    match /bug_reports/{reportId} {
+      function isValidBugReport() {
+        let data = request.resource.data;
+        return data.keys().hasOnly(['lobbyId', 'description', 'timestamp', 'userAgent', 'status', 'url'])
+          && data.lobbyId is string
+          && data.lobbyId.size() <= 128
+          && data.description is string
+          && data.description.size() > 0
+          && data.description.size() <= 2000
+          && data.userAgent is string
+          && data.userAgent.size() <= 512
+          && data.status == 'new'
+          && data.url is string
+          && data.url.size() <= 1024
+          && data.timestamp == request.time;
+      }
+
+      allow create: if isSignedIn() && isValidBugReport();
+      allow read, update, delete: if isAdmin();
+    }
+
     // ─── /test ───────────────────────────────────────────────────────────────
     match /test/connection {
       allow read: if true;

@@ -16,8 +16,15 @@ import {
   ForjaScheduleEntry, ForjaTeam, ForjaDraftSession, ForjaDraftPick,
   ForjaTier, ForjaContentDoc, ForjaPrizeConfig, ForjaSettings, ForjaTierMode,
   ForjaRole, ForjaTournamentConfig, ForjaRulesBlock, ForjaMapPool,
+  ForjaLiveMatchSummary, ForjaLiveMatchesSummaryDoc,
 } from '../types';
 import { FORJA_MAP_POOL } from '../../../data/maps';
+import { fetchAomProfileForPlayer, type AomApiResult } from './aomProfileService';
+import { getDiscordDefaultAvatarUrl } from '../utils/avatar';
+import { forjaLobbyToLiveMatchSummary, isOfficialForjaLobbyData, sortForjaLiveMatches } from '../forjaMatchSummary';
+
+export { fetchAomProfileForPlayer } from './aomProfileService';
+export type { AomApiResult } from './aomProfileService';
 
 const PLAYERS_COL  = 'forja_players';
 const TEAMS_COL    = 'forja_teams';
@@ -25,6 +32,58 @@ const SCHEDULE_COL = 'forja_schedule';
 const DRAFT_COL    = 'forja_meta';
 const DRAFT_DOC    = 'forja_draft_session';
 const CONTENT_COL  = 'forja_content';
+const FORJA_SESSION_CACHE_PREFIX = 'mythos_forja_cache_';
+const FORJA_SHORT_CACHE_MS = 5 * 60 * 1000;
+const FORJA_LONG_CACHE_MS = 15 * 60 * 1000;
+const FORJA_LIVE_MATCHES_DOC = 'live_matches_summary';
+const FORJA_OFFICIAL_MATCHES_CACHE_KEY = 'official_matches';
+
+type ForjaReadOptions = {
+  forceRefresh?: boolean;
+};
+
+type SessionCacheEnvelope<T> = {
+  expiresAt: number;
+  value: T;
+};
+
+function readSessionCache<T>(key: string): T | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.sessionStorage.getItem(`${FORJA_SESSION_CACHE_PREFIX}${key}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as SessionCacheEnvelope<T>;
+    if (!parsed || typeof parsed.expiresAt !== 'number' || parsed.expiresAt <= Date.now()) {
+      window.sessionStorage.removeItem(`${FORJA_SESSION_CACHE_PREFIX}${key}`);
+      return null;
+    }
+    return parsed.value;
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionCache<T>(key: string, value: T, ttlMs: number): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const payload: SessionCacheEnvelope<T> = {
+      expiresAt: Date.now() + ttlMs,
+      value,
+    };
+    window.sessionStorage.setItem(`${FORJA_SESSION_CACHE_PREFIX}${key}`, JSON.stringify(payload));
+  } catch {
+    // ignore cache failures
+  }
+}
+
+function clearSessionCache(key: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.removeItem(`${FORJA_SESSION_CACHE_PREFIX}${key}`);
+  } catch {
+    // ignore cache failures
+  }
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -75,10 +134,15 @@ export function subscribeToForjaPlayers(
     snap => {
       const players = snap.docs
         .map(d => ({ ...(d.data() as ForjaPlayer), discord_id: d.id }));
+      writeSessionCache('players', players, FORJA_SHORT_CACHE_MS);
       onData(players);
     },
     err  => { console.error('[Forja] players:', err); onError?.(err); }
   );
+}
+
+export function invalidatePlayersCache(): void {
+  clearSessionCache('players');
 }
 
 export async function isPlayerRegistered(discordId: string): Promise<boolean> {
@@ -202,10 +266,12 @@ export async function registerForjaPlayer(
 
       transaction.set(playerRef, playerUpdate, { merge: true });
     });
+    invalidatePlayersCache();
     return;
   }
 
   await setDoc(playerRef, playerUpdate, { merge: true });
+  invalidatePlayersCache();
 }
 
 
@@ -217,6 +283,7 @@ export async function registerForjaPlayer(
  */
 export async function removeForjaPlayer(discordId: string): Promise<void> {
   await deleteDoc(doc(db, PLAYERS_COL, discordId));
+  invalidatePlayersCache();
 }
 
 export async function banForjaPlayer(discordId: string, nick: string): Promise<void> {
@@ -227,11 +294,13 @@ export async function banForjaPlayer(discordId: string, nick: string): Promise<v
   });
   // Soft delete: set status to banned instead of removing the document
   await updateDoc(doc(db, PLAYERS_COL, discordId), { status: 'banned' });
+  invalidatePlayersCache();
 }
 
 export async function unbanForjaPlayer(discordId: string): Promise<void> {
   await deleteDoc(doc(db, 'forja_bans', discordId));
   await updateDoc(doc(db, PLAYERS_COL, discordId), { status: 'available' });
+  invalidatePlayersCache();
 }
 
 export async function isPlayerBanned(discordId: string): Promise<boolean> {
@@ -249,18 +318,24 @@ export async function setPlayerTier(discordId: string, tier: ForjaTier, seed?: n
     tier,
     ...(seed !== undefined ? { seed } : {}),
   });
+  invalidatePlayersCache();
 }
 
 export async function updatePlayerStatsSnapshot(discordId: string, updates: Partial<ForjaPlayer>): Promise<void> {
   await updateDoc(doc(db, PLAYERS_COL, discordId), updates);
+  invalidatePlayersCache();
 }
 
 // Busca "fria" (Lê apenas 1 vez, sem ficar escutando o banco)
 export async function getForjaPlayersOnce(): Promise<ForjaPlayer[]> {
+  const cachedSession = readSessionCache<ForjaPlayer[]>('players');
+  if (cachedSession) return cachedSession;
   try {
     const q = query(collection(db, PLAYERS_COL));
     const snap = await getDocs(q);
-    return snap.docs.map(d => ({ ...(d.data() as ForjaPlayer), discord_id: d.id }));
+    const players = snap.docs.map(d => ({ ...(d.data() as ForjaPlayer), discord_id: d.id }));
+    writeSessionCache('players', players, FORJA_SHORT_CACHE_MS);
+    return players;
   } catch (err) {
     console.error('[Forja] Erro na busca fria de players:', err);
     return [];
@@ -279,6 +354,7 @@ export async function updatePlayerProfile(discordId: string, data: Partial<Forja
       ...data,
       last_update: serverTimestamp()
     });
+    invalidatePlayersCache();
   } catch (error) {
     console.error("Erro ao atualizar perfil do jogador:", error);
     throw new Error("Falha ao salvar edição manual.");
@@ -323,43 +399,6 @@ export async function updatePlayerAdminFields(
 
   if (Object.keys(payload).length === 0) return;
   await updateDoc(doc(db, PLAYERS_COL, discordId), payload);
-}
-
-/**
- * Resultado da consulta à API do AoM para um jogador.
- */
-export interface AomApiResult {
-  elo_1v1: number;
-  elo_tg: number;
-  top_gods: Array<{ god: string; winRate: number; playRate: number }>;
-  alias: string;
-  avatar_url: string | null;
-}
-
-/**
- * Consulta a API do AoM (/api/forja/fetch-aom-profile) para um jogador
- * e retorna os dados sem salvar. O Admin decide o que aplicar.
- */
-export async function fetchAomProfileForPlayer(profileId: number): Promise<AomApiResult> {
-  const url = `https://us-central1-boxwood-plating-368522.cloudfunctions.net/fetchaomprofile?id=${profileId}`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? `Erro ${res.status} ao consultar API`);
-  }
-  
-  const json = await res.json();
-  if (!json.success || !json.data) {
-    throw new Error(json.error ?? 'Erro inesperado no retorno da API');
-  }
-  
-  return {
-    elo_1v1: json.data.elo_1v1,
-    elo_tg: json.data.elo_tg,
-    top_gods: json.data.top_gods,
-    alias: json.data.alias || String(profileId),
-    avatar_url: json.data.avatar_url,
-  };
 }
 
 /**
@@ -440,10 +479,20 @@ export let schedulePromise: Promise<ForjaScheduleEntry[]> | null = null;
 
 export async function getForjaScheduleOnce(): Promise<ForjaScheduleEntry[]> {
   if (cachedSchedule) return cachedSchedule;
+  const cachedSession = readSessionCache<ForjaScheduleEntry[]>('schedule');
+  if (cachedSession) {
+    cachedSchedule = cachedSession;
+    schedulePromise = Promise.resolve(cachedSession);
+    return cachedSession;
+  }
   if (!schedulePromise) {
     const q = query(collection(db, SCHEDULE_COL), orderBy('date', 'asc'));
     schedulePromise = getDocs(q)
-      .then(snap => snap.docs.map(d => ({ ...(d.data() as ForjaScheduleEntry), id: d.id })))
+      .then(snap => {
+        const entries = snap.docs.map(d => ({ ...(d.data() as ForjaScheduleEntry), id: d.id }));
+        writeSessionCache('schedule', entries, FORJA_LONG_CACHE_MS);
+        return entries;
+      })
       .catch(() => []);
   }
   cachedSchedule = await schedulePromise;
@@ -453,6 +502,7 @@ export async function getForjaScheduleOnce(): Promise<ForjaScheduleEntry[]> {
 export function invalidateScheduleCache() {
   cachedSchedule = null;
   schedulePromise = null;
+  clearSessionCache('schedule');
 }
 
 export function subscribeToForjaSchedule(
@@ -465,6 +515,7 @@ export function subscribeToForjaSchedule(
       const data = snap.docs.map(d => ({ ...(d.data() as ForjaScheduleEntry), id: d.id }));
       cachedSchedule = data;
       schedulePromise = Promise.resolve(data);
+      writeSessionCache('schedule', data, FORJA_LONG_CACHE_MS);
       onData(data);
     },
     err  => { console.error('[Forja] schedule:', err); onError?.(err); }
@@ -494,10 +545,20 @@ export let teamsPromise: Promise<ForjaTeam[]> | null = null;
 
 export async function getForjaTeamsOnce(): Promise<ForjaTeam[]> {
   if (cachedTeams) return cachedTeams;
+  const cachedSession = readSessionCache<ForjaTeam[]>('teams');
+  if (cachedSession) {
+    cachedTeams = cachedSession;
+    teamsPromise = Promise.resolve(cachedSession);
+    return cachedSession;
+  }
   if (!teamsPromise) {
     const q = query(collection(db, TEAMS_COL), orderBy('pick_order', 'asc'));
     teamsPromise = getDocs(q)
-      .then(snap => snap.docs.map(d => ({ ...(d.data() as ForjaTeam), id: d.id })))
+      .then(snap => {
+        const teams = snap.docs.map(d => ({ ...(d.data() as ForjaTeam), id: d.id }));
+        writeSessionCache('teams', teams, FORJA_LONG_CACHE_MS);
+        return teams;
+      })
       .catch(() => []);
   }
   cachedTeams = await teamsPromise;
@@ -507,6 +568,7 @@ export async function getForjaTeamsOnce(): Promise<ForjaTeam[]> {
 export function invalidateTeamsCache() {
   cachedTeams = null;
   teamsPromise = null;
+  clearSessionCache('teams');
 }
 
 export function subscribeToForjaTeams(
@@ -519,6 +581,7 @@ export function subscribeToForjaTeams(
       const data = snap.docs.map(d => ({ ...(d.data() as ForjaTeam), id: d.id }));
       cachedTeams = data;
       teamsPromise = Promise.resolve(data);
+      writeSessionCache('teams', data, FORJA_LONG_CACHE_MS);
       onData(data);
     },
     err  => { console.error('[Forja] teams:', err); onError?.(err); }
@@ -563,6 +626,97 @@ export async function updateTeamImageUrl(teamId: string, imageUrl: string | null
  */
 export async function deleteForjaLobby(lobbyId: string): Promise<void> {
   await deleteDoc(doc(db, 'lobbies', lobbyId));
+}
+
+export let cachedLiveMatchesSummary: ForjaLiveMatchesSummaryDoc | null = null;
+export let liveMatchesSummaryPromise: Promise<ForjaLiveMatchesSummaryDoc | null> | null = null;
+
+export async function getForjaLiveMatchesSummaryOnce(): Promise<ForjaLiveMatchesSummaryDoc | null> {
+  if (cachedLiveMatchesSummary) return cachedLiveMatchesSummary;
+  const cachedSession = readSessionCache<ForjaLiveMatchesSummaryDoc>('live_matches_summary');
+  if (cachedSession) {
+    cachedLiveMatchesSummary = cachedSession;
+    liveMatchesSummaryPromise = Promise.resolve(cachedSession);
+    return cachedSession;
+  }
+  if (!liveMatchesSummaryPromise) {
+    liveMatchesSummaryPromise = getDoc(doc(db, DRAFT_COL, FORJA_LIVE_MATCHES_DOC))
+      .then(snap => {
+        const data = snap.exists() ? (snap.data() as ForjaLiveMatchesSummaryDoc) : null;
+        if (data) {
+          writeSessionCache('live_matches_summary', data, FORJA_SHORT_CACHE_MS);
+        }
+        return data;
+      })
+      .catch(() => null);
+  }
+  cachedLiveMatchesSummary = await liveMatchesSummaryPromise;
+  return cachedLiveMatchesSummary;
+}
+
+export function updateCachedLiveMatchesSummary(data: ForjaLiveMatchesSummaryDoc | null): void {
+  cachedLiveMatchesSummary = data;
+  liveMatchesSummaryPromise = Promise.resolve(data);
+  if (data) {
+    writeSessionCache('live_matches_summary', data, FORJA_SHORT_CACHE_MS);
+  } else {
+    clearSessionCache('live_matches_summary');
+  }
+}
+
+export let cachedOfficialMatches: ForjaLiveMatchSummary[] | null = null;
+export let officialMatchesPromise: Promise<ForjaLiveMatchSummary[]> | null = null;
+
+export function invalidateForjaOfficialMatchesCache(): void {
+  cachedOfficialMatches = null;
+  officialMatchesPromise = null;
+  clearSessionCache(FORJA_OFFICIAL_MATCHES_CACHE_KEY);
+}
+
+async function fetchOfficialForjaMatches(): Promise<ForjaLiveMatchSummary[]> {
+  try {
+    const snap = await getDocs(query(collection(db, 'lobbies'), where('config.preset', '==', 'FORJA')));
+    const matches = sortForjaLiveMatches(
+      snap.docs
+        .map((snapshot) => ({ id: snapshot.id, ...snapshot.data() }))
+        .filter((lobby) => isOfficialForjaLobbyData(lobby))
+        .map((lobby) => forjaLobbyToLiveMatchSummary(lobby))
+    );
+    writeSessionCache(FORJA_OFFICIAL_MATCHES_CACHE_KEY, matches, FORJA_SHORT_CACHE_MS);
+    return matches;
+  } catch (error) {
+    console.error('Erro ao buscar partidas oficiais Forja', error);
+    throw error;
+  }
+}
+
+export async function getForjaOfficialMatchesOnce(options: ForjaReadOptions = {}): Promise<ForjaLiveMatchSummary[]> {
+  if (!options.forceRefresh && cachedOfficialMatches) return cachedOfficialMatches;
+  if (!options.forceRefresh) {
+    const cachedSession = readSessionCache<ForjaLiveMatchSummary[]>(FORJA_OFFICIAL_MATCHES_CACHE_KEY);
+    if (cachedSession) {
+      cachedOfficialMatches = cachedSession;
+      officialMatchesPromise = Promise.resolve(cachedSession);
+      return cachedSession;
+    }
+  }
+
+  if (options.forceRefresh) {
+    const matches = await fetchOfficialForjaMatches();
+    cachedOfficialMatches = matches;
+    officialMatchesPromise = Promise.resolve(matches);
+    return matches;
+  }
+
+  if (!officialMatchesPromise) {
+    officialMatchesPromise = fetchOfficialForjaMatches().catch((error) => {
+      officialMatchesPromise = null;
+      throw error;
+    });
+  }
+
+  cachedOfficialMatches = await officialMatchesPromise;
+  return cachedOfficialMatches;
 }
 
 
@@ -768,9 +922,21 @@ export let contentPromises: Record<string, Promise<any> | null> = {};
 
 export async function getForjaContentOnce<T = ForjaContentDoc>(docId: ForjaContentId): Promise<T | null> {
   if (cachedContent[docId]) return cachedContent[docId] as T;
+  const cachedSession = readSessionCache<T>(`content_${docId}`);
+  if (cachedSession) {
+    cachedContent[docId] = cachedSession;
+    contentPromises[docId] = Promise.resolve(cachedSession);
+    return cachedSession;
+  }
   if (!contentPromises[docId]) {
     contentPromises[docId] = getDoc(doc(db, CONTENT_COL, docId))
-      .then(snap => snap.exists() ? snap.data() : null)
+      .then(snap => {
+        const data = snap.exists() ? (snap.data() as T) : null;
+        if (data) {
+          writeSessionCache(`content_${docId}`, data, FORJA_LONG_CACHE_MS);
+        }
+        return data;
+      })
       .catch(() => null);
   }
   cachedContent[docId] = await contentPromises[docId];
@@ -780,6 +946,7 @@ export async function getForjaContentOnce<T = ForjaContentDoc>(docId: ForjaConte
 export function updateCachedContent(docId: ForjaContentId, data: any) {
   cachedContent[docId] = data;
   contentPromises[docId] = Promise.resolve(data);
+  writeSessionCache(`content_${docId}`, data, FORJA_LONG_CACHE_MS);
 }
 
 export function subscribeToForjaContent<T = ForjaContentDoc>(
@@ -794,6 +961,7 @@ export function subscribeToForjaContent<T = ForjaContentDoc>(
       if (data) {
         cachedContent[docId] = data;
         contentPromises[docId] = Promise.resolve(data);
+        writeSessionCache(`content_${docId}`, data, FORJA_LONG_CACHE_MS);
       }
       onData(data);
     },
@@ -809,9 +977,21 @@ export let settingsPromise: Promise<ForjaSettings | null> | null = null;
 
 export async function getForjaSettingsOnce(): Promise<ForjaSettings | null> {
   if (cachedSettings) return cachedSettings;
+  const cachedSession = readSessionCache<ForjaSettings>('settings');
+  if (cachedSession) {
+    cachedSettings = cachedSession;
+    settingsPromise = Promise.resolve(cachedSession);
+    return cachedSession;
+  }
   if (!settingsPromise) {
     settingsPromise = getDoc(doc(db, CONTENT_COL, 'settings'))
-      .then(snap => snap.exists() ? snap.data() as ForjaSettings : null)
+      .then(snap => {
+        const data = snap.exists() ? snap.data() as ForjaSettings : null;
+        if (data) {
+          writeSessionCache('settings', data, FORJA_LONG_CACHE_MS);
+        }
+        return data;
+      })
       .catch(() => null);
   }
   cachedSettings = await settingsPromise;
@@ -821,6 +1001,7 @@ export async function getForjaSettingsOnce(): Promise<ForjaSettings | null> {
 export function updateCachedSettings(data: ForjaSettings) {
   cachedSettings = data;
   settingsPromise = Promise.resolve(data);
+  writeSessionCache('settings', data, FORJA_LONG_CACHE_MS);
 }
 
 /** Subscrição em tempo real às configurações gerais do torneio. */
@@ -835,6 +1016,7 @@ export function subscribeToForjaSettings(
       if (data) {
         cachedSettings = data;
         settingsPromise = Promise.resolve(data);
+        writeSessionCache('settings', data, FORJA_LONG_CACHE_MS);
       }
       onData(data);
     },
@@ -860,6 +1042,7 @@ export async function saveForjaSettings(
     updateCachedSettings({ ...cachedSettings, ...settings } as ForjaSettings);
   } else {
     settingsPromise = null;
+    clearSessionCache('settings');
   }
 }
 
@@ -904,8 +1087,7 @@ export async function adminRegisterPlayer(params: {
     throw new Error(`Jogador com Discord ID ${discordId} já está inscrito.`);
   }
 
-  // Avatar placeholder do CDN do Discord
-  const defaultAvatar = `https://cdn.discordapp.com/embed/avatars/${parseInt(discordId.slice(-1)) % 6}.png`;
+  const defaultAvatar = getDiscordDefaultAvatarUrl(discordId);
 
   const player: Omit<import('../types').ForjaPlayer, 'discord_id'> = {
     aom_profile_id:     aomProfileId,

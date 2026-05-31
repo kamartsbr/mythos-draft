@@ -1,7 +1,47 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Lobby } from '../types';
+import { Lobby, DraftActionOptions } from '../types';
 import { MAPS, MAJOR_GODS } from '../constants';
 import { getServerTime } from '../lib/serverTime';
+
+const timestampToMillis = (value: unknown): number | null => {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return null;
+    return value < 10000000000 ? value * 1000 : value;
+  }
+  if (typeof value === 'string') {
+    const parsed = new Date(value).getTime();
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (value instanceof Date) {
+    const parsed = value.getTime();
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (value && typeof value === 'object' && 'toMillis' in value) {
+    const toMillis = (value as { toMillis?: () => number }).toMillis;
+    if (typeof toMillis === 'function') {
+      const parsed = toMillis.call(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+  }
+  if (value && typeof value === 'object' && 'toDate' in value) {
+    const toDate = (value as { toDate?: () => Date }).toDate;
+    if (typeof toDate === 'function') {
+      const parsed = toDate.call(value).getTime();
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+  }
+  return null;
+};
+
+const resolveTurnEndTime = (lobby: Lobby): number | null => {
+  const explicitEndTime = timestampToMillis(lobby.turnEndsAt);
+  if (explicitEndTime !== null) return explicitEndTime;
+
+  const startTime = timestampToMillis(lobby.timerStart);
+  if (startTime === null) return null;
+
+  return startTime + ((lobby.config?.timerDuration || 60) * 1000);
+};
 
 /**
  * Manage and expose the lobby draft countdown and trigger automatic draft actions when the timer elapses.
@@ -20,8 +60,8 @@ export function useTimer(
   lobby: Lobby | null, 
   isCaptain1: boolean, 
   isCaptain2: boolean, 
-  handleAction: (id: string, playerId?: number, playerName?: string, options?: { isRandom?: boolean }) => void,
-  handlePickerAction?: (id: string, playerId?: number, playerName?: string, options?: { isRandom?: boolean }) => void
+  handleAction: (id: string, playerId?: number, playerName?: string, options?: DraftActionOptions) => void,
+  handlePickerAction?: (id: string, playerId?: number, playerName?: string, options?: DraftActionOptions) => void
 ) {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const isProcessing = useRef(false);
@@ -59,7 +99,7 @@ export function useTimer(
 
   const tick = useCallback(async () => {
     const currentLobby = lobbyRef.current;
-    if (!currentLobby || (!currentLobby.timerStart && !currentLobby.turnEndsAt) || currentLobby.status !== 'drafting' || currentLobby.phase === 'finished' || currentLobby.phase === 'post_draft') {
+    if (!currentLobby || (!currentLobby.timerStart && !currentLobby.turnEndsAt) || currentLobby.status !== 'drafting' || currentLobby.phase === 'finished' || currentLobby.phase === 'post_draft' || currentLobby.phase === 'ready') {
       setTimeLeft(null);
       isProcessing.current = false;
       lastTriggeredTurn.current = null;
@@ -71,10 +111,6 @@ export function useTimer(
       return;
     }
 
-    if (isProcessing.current) return;
-
-    // Retry logic: If we triggered for this turn but it failed (turn hasn't changed), 
-    // allow retry after 5 seconds to prevent permanent stall.
     const nowMs = Date.now();
 
     if (isProcessing.current) return;
@@ -85,36 +121,36 @@ export function useTimer(
       return;
     }
 
-    // 🔥 SOLUÇÃO: Timer Absoluto (Sincronização Perfeita)
-    // Usamos o 'turnEndsAt' persistido no Firestore como fonte única da verdade.
-    let endTime: number;
-    const tea = currentLobby.turnEndsAt;
-    
-    if (tea && typeof (tea as any).toMillis === 'function') {
-      endTime = (tea as any).toMillis();
-    } else if (tea && typeof (tea as any).toDate === 'function') {
-      endTime = (tea as any).toDate().getTime();
-    } else if (typeof tea === 'number') {
-      endTime = tea < 10000000000 ? tea * 1000 : tea;
-    } else {
-      // Fallback para lógica antiga caso turnEndsAt não exista (migração)
-      let startTime: number;
-      const ts = currentLobby.timerStart;
-      if (ts && typeof (ts as any).toMillis === 'function') {
-        startTime = (ts as any).toMillis();
-      } else if (typeof ts === 'number') {
-        startTime = ts < 10000000000 ? ts * 1000 : ts;
-      } else {
-        startTime = Date.now();
-      }
-      const duration = currentLobby.config?.timerDuration || 60;
-      endTime = startTime + (duration * 1000);
+    // Prefer the persisted turnEndsAt boundary; fall back to timerStart for old lobbies.
+    const endTime = resolveTurnEndTime(currentLobby);
+    if (endTime === null) {
+      setTimeLeft(null);
+      return;
     }
-
     const duration = currentLobby.config?.timerDuration || 60;
     const nowServer = await getServerTime();
-    const remaining = Math.max(0, Math.floor((endTime - nowServer) / 1000));
-    const elapsed = Math.max(0, (nowServer - (endTime - (duration * 1000))) / 1000);
+    const latestLobby = lobbyRef.current;
+    const latestEndTime = latestLobby ? resolveTurnEndTime(latestLobby) : null;
+    if (
+      !latestLobby ||
+      latestLobby.id !== currentLobby.id ||
+      latestLobby.currentGame !== currentLobby.currentGame ||
+      latestLobby.turn !== currentLobby.turn ||
+      latestLobby.phase !== currentLobby.phase ||
+      latestLobby.status !== currentLobby.status ||
+      Boolean(latestLobby.isPaused) !== Boolean(currentLobby.isPaused) ||
+      timestampToMillis(latestLobby.turnEndsAt) !== timestampToMillis(currentLobby.turnEndsAt) ||
+      timestampToMillis(latestLobby.timerStart) !== timestampToMillis(currentLobby.timerStart) ||
+      latestEndTime === null ||
+      latestEndTime !== endTime
+    ) {
+      return;
+    }
+
+    const activeEndTime = latestEndTime;
+    const msRemaining = activeEndTime - nowServer;
+    const remaining = Math.max(0, Math.ceil(msRemaining / 1000));
+    const elapsed = Math.max(0, (nowServer - (activeEndTime - (duration * 1000))) / 1000);
 
     // Protection: if the calculated time is suspiciously large (e.g. > 1 hour),
     // it likely indicates a clock sync issue or a corrupted timestamp.
@@ -137,7 +173,9 @@ export function useTimer(
       return;
     }
     
-    if (elapsed >= duration) {
+    const shouldTimeoutNow = msRemaining <= 0 || elapsed >= duration;
+
+    if (shouldTimeoutNow) {
       isProcessing.current = true;
       lastTriggerAt.current = nowMs;
       
@@ -155,7 +193,7 @@ export function useTimer(
         const opponentVote = isCaptain1 ? currentLobby.pickerVoteB : currentLobby.pickerVoteA;
         
         // If I already picked AND the opponent already picked, or it's not even my turn to help...
-        if (myVote && (opponentVote || elapsed < duration + 2)) {
+        if (myVote && opponentVote) {
           isProcessing.current = false;
           return;
         }
@@ -195,12 +233,16 @@ export function useTimer(
         return;
       }
 
+      if (currentTurn.player === 'ADMIN') {
+        isProcessing.current = false;
+        return;
+      }
+
       const isC1Turn = currentTurn.player === 'A' || currentTurn.player === 'BOTH';
       const isC2Turn = currentTurn.player === 'B' || currentTurn.player === 'BOTH';
-      
       const isMyTurn = (isC1Turn && isCaptain1) || (isC2Turn && isCaptain2);
       const isOpponentTurn = (isC1Turn && isCaptain2) || (isC2Turn && isCaptain1);
-      
+
       const shouldTrigger = isMyTurn || (isOpponentTurn && elapsed >= duration + 2);
       if (!shouldTrigger) {
         isProcessing.current = false;
@@ -211,7 +253,7 @@ export function useTimer(
 
       if (currentTurn.action === 'REVEAL') {
         try {
-          await handleAction('REVEAL');
+          await handleAction('REVEAL', undefined, undefined, { isTimeoutAutoResolve: true });
         } finally {
           isProcessing.current = false;
         }
@@ -263,24 +305,25 @@ export function useTimer(
 
       if (actionId) {
         try {
-          if (currentLobby.config.preset === 'MCL' && currentTurn.target === 'GOD' && currentTurn.action === 'PICK') {
+          const isPresetWithRoster = currentLobby.config.preset === 'MCL' || currentLobby.config.preset === 'FORJA' || currentLobby.config.preset === 'MCL_PLAYOFFS' || currentLobby.config.preset === 'MCL_TIEBREAKER';
+          if (isPresetWithRoster && currentTurn.target === 'GOD' && currentTurn.action === 'PICK') {
             const team = currentTurn.player === 'A' ? 'A' : (currentTurn.player === 'B' ? 'B' : (isCaptain1 ? 'A' : 'B'));
             const teamPlayers = team === 'A' ? currentLobby.teamAPlayers : currentLobby.teamBPlayers;
             const emptyPick = currentLobby.picks.find(p => p.team === team && p.godId === null);
             
             if (emptyPick) {
-              const assignedPlayerNames = currentLobby.picks.filter(p => p.team === team && p.godId !== null).map(p => p.playerName);
-              const availablePlayers = teamPlayers?.filter(tp => !assignedPlayerNames.includes(tp.name)) || [];
+              const assignedPlayerNames = currentLobby.picks.filter(p => p.team === team && p.godId !== null).map(p => p.playerName).filter(Boolean);
+              const availablePlayers = teamPlayers?.filter(tp => tp.name && !assignedPlayerNames.includes(tp.name)) || [];
               const randomPlayer = availablePlayers.length > 0 
                 ? availablePlayers[Math.floor(Math.random() * availablePlayers.length)] 
                 : { name: `Player ${emptyPick.playerId}` };
                 
-              await handleAction(actionId, emptyPick.playerId, randomPlayer.name, { isRandom: true });
+              await handleAction(actionId, emptyPick.playerId, randomPlayer.name, { isRandom: true, isTimeoutAutoResolve: true });
             } else {
-              await handleAction(actionId, undefined, undefined, { isRandom: true });
+              await handleAction(actionId, undefined, undefined, { isRandom: true, isTimeoutAutoResolve: true });
             }
           } else {
-            await handleAction(actionId, undefined, undefined, { isRandom: true });
+            await handleAction(actionId, undefined, undefined, { isRandom: true, isTimeoutAutoResolve: true });
           }
         } finally {
           isProcessing.current = false;

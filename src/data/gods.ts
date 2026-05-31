@@ -38,3 +38,18 @@ export const MAJOR_GODS: God[] = [
   { id: 'tezcatlipoca', name: 'Tezcatlipoca', culture: 'Aztec', image: 'https://static.wikia.nocookie.net/ageofempires/images/0/01/Tezcatlipoca_artwork_AoMR.webp/revision/latest?cb=20260407174030' },
   { id: 'huitzilopochtli', name: 'Huitzilopochtli', culture: 'Aztec', image: 'https://static.wikia.nocookie.net/ageofempires/images/3/3e/Huitzilopochtli_artwork_AoMR.webp/revision/latest?cb=20260407174035' },
 ];
+
+export const MAJOR_GODS_BY_ID: Record<string, God> = MAJOR_GODS.reduce<Record<string, God>>((acc, god) => {
+  acc[god.id] = god;
+  return acc;
+}, {});
+
+const MAJOR_GODS_BY_LOWER_ID: Record<string, God> = MAJOR_GODS.reduce<Record<string, God>>((acc, god) => {
+  acc[god.id.toLowerCase()] = god;
+  return acc;
+}, {});
+
+export function getMajorGodById(godId: string | null | undefined): God | undefined {
+  if (!godId) return undefined;
+  return MAJOR_GODS_BY_ID[godId] ?? MAJOR_GODS_BY_LOWER_ID[godId.toLowerCase()];
+}

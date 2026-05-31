@@ -66,6 +66,11 @@ vi.mock('../../constants', () => ({
 vi.mock('../../data/draft', () => ({
   getMCLPicks: vi.fn(() => []),
   getMCLTeamOrder: vi.fn(() => []),
+  shouldUseGame2MclOrder: vi.fn(() => false),
+}));
+
+vi.mock('../../features/forja/services/forjaService', () => ({
+  updateCachedLiveMatchesSummary: vi.fn(),
 }));
 
 // ─── Import da função a ser testada ──────────────────────────────────────────

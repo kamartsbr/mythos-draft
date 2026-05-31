@@ -43,7 +43,19 @@ export function useLobby(initialNickname: string) {
 
   const [lobby, setLobby] = useState<Lobby | null>(null);
   const [lobbyId, setLobbyId] = useState<string | null>(null);
-  const [lobbyInitialLoading, setLobbyInitialLoading] = useState(false);
+  const [lobbyInitialLoading, setLobbyInitialLoading] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      let id = params.get('lobby');
+      if (!id && window.location.pathname.startsWith('/lobby/')) {
+        id = window.location.pathname.split('/')[2];
+      }
+      return !!id;
+    } catch (e) {
+      return false;
+    }
+  });
+  const [hasAttemptedLobbyLoad, setHasAttemptedLobbyLoad] = useState(false);
   const [nickname, setNickname] = useState(initialNickname);
   const [isCaptain1, setIsCaptain1] = useState(false);
   const [isCaptain2, setIsCaptain2] = useState(false);
@@ -186,45 +198,64 @@ export function useLobby(initialNickname: string) {
 
   // Lobby subscription (only when lobbyId exists)
   useEffect(() => {
-    if (!lobbyId) return;
-    if (!guestId) {
+    if (!lobbyId) {
       setLobbyInitialLoading(false);
+      setHasAttemptedLobbyLoad(false);
+      return;
+    }
+    if (!isAuthReady || !guestId) {
+      setLobbyInitialLoading(true);
+      setHasAttemptedLobbyLoad(false);
       return;
     }
 
     setPublicLobbies([]);
+    setLobbyInitialLoading(true);
+    setHasAttemptedLobbyLoad(false);
+
+    let active = true;
 
     const unsub = lobbyService.subscribeToLobby(
       lobbyId,
       (data) => {
-        setLobbyInitialLoading(false);
+        if (!active) return;
         setLobby(prev => {
           if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
           return data;
         });
+        setHasAttemptedLobbyLoad(true);
+        setLobbyInitialLoading(false);
 
-        const isC1 = data.captain1 === guestId;
-        const isC2 = data.captain2 === guestId;
+        if (data) {
+          const isC1 = data.captain1 === guestId;
+          const isC2 = data.captain2 === guestId;
 
-        setIsCaptain1(isC1);
-        setIsCaptain2(isC2);
+          setIsCaptain1(isC1);
+          setIsCaptain2(isC2);
 
-        const slotAvailable = !data.captain1 || !data.captain2;
-        const isFull = !!(data.captain1 && data.captain2);
-        const isFinished = data.status === 'finished';
+          const slotAvailable = !data.captain1 || !data.captain2;
+          const isFull = !!(data.captain1 && data.captain2);
+          const isFinished = data.status === 'finished';
 
-        const shouldBeSpectator = !isC1 && !isC2 && !slotAvailable && (isFull || isFinished);
+          const shouldBeSpectator = !isC1 && !isC2 && !slotAvailable && (isFull || isFinished);
 
-        setIsSpectator(shouldBeSpectator);
+          setIsSpectator(shouldBeSpectator);
+        }
       },
       (err) => {
+        if (!active) return;
+        setLobby(null);
+        setHasAttemptedLobbyLoad(true);
         setLobbyInitialLoading(false);
         setError("Erro no Lobby: " + err.message);
       }
     );
 
-    return unsub;
-  }, [lobbyId, guestId]);
+    return () => {
+      active = false;
+      unsub();
+    };
+  }, [lobbyId, guestId, isAuthReady]);
 
   const join = useCallback(async (id: string, role: 'A' | 'B' | 'SPECTATOR', preferredPosition: number, playerNames: Record<number, string>, newNickname?: string) => {
     const finalNickname = newNickname || nickname;
@@ -262,12 +293,17 @@ export function useLobby(initialNickname: string) {
 
   const create = useCallback(async (id: string, newLobby: Lobby) => {
     setLoading(true);
+    setLobbyInitialLoading(true);
+    setHasAttemptedLobbyLoad(false);
+    setLobby(newLobby);
     try {
       await lobbyService.createLobby(id, newLobby);
       setLobbyId(id);
       window.history.pushState({}, '', `?lobby=${id}`);
     } catch (err: any) {
       setError("Create failed: " + err.message);
+      setLobbyInitialLoading(false);
+      setLobby(null);
     }
     setLoading(false);
   }, []);
@@ -275,6 +311,8 @@ export function useLobby(initialNickname: string) {
   const leave = useCallback(() => {
     setLobbyId(null);
     setLobby(null);
+    setLobbyInitialLoading(false);
+    setHasAttemptedLobbyLoad(false);
     const url = new URL(window.location.href);
     url.searchParams.delete('lobby');
     window.history.replaceState({}, '', url.pathname + url.search);
@@ -347,6 +385,7 @@ export function useLobby(initialNickname: string) {
     forceUnpause,
     forceStartDraft,
     isAuthReady,
-    lobbyInitialLoading
+    lobbyInitialLoading,
+    hasAttemptedLobbyLoad
   };
 }

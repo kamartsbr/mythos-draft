@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { User, Shield, Dices } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { PickEntry } from '../../types';
-import { MAJOR_GODS } from '../../constants';
+import { getMajorGodById } from '../../constants';
 
 interface PlayerSlotProps {
   pick: PickEntry;
@@ -16,6 +16,8 @@ interface PlayerSlotProps {
   timeLeft?: number | null;
   timerDuration?: number;
   overridePlayerName?: string;
+  visualColor?: string;
+  visualOrder?: number;
 }
 
 /**
@@ -32,39 +34,42 @@ interface PlayerSlotProps {
  * @param timeLeft - Remaining time for the current turn (used to compute progress bar width); may be null
  * @param timerDuration - Total timer duration used to compute progress; if null or <= 0 the bar is not shown
  * @param overridePlayerName - Explicit player name pushed from top-level to bypass pick.playerName defaults
+ * @param visualColor - Resolved visual color
+ * @param visualOrder - Resolved flex layout order
  * @returns The React element representing the player slot UI
  */
-export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, hoveredGodId, timeLeft, timerDuration, overridePlayerName }: PlayerSlotProps) {
-  const god = MAJOR_GODS.find(g => g.id === pick.godId) || (isCurrentTurn && hoveredGodId ? MAJOR_GODS.find(g => g.id === hoveredGodId) : undefined);
-  const isHovered = !pick.godId && god && isCurrentTurn;
+export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, hoveredGodId, timeLeft, timerDuration, overridePlayerName, visualColor, visualOrder }: PlayerSlotProps) {
+  const committedGod = getMajorGodById(pick.godId);
+  const previewGod = !pick.godId && isCurrentTurn ? getMajorGodById(hoveredGodId) : undefined;
+  const god = committedGod || previewGod;
+  const isHovered = Boolean(previewGod);
 
   const getPlayerLabel = () => {
-    if (preset === 'MCL' || preset === 'FORJA') {
-      return `${t.player || 'Player'} ${(index ?? 0) + 1}`;
+    if (preset === 'MCL' || preset === 'FORJA' || preset === 'MCL_PLAYOFFS' || preset === 'MCL_TIEBREAKER') {
+      return pick.playerName?.trim()
+        ? pick.playerName
+        : (isCurrentTurn ? (t.picking || 'Picking...') : (t.selecting || 'Selecting...'));
     }
     return pick.position === 'corner' ? t.corner : t.middle;
   };
 
-  // FIXED: Visual HUD layout requirements handled by CSS order (Visual Swap)
-  // Lado HOST (A): Turno 1 <-> Turno 4
-  // Lado GUEST (B): Turno 2 <-> Turno 3
-  const visualOrder = {
-    4: 1, 5: 2, 1: 3,
-    2: 1, 6: 2, 3: 3
-  }[pick.playerId!] || 1;
-
   const showColor = !isHidden && (god || (preset !== 'MCL' && preset !== 'FORJA'));
+  
+  const displayPlayerName = pick.godId || isCurrentTurn ? pick.playerName : '';
+  const isMclStylePreset = preset === 'MCL' || preset === 'FORJA' || preset === 'MCL_PLAYOFFS' || preset === 'MCL_TIEBREAKER';
+  const fallbackLabel = isMclStylePreset ? (t.selecting || 'Selecting...') : `Player ${pick.playerId}`;
+  
   const displayName = isHidden 
     ? (pick.team === 'A' ? t.teamA : t.teamB) 
-    : (isHovered ? (t.selecting || 'Selecting...') : (overridePlayerName || pick.playerName || ((preset === 'MCL' || preset === 'FORJA') ? (t.selecting || 'Selecionando...') : `Player ${pick.playerId}`)));
+    : (isHovered ? (t.selecting || 'Selecting...') : (overridePlayerName || displayPlayerName || fallbackLabel));
 
   return (
     <motion.div 
       initial={{ opacity: 0, x: pick.team === 'A' ? -20 : 20 }}
       animate={{ opacity: 1, x: 0 }}
-      style={{ order: visualOrder }}
+      style={{ order: visualOrder ?? 1 }}
       className={cn(
-        "relative group h-24 rounded-2xl overflow-hidden border transition-all duration-500",
+        "relative group h-20 rounded-2xl overflow-hidden border transition-all duration-500",
         isCurrentTurn 
           ? "border-amber-500 shadow-[0_0_25px_rgba(245,158,11,0.4)] bg-amber-500/10 ring-2 ring-amber-500/20" 
           : "border-slate-800 bg-slate-900/40 hover:border-slate-700"
@@ -87,11 +92,11 @@ export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, ho
         </motion.div>
       )}
 
-      <div className="relative z-10 h-full flex items-center px-4 gap-4">
+      <div className="relative z-10 h-full flex items-center px-3 gap-3">
         {/* Player Color Indicator */}
         <div 
-          className="w-2 h-14 rounded-full shadow-lg transition-colors duration-500"
-          style={{ backgroundColor: showColor ? pick.color : '#1e293b', opacity: isHovered ? 0.5 : 1 }}
+          className="w-2 h-12 rounded-full shadow-lg transition-colors duration-500"
+          style={{ backgroundColor: showColor ? (visualColor ?? pick.color) : '#1e293b', opacity: isHovered ? 0.5 : 1 }}
         />
 
         <div className="flex-1 min-w-0">
@@ -110,14 +115,14 @@ export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, ho
             )}
           </div>
           <h3 className={cn(
-            "text-xl font-black truncate drop-shadow-md transition-colors duration-500",
+            "text-lg font-black truncate drop-shadow-md transition-colors duration-500",
             (god || !preset || preset !== 'MCL') ? "text-white" : "text-slate-700",
             isHovered && "text-slate-400"
           )}>
             {displayName}
           </h3>
           <p className={cn(
-            "text-xs font-black uppercase tracking-widest flex items-center gap-1",
+            "text-[11px] font-black uppercase tracking-widest flex items-center gap-1",
             god && !isHovered ? "text-amber-500" : "text-slate-600"
           )}>
             {god ? god.name : t.selecting}
@@ -127,7 +132,7 @@ export function PlayerSlot({ pick, isCurrentTurn, t, isHidden, preset, index, ho
 
         {/* God Icon */}
         <div className={cn(
-          "w-16 h-16 rounded-2xl border-2 overflow-hidden transition-all duration-500 relative shadow-2xl",
+          "w-14 h-14 rounded-xl border-2 overflow-hidden transition-all duration-500 relative shadow-2xl",
           god ? "border-amber-500/50 rotate-0 scale-100" : "border-slate-800 rotate-12 scale-90 bg-slate-950 flex items-center justify-center",
           isHovered && "opacity-60 border-dashed"
         )}>

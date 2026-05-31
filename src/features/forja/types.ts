@@ -5,7 +5,12 @@
  */
 
 // ─── Utilitários Firestore ───────────────────────────────────────────────────
-export type FirestoreTimestamp = { seconds: number; nanoseconds: number } | number | null;
+export type FirestoreTimestamp =
+  | { seconds: number; nanoseconds: number; toDate?: () => Date; toMillis?: () => number }
+  | number
+  | string
+  | Date
+  | null;
 
 // ─── Jogador ─────────────────────────────────────────────────────────────────
 export type ForjaPlayerStatus = 'available' | 'drafted' | 'reserve' | 'rejected' | 'pending' | 'banned';
@@ -99,6 +104,35 @@ export interface ForjaScheduleEntry {
   matchup: string;
   streamer_link: string;
   streamer_name: string;
+}
+
+export interface ForjaLiveMatchSummary {
+  id: string;
+  name: string;
+  status: string;
+  scoreA: number;
+  scoreB: number;
+  stage: string;
+  scheduledDate?: FirestoreTimestamp;
+  scheduledTime?: string;
+  streamerUrl?: string;
+  externalLink?: string;
+  config?: {
+    name?: string;
+    forjaTeamA?: string;
+    forjaTeamB?: string;
+    forjaGroupId?: string;
+    tournamentStage?: string;
+    externalLink?: string;
+    scheduledDate?: FirestoreTimestamp;
+    scheduledTime?: string;
+    streamerUrl?: string;
+  };
+}
+
+export interface ForjaLiveMatchesSummaryDoc {
+  matches: ForjaLiveMatchSummary[];
+  updated_at?: FirestoreTimestamp;
 }
 
 // ─── Draft Session ────────────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ import { cn } from '../../lib/utils';
 import { Lobby, God, MapInfo } from '../../types';
 import { MAJOR_GODS, MAPS, PANTHEONS } from '../../constants';
 import { lobbyService } from '../../services/lobbyService';
+import { resolveDraftPlayerTargets } from '../../domain/draft/playerTargets';
 import { MapVisualizer } from '../MapVisualizer';
 import { ConfirmModal } from '../UI/ConfirmModal';
 import { DraftResultCard } from './DraftResultCard';
@@ -55,6 +56,13 @@ export function PickBanPanel({
   const [showRequestResetConfirm, setShowRequestResetConfirm] = useState(false);
   const [showSnakeWarning, setShowSnakeWarning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingMapId, setPendingMapId] = useState<string | null>(null);
+  const [pendingGodBanId, setPendingGodBanId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPendingMapId(null);
+    setPendingGodBanId(null);
+  }, [lobby.turn, lobby.phase, lobby.selectedMap]);
 
   useEffect(() => {
     if (lobby.config.preset === 'MCL' && lobby.selectedMap === 'snake_dance' && lobby.phase === 'post_draft') {
@@ -104,6 +112,7 @@ export function PickBanPanel({
   };
   
   const currentTurn = lobby.turnOrder[lobby.turn];
+  const isTurnExpired = timeLeft !== null && !Number.isNaN(timeLeft) && timeLeft <= 0;
 
   const selectedPositionId = useMemo(() => {
     if (lobby.phase !== 'god_pick') return undefined;
@@ -124,23 +133,33 @@ export function PickBanPanel({
   useEffect(() => {
     if (!isMyTurn) {
       setSelectedGodId(null);
+      setPendingGodBanId(null);
     }
   }, [isMyTurn]);
 
   useEffect(() => {
     setSelectedGodId(null);
+    setPendingGodBanId(null);
   }, [lobby.turn]);
 
   useEffect(() => {
-    if ((isCaptain1 || isCaptain2) || isAdmin || myTeam) {
-      let team = myTeam || 'A';
-      if (!myTeam && isCaptain2 && !isCaptain1) {
-        team = 'B';
-      }
-      const godId = isMyTurn ? selectedGodId : null;
-      lobbyService.setHoveredGod(lobby.id, team as 'A' | 'B', godId);
+    if (!((isCaptain1 || isCaptain2) || isAdmin || myTeam)) {
+      return;
     }
-  }, [selectedGodId, isMyTurn, isCaptain1, isCaptain2, lobby.id, myTeam, isAdmin]);
+
+    let team = myTeam || 'A';
+    if (!myTeam && isCaptain2 && !isCaptain1) {
+      team = 'B';
+    }
+
+    const isActiveGodPickTurn =
+      lobby.phase === 'god_pick' &&
+      currentTurn?.target === 'GOD' &&
+      currentTurn?.action === 'PICK';
+
+    const shouldPreview = Boolean(isMyTurn && isActiveGodPickTurn && selectedGodId);
+    lobbyService.setHoveredGod(lobby.id, team as 'A' | 'B', shouldPreview ? selectedGodId : null);
+  }, [selectedGodId, isMyTurn, isCaptain1, isCaptain2, lobby.id, myTeam, isAdmin, lobby.phase, currentTurn?.target, currentTurn?.action]);
 
   useEffect(() => {
     if (lobby.phase !== lastPhase && lobby.status === 'drafting') {
@@ -250,20 +269,27 @@ export function PickBanPanel({
   const mapGridElements = useMemo(() => availableMaps.map(map => {
     const isBanned = isMapBanned(map.id);
     const isPicked = isMapPicked(map.id);
-    const isDisabled = isBanned || isPicked || !isMyTurn;
+    const isDisabled = isBanned || isPicked || !isMyTurn || isTurnExpired;
 
     return (
       <motion.button
         key={map.id}
+        data-testid="map-card"
+        data-map-id={map.id}
         whileHover={!isDisabled ? { scale: 1.05, y: -4 } : {}}
         whileTap={!isDisabled ? { scale: 0.95 } : {}}
-        onClick={() => !isDisabled && handleAction(map.id)}
+        onClick={() => {
+          if (!isDisabled) {
+            setPendingMapId(prev => prev === map.id ? null : map.id);
+          }
+        }}
         disabled={isDisabled}
         aria-label={t.mapNames?.[map.id] || map.name}
         className={cn(
-          "relative aspect-video rounded-2xl overflow-hidden border-2 transition-all duration-300 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500",
+          "relative h-24 rounded-2xl overflow-hidden border-2 transition-all duration-300 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 w-full",
           isBanned ? "border-red-600 shadow-[0_0_15px_rgba(220,38,38,0.4)]" :
           isPicked ? "border-green-500/50 opacity-40 grayscale" :
+          pendingMapId === map.id ? "border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)] scale-[1.02]" :
           isMyTurn ? "border-slate-800 hover:border-amber-500 shadow-lg hover:shadow-amber-500/10" :
           "border-slate-800 opacity-60 grayscale"
         )}
@@ -322,24 +348,29 @@ export function PickBanPanel({
         )}
       </motion.button>
     );
-  }), [availableMaps, isMyTurn, lobby.mapBans, lobby.seriesMaps, optimisticAction, t.mapNames, handleAction]);
+  }), [availableMaps, isMyTurn, isTurnExpired, lobby.mapBans, lobby.seriesMaps, optimisticAction, t.mapNames, handleAction, pendingMapId]);
 
   const godGridElements = useMemo(() => filteredGods.map(god => {
     const isBanned = isGodBanned(god.id);
     const isPicked = isGodPicked(god.id);
     const isPickedByMyTeam = isGodPickedByMyTeam(god.id);
-    const isDisabled = isBanned || (lobby.config.isExclusive && isPicked) || isPickedByMyTeam || !isMyTurn;
+    const isDisabled = isBanned || (lobby.config.isExclusive && isPicked) || isPickedByMyTeam || !isMyTurn || isTurnExpired;
+    const isPendingGodBan = pendingGodBanId === god.id;
 
     return (
       <motion.button
         key={god.id}
+        data-testid="god-card"
+        data-god-id={god.id}
         layoutId={`god-${god.id}`}
         whileHover={!isDisabled ? { scale: 1.05, y: -1 } : {}}
         whileTap={!isDisabled ? { scale: 0.95 } : {}}
         onClick={() => {
           if (isDisabled) return;
-          if ((lobby.config.preset === 'MCL' || lobby.config.preset === 'FORJA') && lobby.phase === 'god_pick') {
+          if ((lobby.config.preset === 'MCL' || lobby.config.preset === 'FORJA' || lobby.config.preset === 'MCL_PLAYOFFS' || lobby.config.preset === 'MCL_TIEBREAKER') && lobby.phase === 'god_pick') {
             setSelectedGodId(prev => prev === god.id ? null : god.id);
+          } else if (lobby.phase === 'god_ban') {
+            setPendingGodBanId(prev => prev === god.id ? null : god.id);
           } else {
             handleAction(god.id);
           }
@@ -350,6 +381,7 @@ export function PickBanPanel({
           "relative aspect-square rounded-xl overflow-hidden border transition-all duration-300 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500",
           isBanned ? "border-red-600 shadow-[0_0_10px_rgba(220,38,38,0.4)]" :
           (isPicked && lobby.config.isExclusive) || isPickedByMyTeam ? "border-blue-900/50 opacity-40 grayscale" :
+          isPendingGodBan ? "border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.5)] scale-105" :
           selectedGodId === god.id ? "border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)] scale-105" :
           isMyTurn ? "border-slate-800 hover:border-amber-500 shadow-lg hover:shadow-amber-500/10" :
           "border-slate-800 opacity-60 grayscale"
@@ -411,7 +443,11 @@ export function PickBanPanel({
         </AnimatePresence>
       </motion.button>
     );
-  }), [filteredGods, isMyTurn, lobby.bans, lobby.picks, lobby.config.isExclusive, lobby.config.preset, lobby.phase, selectedGodId, optimisticAction, handleAction]);
+  }), [filteredGods, isMyTurn, isTurnExpired, lobby.bans, lobby.picks, lobby.config.isExclusive, lobby.config.preset, lobby.phase, selectedGodId, pendingGodBanId, optimisticAction, handleAction]);
+
+  const pendingGodBan = pendingGodBanId
+    ? MAJOR_GODS.find(god => god.id === pendingGodBanId)
+    : null;
 
   if (isViewingHistory && historyGame) {
     const gameMap = MAPS.find(m => m.id.toLowerCase() === (historyGame.mapId || '').toLowerCase());
@@ -443,7 +479,7 @@ export function PickBanPanel({
         </div>
 
         <div className="flex-1 flex flex-col items-center justify-center gap-4 overflow-y-auto custom-scrollbar pt-4">
-          <div className="w-full max-w-3xl flex flex-col items-center gap-4">
+          <div className="w-full max-w-[480px] mx-auto flex flex-col items-center gap-4">
             <MapVisualizer 
               lobby={lobby} 
               isVisible={() => true} 
@@ -492,7 +528,7 @@ export function PickBanPanel({
           </div>
 
           <div className="flex-1 p-8 flex flex-col items-center gap-8">
-          <div className="w-full max-w-[550px]">
+          <div className="w-full max-w-[480px] mx-auto">
               <MapVisualizer 
                 lobby={lobby} 
                 isVisible={() => true} 
@@ -515,6 +551,7 @@ export function PickBanPanel({
             <div className="flex flex-col items-center gap-4 w-full">
               <div className="flex gap-4 w-full max-w-sm">
                 <button
+                  data-testid="post-draft-ready-report-button"
                   onClick={() => reportScore(null as any)}
                   disabled={(!isCaptain1 && !isCaptain2) || (isCaptain1 && lobby.readyA_report) || (isCaptain2 && lobby.readyB_report)}
                   className={cn(
@@ -636,9 +673,27 @@ export function PickBanPanel({
           </div>
         </div>
 
-        <div className="grid grid-cols-3 md:grid-cols-4 gap-4 overflow-y-auto pr-2 custom-scrollbar max-w-5xl mx-auto w-full">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3 overflow-y-auto pr-2 custom-scrollbar max-w-5xl mx-auto w-full max-h-[calc(100vh-320px)]">
           {mapGridElements}
         </div>
+
+        {/* Confirm Map Pick Button */}
+        {isMyTurn && pendingMapId && !isTurnExpired && (
+          <div className="mt-6 flex justify-center shrink-0">
+            <motion.button
+              data-testid="confirm-map-pick"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              onClick={() => {
+                handleAction(pendingMapId);
+                setPendingMapId(null);
+              }}
+              className="px-8 py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-2xl uppercase tracking-widest transition-all shadow-xl shadow-amber-500/20"
+            >
+              {t.confirmMapPick || "Confirm Map Pick"}
+            </motion.button>
+          </div>
+        )}
         
         {modalsPortal}
       </div>
@@ -646,7 +701,7 @@ export function PickBanPanel({
   }
 
   return (
-    <div className="flex flex-col h-full p-4 md:p-8 relative overflow-hidden">
+    <div className="flex flex-col h-full p-4 md:p-6 relative overflow-hidden">
       {/* Phase Transition Overlay */}
       <AnimatePresence>
         {showPhaseTransition && (
@@ -687,33 +742,9 @@ export function PickBanPanel({
         )}
       </AnimatePresence>
 
-      {/* Search & Filters */}
-      <div className="mb-4 flex flex-col md:flex-row gap-4">
-        <div className="relative flex-1 group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-amber-500 transition-colors" />
-          <input 
-            type="text" 
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t.searchGods}
-            className="w-full bg-slate-900 border border-slate-800 rounded-2xl pl-12 pr-4 py-2 text-sm focus:outline-none focus:border-amber-500 transition-all placeholder:text-slate-600"
-          />
-        </div>
-        
-        {(isCaptain1 || isCaptain2) && (
-          <button 
-            onClick={() => setShowRequestResetConfirm(true)}
-            className="px-6 py-2 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-amber-500 hover:text-white transition-all shadow-lg shadow-amber-500/5"
-          >
-            <RefreshCw className="w-4 h-4 mr-2 inline-block" />
-            {t.resetGameDraft || "RESET GAME DRAFT"}
-          </button>
-        )}
-      </div>
-
       {lobby.selectedMap && (
-        <div className="mb-4 flex flex-col items-center">
-          <div className="w-full max-w-[550px]">
+        <div className="mb-3 flex flex-col items-center bg-slate-900/20 px-3 py-3 rounded-2xl border border-slate-900/40 shrink-0 w-full">
+          <div className="w-[min(550px,56vw)] mx-auto shrink-0 overflow-visible rounded-2xl flex items-center justify-center">
             <MapVisualizer 
               lobby={lobby} 
               isVisible={() => true} 
@@ -727,7 +758,58 @@ export function PickBanPanel({
         </div>
       )}
 
-
+      {/* Control Bar (Search, Phase info, Reset draft) */}
+      <div className="mb-4 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/30 p-4 rounded-2xl border border-slate-900/50 shrink-0">
+        <div className="flex-1 max-w-md w-full">
+          <div className="relative group w-full">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-amber-500 transition-colors" />
+            <input 
+              type="text" 
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t.searchGods}
+              className="w-full bg-slate-900 border border-slate-800 rounded-2xl pl-12 pr-4 py-2 text-sm focus:outline-none focus:border-amber-500 transition-all placeholder:text-slate-600"
+            />
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-4 self-stretch md:self-auto justify-between md:justify-end">
+          <div className="flex flex-col text-right md:text-left">
+            <h2 className="text-sm font-black text-white uppercase tracking-tight leading-none mb-1">
+              {t[lobby.phase + 'Phase'] || lobby.phase.replace('_', ' ').toUpperCase()}
+            </h2>
+            <motion.p 
+              animate={isMyTurn ? { opacity: [0.5, 1, 0.5] } : { opacity: 1 }}
+              transition={{ repeat: Infinity, duration: 2 }}
+              className={cn(
+                "text-[9px] font-black uppercase tracking-[0.2em]",
+                isMyTurn ? "text-amber-500" : "text-slate-500"
+              )}
+            >
+              {isMyTurn ? t.yourTurn : (lobby.phase === 'god_picker' ? t.waitingOpponentConfirm : t.opponentTurn)}
+            </motion.p>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl">
+              <Info className="w-3.5 h-3.5 text-amber-500" />
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                {lobby.config.isExclusive ? t.exclusive : t.nonExclusive}
+              </span>
+            </div>
+            
+            {(isCaptain1 || isCaptain2) && (
+              <button 
+                onClick={() => setShowRequestResetConfirm(true)}
+                className="px-4 py-2 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-500 hover:text-white transition-all shadow-lg shadow-amber-500/5 flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-3 h-3" />
+                {t.resetGameDraft || "RESET GAME DRAFT"}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Snake Dance Warning Overlay */}
       <AnimatePresence>
@@ -765,32 +847,6 @@ export function PickBanPanel({
         )}
       </AnimatePresence>
 
-      {/* Gods Grid Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex flex-col">
-          <h2 className="text-2xl font-black text-white uppercase tracking-tight">
-            {t[lobby.phase + 'Phase'] || lobby.phase.replace('_', ' ').toUpperCase()}
-          </h2>
-          <motion.p 
-            animate={isMyTurn ? { opacity: [0.5, 1, 0.5] } : { opacity: 1 }}
-            transition={{ repeat: Infinity, duration: 2 }}
-            className={cn(
-              "text-[10px] font-black uppercase tracking-[0.2em]",
-              isMyTurn ? "text-amber-500" : "text-slate-500"
-            )}
-          >
-            {isMyTurn ? t.yourTurn : (lobby.phase === 'god_picker' ? t.waitingOpponentConfirm : t.opponentTurn)}
-          </motion.p>
-        </div>
-        
-        <div className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl">
-          <Info className="w-4 h-4 text-amber-500" />
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-            {lobby.config.isExclusive ? t.exclusive : t.nonExclusive}
-          </span>
-        </div>
-      </div>
-
       {/* Gods Grid */}
       <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
         <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-1.5 pb-2">
@@ -798,54 +854,85 @@ export function PickBanPanel({
         </div>
       </div>
 
+      {/* Confirm God Ban Button */}
+      {lobby.phase === 'god_ban' && isMyTurn && (
+        <div className="sticky bottom-0 left-0 right-0 mt-3 p-3 bg-slate-950/90 border border-red-500/30 rounded-2xl backdrop-blur-md z-[20] shadow-2xl">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="min-w-0 text-center sm:text-left">
+              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-red-400">
+                {t.godBanPhase || 'God Ban Phase'}
+              </div>
+              <div className="text-xs font-bold text-slate-400 truncate">
+                {pendingGodBan ? (pendingGodBan.name || pendingGodBan.id) : (t.selectGodFirst || 'Select a God first')}
+              </div>
+            </div>
+            <button
+              data-testid="confirm-god-ban"
+              disabled={!pendingGodBanId || isTurnExpired}
+              onClick={() => {
+                if (!pendingGodBanId || isTurnExpired) return;
+                handleAction(pendingGodBanId);
+                setPendingGodBanId(null);
+              }}
+              className={cn(
+                "w-full sm:w-auto px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
+                pendingGodBanId && !isTurnExpired
+                  ? "bg-red-500 hover:bg-red-400 text-white shadow-lg shadow-red-500/20"
+                  : "bg-slate-900 border border-slate-800 text-slate-600 cursor-not-allowed"
+              )}
+            >
+              <X className="w-4 h-4" />
+              {t.confirmGodBan || 'Confirm God Ban'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* MCL / FORJA Player Selection */}
-      {(lobby.config.preset === 'MCL' || lobby.config.preset === 'FORJA') && currentTurn?.target === 'GOD' && currentTurn?.action === 'PICK' && isMyTurn && (
-        <div className="mt-2 p-3 bg-slate-900 border border-slate-800 rounded-2xl">
+      {(lobby.config.preset === 'MCL' || lobby.config.preset === 'FORJA' || lobby.config.preset === 'MCL_PLAYOFFS' || lobby.config.preset === 'MCL_TIEBREAKER') && currentTurn?.target === 'GOD' && currentTurn?.action === 'PICK' && isMyTurn && (
+        <div className="sticky bottom-0 left-0 right-0 mt-3 p-3 bg-slate-950/90 border border-slate-800 rounded-2xl backdrop-blur-md z-[20] shadow-2xl">
           <h4 className="text-xs font-bold text-slate-300 mb-2 text-center uppercase tracking-widest">
             {selectedGodId ? t.selectPlayerForGod || "Select a player for this God" : t.selectGodFirst || "Select a God first"}
           </h4>
           <div className="flex items-center justify-center gap-2 sm:gap-4">
             {(() => {
-              const activeTeam = myTeam || (isCaptain1 ? 'A' : (isCaptain2 ? 'B' : 'A'));
+              const activeTeam: 'A' | 'B' = myTeam === 'A' || myTeam === 'B' ? myTeam : (isCaptain1 ? 'A' : (isCaptain2 ? 'B' : 'A'));
               let players = activeTeam === 'A' ? (lobby.teamAPlayers || []) : (lobby.teamBPlayers || []);
+              const teamPicks = lobby.picks.filter(p => p.team === activeTeam);
               
               if (players.length === 0) {
                 const teamSlots = activeTeam === 'A' ? [1, 4, 5] : [2, 3, 6];
                 players = teamSlots.map(id => ({ name: `Player ${id}`, position: id }));
               }
+
+              const playerTargets = resolveDraftPlayerTargets(players, teamPicks);
               
-              return players.map((tp, idx) => {
-                const lowerTpName = tp.name.toLowerCase().trim();
-                const isAssigned = lobby.picks.some(p => 
-                  p.team === activeTeam && 
-                  p.playerName?.toLowerCase().trim() === lowerTpName && 
-                  p.godId !== null
-                );
+              return playerTargets.map((target, idx) => {
                 return (
                   <button
                     key={idx}
-                    disabled={!selectedGodId || isAssigned}
+                    data-testid="mcl-player-target"
+                    data-player-id={target.targetPlayerId ?? -1}
+                    data-player-name={target.name}
+                    disabled={!selectedGodId || target.isAssigned || !target.targetPlayerId}
                     onClick={() => {
-                      if (selectedGodId && !isAssigned) {
-                        const targetPick = lobby.picks.find(p => p.team === activeTeam && p.godId === null);
-                        if (targetPick) {
-                          handleAction(selectedGodId, targetPick.playerId, tp.name);
-                          setSelectedGodId(null);
-                        }
+                      if (selectedGodId && !target.isAssigned && target.targetPlayerId) {
+                        handleAction(selectedGodId, target.targetPlayerId, target.name);
+                        setSelectedGodId(null);
                       }
                     }}
                     className={cn(
                       "px-4 py-3 sm:px-8 sm:py-4 rounded-xl border-2 transition-all duration-300 flex flex-col items-center gap-1 shadow-lg",
-                      isAssigned ? "border-slate-800 opacity-50 grayscale" :
+                      target.isAssigned ? "border-slate-800 opacity-50 grayscale" :
                       selectedGodId ? "border-slate-700 hover:border-amber-500 hover:bg-amber-500/20 hover:shadow-amber-500/10 cursor-pointer" :
                       "border-slate-800 opacity-50 cursor-not-allowed"
                     )}
                   >
                     <span className={cn(
                       "text-xs sm:text-sm font-black uppercase tracking-widest truncate max-w-[100px] sm:max-w-[140px]",
-                      isAssigned ? "text-slate-500" : "text-white"
+                      target.isAssigned ? "text-slate-500" : "text-white"
                     )}>
-                      {tp.name}
+                      {target.name}
                     </span>
                   </button>
                 );

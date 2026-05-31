@@ -1,12 +1,12 @@
 
 const SOUNDS = {
-  yourTurn: '/assets/sounds/yourTurn.mp3', // Horn
-  timerLow: '/assets/sounds/yourTurn.mp3', // Ticking (fallback)
+  yourTurn: null,
+  timerLow: null,
   pick: '/assets/sounds/pick.mp3', // Sword
   ban: '/assets/sounds/ban.mp3', // Stone/Bash
-  complete: '/assets/sounds/yourTurn.mp3', // Fanfare (fallback)
+  complete: null,
   action: '/assets/sounds/pick.mp3', // Sword/Click (fallback)
-  finish: '/assets/sounds/yourTurn.mp3', // Fanfare (fallback)
+  finish: null,
 };
 
 class SoundService {
@@ -21,6 +21,8 @@ class SoundService {
 
     try {
       const url = SOUNDS[soundName];
+      if (!url) return;
+
       const audio = new Audio(url);
       audio.volume = 0.4;
 

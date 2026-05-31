@@ -59,6 +59,28 @@ export default defineConfig(({ mode }) => {
             /^https?:\/\/accounts\.google\.com/,
           ],
         },
+        manifest: {
+          name: 'Mythos Draft',
+          short_name: 'Mythos Draft',
+          description: 'Competitive drafting tool for Age of Mythology: Retold.',
+          theme_color: '#020617',
+          background_color: '#020617',
+          display: 'standalone',
+          orientation: 'portrait',
+          icons: [
+            {
+              src: '/pwa-192x192.png',
+              sizes: '192x192',
+              type: 'image/png'
+            },
+            {
+              src: '/pwa-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'any maskable'
+            }
+          ]
+        }
       }),
     ],
     define: {

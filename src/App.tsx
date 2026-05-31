@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
-import { motion } from 'motion/react';
-import { Sword, Loader2, AlertTriangle, Github, MessageSquare, Scroll, User, X, Key, Shield, Heart, Coffee } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Sword, Loader2, AlertTriangle, Github, MessageSquare, Scroll, User, X, Key, Shield, Heart, Coffee, Settings } from 'lucide-react';
 import { useLobby } from './hooks/useLobby';
 import { useDraft } from './hooks/useDraft';
 import { useDraftConfig } from './hooks/useDraftConfig';
+import { useTheme } from './hooks/useTheme';
 import { LanguageToggle } from './components/UI/LanguageToggle';
 import { LobbyCreation } from './components/Lobby/LobbyCreation';
 import { LobbyList } from './components/Lobby/LobbyList';
@@ -12,6 +13,7 @@ import { StreamerHUD } from './components/Draft/StreamerHUD';
 import { ConfirmModal } from './components/UI/ConfirmModal';
 import { BugReportModal } from './components/UI/BugReportModal';
 import { PatchNotesModal } from './components/UI/PatchNotesModal';
+import { SettingsModal } from './components/UI/SettingsModal';
 import { TRANSLATIONS, PLAYER_COLORS, MCL_ROUND_MAPS, MCL_PLAYOFFS_PHASES, getMCLPicks } from './constants';
 import { DraftTurn, Lobby, PickEntry, LobbySummary } from './types';
 import { lobbyService, PUBLIC_LOBBIES_PAGE_SIZE } from './services/lobbyService';
@@ -19,6 +21,12 @@ import { cn } from './lib/utils';
 
 import { ErrorBoundary } from './components/UI/ErrorBoundary';
 import { Footer } from './components/UI/Footer';
+import { CookieConsent } from './components/UI/CookieConsent';
+import { InstallPrompt } from './components/UI/InstallPrompt';
+import { AboutPage } from './pages/AboutPage';
+import { TermsPage } from './pages/TermsPage';
+import { PrivacyPage } from './pages/PrivacyPage';
+import { CookiesPage } from './pages/CookiesPage';
 import { lazyWithRetry } from './lib/lazyWithRetry';
 
 // ── Forja de Hefesto — Lazy-loaded para isolamento total ──────────
@@ -122,6 +130,10 @@ function AppContent() {
   const isStreamerDock = window.location.pathname.startsWith('/streamer-dock/');
   const isLobbyPath = window.location.pathname.startsWith('/lobby/');
   const isForjaRoute = window.location.pathname.startsWith('/forja');
+  const isAboutRoute = window.location.pathname === '/about';
+  const isTermsRoute = window.location.pathname === '/terms';
+  const isPrivacyRoute = window.location.pathname === '/privacy';
+  const isCookiesRoute = window.location.pathname === '/cookies';
   const lobbyIdFromPath = (isOverlay || isStreamerHud || isStreamerDock || isLobbyPath) ? window.location.pathname.split('/')[2] : null;
 
   useEffect(() => {
@@ -172,6 +184,9 @@ function AppContent() {
     authenticateAdmin,
     logoutAdmin,
     publicLobbies,
+    fetchPublicLobbies,
+    lobbyListLoading,
+    lobbyListFetched,
     error,
     setError,
     loading: lobbyLoading,
@@ -324,10 +339,14 @@ function AppContent() {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showBugModal, setShowBugModal] = useState(false);
   const [showPatchNotes, setShowPatchNotes] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [tempNickname, setTempNickname] = useState(nickname);
   const [isEditingNick, setIsEditingNick] = useState(false);
   const [isPermanent, setIsPermanent] = useState(false);
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState('');
+  
+  // Call useTheme to initialize global themes on mount
+  useTheme();
   const [copySuccess, setCopySuccess] = useState(false);
   const [urlCopySuccess, setUrlCopySuccess] = useState(false);
 
@@ -339,6 +358,7 @@ function AppContent() {
     if (!isMenuRoute) return;
 
     if (!isAdmin) {
+      // Regular users: use publicLobbies from the on-demand fetch
       setPaginatedLobbies(publicLobbies);
       setHasMore(false);
       return;
@@ -349,6 +369,16 @@ function AppContent() {
       setHasMore(lbs.length >= 20);
     });
   }, [publicLobbies, isAdmin, lobbyId, isForjaRoute, isOverlay, isStreamerHud, isStreamerDock, isLobbyPath]);
+
+  const handleFetchLobbies = async () => {
+    if (isAdmin) {
+      const lbs = await lobbyService.getLobbiesPaginated(true);
+      setPaginatedLobbies(lbs);
+      setHasMore(lbs.length >= 20);
+    } else {
+      await fetchPublicLobbies();
+    }
+  };
 
   const loadMore = async () => {
     if (!isAdmin) return;
@@ -619,6 +649,14 @@ function AppContent() {
         <Suspense fallback={<ForjaLoader />}>
           <ForjaHub />
         </Suspense>
+      ) : isAboutRoute ? (
+        <AboutPage t={t} lang={lang} setLang={setLang as any} />
+      ) : isTermsRoute ? (
+        <TermsPage t={t} lang={lang} setLang={setLang as any} />
+      ) : isPrivacyRoute ? (
+        <PrivacyPage t={t} lang={lang} setLang={setLang as any} />
+      ) : isCookiesRoute ? (
+        <CookiesPage t={t} lang={lang} setLang={setLang as any} />
       ) : (isOverlay || isStreamerHud) && lobbyIdFromPath ? (
         <StreamerHUD lobbyId={lobbyIdFromPath} />
       ) : (
@@ -782,6 +820,13 @@ function AppContent() {
                 <Scroll className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform" />
                 <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest hidden sm:inline">Patch Notes</span>
                 <div className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full shadow-[0_0_8px_rgba(245,158,11,0.8)] animate-pulse" />
+              </button>
+              <button
+                onClick={() => setShowSettings(true)}
+                className="h-10 px-4 rounded-xl bg-slate-900/80 backdrop-blur-md border border-slate-800 hover:border-amber-500/50 hover:bg-slate-800 transition-all flex items-center gap-2 group relative"
+              >
+                <Settings className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform" />
+                <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest hidden sm:inline">Settings</span>
               </button>
               <LanguageToggle lang={lang} setLang={setLang as any} />
             </div>
@@ -966,7 +1011,7 @@ function AppContent() {
                   </div>
 
                   <div className="lg:col-span-5 space-y-6">
-                    <LobbyList
+                  <LobbyList
                       lobbies={paginatedLobbies}
                       t={t}
                       isAdmin={isAdmin}
@@ -983,6 +1028,9 @@ function AppContent() {
                       onDelete={handleDeleteLobby}
                       onLoadMore={loadMore}
                       hasMore={hasMore}
+                      onFetchLobbies={handleFetchLobbies}
+                      isLoadingLobbies={lobbyListLoading}
+                      hasBeenFetched={isAdmin || lobbyListFetched}
                     />
                   </div>
                 </div>
@@ -1174,10 +1222,21 @@ function AppContent() {
             onClose={() => setShowPatchNotes(false)}
             t={t}
           />
+          <AnimatePresence>
+            {showSettings && (
+              <SettingsModal 
+                onClose={() => setShowSettings(false)} 
+                t={t} 
+              />
+            )}
+          </AnimatePresence>
 
           <Footer t={t} lang={lang} />
         </>
       )}
+      
+      <CookieConsent t={t} />
+      <InstallPrompt />
     </div>
   );
 }

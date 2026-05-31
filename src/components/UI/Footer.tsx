@@ -100,10 +100,14 @@ export const Footer: React.FC<FooterProps> = ({ t, lang }) => {
           <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.5em] opacity-50">
             Mythos Draft &copy; {new Date().getFullYear()} • Age of Mythology: Retold Fan Project
           </p>
-          <div className="flex justify-center gap-6 opacity-30 hover:opacity-100 transition-opacity duration-500">
-            <div className="w-1.5 h-1.5 rounded-full bg-amber-500/50" />
-            <div className="w-1.5 h-1.5 rounded-full bg-amber-500/50" />
-            <div className="w-1.5 h-1.5 rounded-full bg-amber-500/50" />
+          <div className="flex justify-center gap-4 text-slate-500 text-xs font-bold uppercase tracking-widest mt-6">
+            <a href="/about" className="hover:text-amber-500 transition-colors">{t?.legal?.navAbout || "About"}</a>
+            <span>|</span>
+            <a href="/terms" className="hover:text-amber-500 transition-colors">{t?.legal?.navTerms || "Terms"}</a>
+            <span>|</span>
+            <a href="/privacy" className="hover:text-amber-500 transition-colors">{t?.legal?.navPrivacy || "Privacy"}</a>
+            <span>|</span>
+            <a href="/cookies" className="hover:text-amber-500 transition-colors">{t?.legal?.navCookies || "Cookies"}</a>
           </div>
         </div>
       </div>

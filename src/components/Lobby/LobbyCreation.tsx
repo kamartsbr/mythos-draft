@@ -731,16 +731,33 @@ export function LobbyCreation({
                 <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest block">{t.communityPresets}</label>
                 <div className="grid grid-cols-2 gap-2">
                   {communityPresets.map(preset => (
-                    <button
+                    <div
                       key={preset.id}
-                      onClick={() => applyCustomPreset(preset)}
                       className={cn(
-                        "px-4 py-3 rounded-xl border text-[10px] font-bold uppercase tracking-tight transition-all text-left truncate",
-                        config.preset === `custom_${preset.id}` ? "bg-blue-500 border-blue-500 text-white" : "bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700"
+                        "flex items-center justify-between px-3 py-2 rounded-xl border transition-all",
+                        config.preset === `custom_${preset.id}` ? "bg-blue-500/10 border-blue-500/50" : "bg-slate-950 border-slate-800 hover:border-slate-700"
                       )}
                     >
-                      {preset.name}
-                    </button>
+                      <button
+                        onClick={() => applyCustomPreset(preset)}
+                        className={cn(
+                          "flex-1 text-[10px] font-bold uppercase tracking-tight text-left truncate",
+                          config.preset === `custom_${preset.id}` ? "text-blue-400" : "text-slate-400"
+                        )}
+                      >
+                        {preset.name}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          lobbyService.upvotePreset(preset.id).then(() => loadPresets());
+                        }}
+                        className="flex items-center gap-1 pl-2 ml-2 border-l border-slate-800 text-slate-500 hover:text-amber-500 transition-colors"
+                      >
+                        <ChevronUp className="w-4 h-4" />
+                        <span className="text-[10px] font-black">{preset.upvotes || 0}</span>
+                      </button>
+                    </div>
                   ))}
                 </div>
               </div>

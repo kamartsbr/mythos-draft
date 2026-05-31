@@ -18,6 +18,7 @@ import {
   runTransaction,
   Timestamp,
   addDoc,
+  increment,
   QueryDocumentSnapshot
 } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
@@ -36,7 +37,7 @@ const STORAGE_PREFIX = 'mythos_draft_dev_';
 /** Max lobbies shown in the public list (21st and beyond are hidden). */
 export const PUBLIC_LOBBIES_PAGE_SIZE = 20;
 
-/** Public list: non-private, visible, and both captain slots filled. */
+/** Public list: non-private, visible, and at least one captain slot filled. */
 export function isLobbyEligibleForPublicList(data: {
   captain1?: string | null;
   captain2?: string | null;
@@ -44,7 +45,7 @@ export function isLobbyEligibleForPublicList(data: {
   isHidden?: boolean;
 }): boolean {
   if (!data.config || data.config.isPrivate || data.isHidden === true) return false;
-  return !!(data.captain1 && data.captain2);
+  return !!(data.captain1 || data.captain2);
 }
 
 export function lobbyDocToSummary(id: string, normalized: Lobby): LobbySummary {
@@ -68,7 +69,7 @@ export function lobbyDocToSummary(id: string, normalized: Lobby): LobbySummary {
 
 export function filterPublicSummaries(summaries: LobbySummary[]): LobbySummary[] {
   return summaries
-    .filter((s) => !!(s.captain1 && s.captain2))
+    .filter((s) => !!(s.captain1 || s.captain2))
     .slice(0, PUBLIC_LOBBIES_PAGE_SIZE);
 }
 
@@ -376,7 +377,7 @@ export const lobbyService = {
       return snapshot.docs
         .filter(doc => {
           const data = doc.data();
-          return !!(data.captain1 && data.captain2 && (!data.config || !data.config.isPrivate) && data.isHidden !== true);
+          return !!((data.captain1 || data.captain2) && (!data.config || !data.config.isPrivate) && data.isHidden !== true);
         })
         .map(doc => {
           const normalized = normalizeLobbyData(doc.data());
@@ -1265,88 +1266,92 @@ export const lobbyService = {
     }
     try {
       const docRef = doc(db, 'lobbies', id);
-      const docSnap = await getDoc(docRef);
-      
-      if (!docSnap.exists()) {
-        return { success: false, error: "Lobby not found" };
-      }
 
-      const data = normalizeLobbyData(docSnap.data());
-      const updates: any = {};
+      await runTransaction(db, async (transaction) => {
+        const docSnap = await transaction.get(docRef);
 
-      const isMCL = data.config.preset === 'MCL' || data.config.preset === 'FORJA';
-
-      if (role === 'A') {
-        if (data.captain1 && data.captain1 !== guestId) {
-          return { success: false, error: "Host slot already taken" };
+        if (!docSnap.exists()) {
+          throw new Error("Lobby not found");
         }
-        updates.captain1 = guestId;
-        updates.captain1Active = true;
-        
-        const is1v1 = data.config.teamSize === 1;
-        const defaultNames = ['Team A (Host)', 'Time A (Host)', 'Team A', 'Time A', 'Host', 'Time A (Host)'];
-        updates.captain1Name = playerNames[100] || nickname;
-        if (is1v1 && (!playerNames[100] || defaultNames.includes(playerNames[100]))) {
-          updates.captain1Name = nickname;
-        }
-        
-        if (!isMCL) {
-          updates.picks = (Array.isArray(data.picks) ? data.picks : Object.values(data.picks || {})).map((p: any) => {
-            if (p.team === 'A') {
-              if (playerNames && playerNames[p.playerId]) {
-                return { ...p, playerName: playerNames[p.playerId] };
+
+        const data = normalizeLobbyData(docSnap.data());
+        const updates: any = {};
+
+        const isMCL = data.config.preset === 'MCL' || data.config.preset === 'FORJA';
+
+        if (role === 'A') {
+          if (data.captain1 && data.captain1 !== guestId) {
+            throw new Error("Host slot already taken");
+          }
+          updates.captain1 = guestId;
+          updates.captain1Active = true;
+
+          const is1v1 = data.config.teamSize === 1;
+          const defaultNames = ['Team A (Host)', 'Time A (Host)', 'Team A', 'Time A', 'Host', 'Time A (Host)'];
+          updates.captain1Name = playerNames[100] || nickname;
+          if (is1v1 && (!playerNames[100] || defaultNames.includes(playerNames[100]))) {
+            updates.captain1Name = nickname;
+          }
+
+          if (!isMCL) {
+            updates.picks = (Array.isArray(data.picks) ? data.picks : Object.values(data.picks || {})).map((p: any) => {
+              if (p.team === 'A') {
+                if (playerNames && playerNames[p.playerId]) {
+                  return { ...p, playerName: playerNames[p.playerId] };
+                }
               }
-            }
-            return p;
-          });
-        }
-        
-        updates.teamAPlayers = Array.from({ length: data.config.teamSize }, (_, idx) => ({
-          name: playerNames[idx] || '',
-          position: idx
-        }));
+              return p;
+            });
+          }
 
-      } else if (role === 'B') {
-        if (data.captain2 && data.captain2 !== guestId) {
-          return { success: false, error: "Guest slot already taken" };
-        }
-        updates.captain2 = guestId;
-        updates.captain2Active = true;
-        
-        const is1v1 = data.config.teamSize === 1;
-        const defaultNames = ['Team B (Guest)', 'Time B (Guest)', 'Team B', 'Time B', 'Guest', 'Time B (Convidado)', 'Convidado'];
-        updates.captain2Name = playerNames[200] || nickname;
-        if (is1v1 && (!playerNames[200] || defaultNames.includes(playerNames[200]))) {
-          updates.captain2Name = nickname;
-        }
+          updates.teamAPlayers = Array.from({ length: data.config.teamSize }, (_, idx) => ({
+            name: playerNames[idx] || '',
+            position: idx
+          }));
 
-        if (!isMCL) {
-          updates.picks = (Array.isArray(updates.picks || data.picks) ? (updates.picks || data.picks) : Object.values(updates.picks || data.picks || {})).map((p: any) => {
-            if (p.team === 'B') {
-              if (playerNames && playerNames[p.playerId]) {
-                return { ...p, playerName: playerNames[p.playerId] };
+        } else if (role === 'B') {
+          if (data.captain2 && data.captain2 !== guestId) {
+            throw new Error("Guest slot already taken");
+          }
+          updates.captain2 = guestId;
+          updates.captain2Active = true;
+
+          const is1v1 = data.config.teamSize === 1;
+          const defaultNames = ['Team B (Guest)', 'Time B (Guest)', 'Team B', 'Time B', 'Guest', 'Time B (Convidado)', 'Convidado'];
+          updates.captain2Name = playerNames[200] || nickname;
+          if (is1v1 && (!playerNames[200] || defaultNames.includes(playerNames[200]))) {
+            updates.captain2Name = nickname;
+          }
+
+          if (!isMCL) {
+            updates.picks = (Array.isArray(data.picks) ? data.picks : Object.values(data.picks || {})).map((p: any) => {
+              if (p.team === 'B') {
+                if (playerNames && playerNames[p.playerId]) {
+                  return { ...p, playerName: playerNames[p.playerId] };
+                }
               }
-            }
-            return p;
-          });
+              return p;
+            });
+          }
+
+          updates.teamBPlayers = Array.from({ length: data.config.teamSize }, (_, idx) => ({
+            name: playerNames[idx] || '',
+            position: idx
+          }));
+        } else {
+          const spectators = Array.isArray(data.spectators) ? data.spectators : Object.values(data.spectators || {});
+          if (!spectators.some((s: any) => s.id === guestId)) {
+            updates.spectators = [...spectators, { id: guestId, name: nickname }];
+          }
         }
 
-        updates.teamBPlayers = Array.from({ length: data.config.teamSize }, (_, idx) => ({
-          name: playerNames[idx] || '',
-          position: idx
-        }));
-      } else {
-        const spectators = Array.isArray(data.spectators) ? data.spectators : Object.values(data.spectators || {});
-        if (!spectators.some((s: any) => s.id === guestId)) {
-          updates.spectators = [...spectators, { id: guestId, name: nickname }];
+        if (data.phase === 'waiting' && (updates.captain1 || data.captain1) && (updates.captain2 || data.captain2)) {
+          updates.phase = 'ready';
         }
-      }
 
-      if (data.phase === 'waiting' && (updates.captain1 || data.captain1) && (updates.captain2 || data.captain2)) {
-        updates.phase = 'ready';
-      }
+        transaction.update(docRef, cleanData(updates));
+      });
 
-      await updateDoc(docRef, cleanData(updates));
       await this.syncPublicMetadataForLobby(id);
       return { success: true };
     } catch (err: any) {
@@ -1439,6 +1444,7 @@ export const lobbyService = {
         id,
         name,
         config,
+        upvotes: 0,
         createdAt: now()
       };
       await setDoc(doc(db, 'presets', id), cleanData(preset));
@@ -1450,6 +1456,26 @@ export const lobbyService = {
       return id;
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'presets');
+      throw error;
+    }
+  },
+
+  async upvotePreset(id: string): Promise<void> {
+    if (IS_DEV) return;
+    try {
+      const docRef = doc(db, 'presets', id);
+      await updateDoc(docRef, { upvotes: increment(1) });
+      
+      // Update cache
+      if (cachedPresets) {
+        const index = cachedPresets.findIndex(p => p.id === id);
+        if (index !== -1) {
+          cachedPresets[index].upvotes = (cachedPresets[index].upvotes || 0) + 1;
+          cachedPresets.sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0));
+        }
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `presets/${id}`);
       throw error;
     }
   },
@@ -1902,7 +1928,7 @@ export const lobbyService = {
     if (cachedPresets) return cachedPresets;
 
     if (!presetsPromise) {
-      const q = query(collection(db, 'presets'), orderBy('createdAt', 'desc'), limit(20));
+      const q = query(collection(db, 'presets'), orderBy('upvotes', 'desc'), orderBy('createdAt', 'desc'), limit(50));
       presetsPromise = getDocs(q)
         .then(snap => {
           const data = snap.docs.map(d => d.data());

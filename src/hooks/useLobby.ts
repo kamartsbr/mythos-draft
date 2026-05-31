@@ -71,24 +71,6 @@ export function useLobby(initialNickname: string) {
   const [loading, setLoading] = useState(false);
   const lastStateRef = useRef<string>('');
 
-  // Discord Trigger
-  useEffect(() => {
-    if (!lobby || !lobby.discordWebhookUrl) return;
-
-    // Only allow Captain A or Admin to trigger webhook updates to prevent multiple calls
-    if (!isCaptain1 && !isAdmin) return;
-
-    // Generate a unique fingerprint of the state that matters for Discord
-    const fingerprint = `${lobby.phase}-${lobby.turn}-${lobby.status}-${lobby.scoreA}-${lobby.scoreB}-${lobby.selectedMap}-${lobby.currentGame}`;
-    
-    if (fingerprint !== lastStateRef.current) {
-      lastStateRef.current = fingerprint;
-      import('../services/discordService').then(({ discordService }) => {
-        discordService.updateLobbyWebhook(lobby);
-      });
-    }
-  }, [lobby, isCaptain1, isAdmin]);
-
   // Admin check
   useEffect(() => {
     if (!isAuthReady) return;
@@ -111,11 +93,6 @@ export function useLobby(initialNickname: string) {
     
     // Clean up ?admin=
     if (url.searchParams.has('admin')) {
-      const token = url.searchParams.get('admin');
-      if (token === 'mythosadmin2026@') {
-        sessionStorage.setItem('isAdmin', 'true');
-        setIsAdmin(true);
-      }
       url.searchParams.delete('admin');
       urlChanged = true;
     }
@@ -125,13 +102,24 @@ export function useLobby(initialNickname: string) {
     }
   }, [isAuthReady, guestId, auth.currentUser?.email]);
 
-  const authenticateAdmin = useCallback((token: string) => {
-    if (token === 'mythosadmin2026@') {
+  const authenticateAdmin = useCallback(async (password: string) => {
+    try {
+      const { getFunctions, httpsCallable } = await import('firebase/functions');
+      const functions = getFunctions();
+      const authAdminPass = httpsCallable<{ password: string }, { success: boolean }>(functions, 'authenticateadminpass');
+      await authAdminPass({ password });
+      
+      if (auth.currentUser) {
+        await auth.currentUser.getIdToken(true);
+      }
+      
       sessionStorage.setItem('isAdmin', 'true');
       setIsAdmin(true);
       return true;
+    } catch (e) {
+      console.error('Admin auth failed:', e);
+      return false;
     }
-    return false;
   }, []);
 
   const logoutAdmin = useCallback(() => {

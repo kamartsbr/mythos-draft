@@ -1,4 +1,4 @@
-import { collection, doc, setDoc, getDocs, updateDoc, increment, query, orderBy, limit, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs, updateDoc, increment, query, orderBy, limit, serverTimestamp, arrayUnion } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { LobbyConfig } from '../types';
 
@@ -39,7 +39,12 @@ export const presetService = {
 
   async upvotePreset(id: string) {
     if (!auth.currentUser) throw new Error("Must be logged in to upvote");
+    const uid = auth.currentUser.uid;
     const docRef = doc(db, 'public_presets', id);
-    await updateDoc(docRef, { upvotes: increment(1) });
+    // Add to upvotedBy array, and keep upvotes number around for ordering/compatibility
+    await updateDoc(docRef, { 
+      upvotedBy: arrayUnion(uid),
+      upvotes: increment(1) 
+    });
   }
 };

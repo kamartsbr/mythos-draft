@@ -245,6 +245,7 @@ export const getMillis = (val: any): number => {
 
 export const cleanData = (obj: any): any => {
   if (obj === null || obj === undefined) return obj;
+  if (typeof obj === 'string') return obj.replace(/[<>]/g, '');
   if (typeof obj !== 'object') return obj;
   
   if (Array.isArray(obj)) {
@@ -324,22 +325,26 @@ let presetsPromise: Promise<any[]> | null = null;
 
 export const lobbyService = {
   async createLobby(id: string, lobby: Lobby): Promise<void> {
+    const webhookUrl = lobby.discordWebhookUrl;
+    const lobbyData = cleanData({ ...lobby });
+    delete lobbyData.discordWebhookUrl;
+
     if (IS_DEV) {
       console.log(`[MOCK] Lobby created locally (LocalStorage): ${id}`);
-      setLocalLobby(id, lobby);
-      if (!lobby.config.isPrivate) {
+      setLocalLobby(id, lobbyData);
+      if (!lobbyData.config.isPrivate) {
         const index = getLocalIndex();
         const summary: LobbySummary = {
           id,
-          name: lobby.config.name,
-          teamSize: lobby.config.teamSize,
-          captain1Name: lobby.captain1Name,
-          captain2Name: lobby.captain2Name,
-          teamAName: lobby.teamAName,
-          teamBName: lobby.teamBName,
-          status: lobby.status,
-          phase: lobby.phase,
-          preset: lobby.config.preset,
+          name: lobbyData.config.name,
+          teamSize: lobbyData.config.teamSize,
+          captain1Name: lobbyData.captain1Name,
+          captain2Name: lobbyData.captain2Name,
+          teamAName: lobbyData.teamAName,
+          teamBName: lobbyData.teamBName,
+          status: lobbyData.status,
+          phase: lobbyData.phase,
+          preset: lobbyData.config.preset,
           lastActivityAt: Date.now() as any,
           createdAt: Date.now() as any
         };
@@ -348,8 +353,11 @@ export const lobbyService = {
       return;
     }
     try {
-      await setDoc(doc(db, 'lobbies', id), cleanData(lobby));
-      await this.syncPublicMetadataForLobby(id, lobby);
+      await setDoc(doc(db, 'lobbies', id), lobbyData);
+      if (webhookUrl) {
+        await setDoc(doc(db, 'lobby_secrets', id), { discordWebhookUrl: webhookUrl });
+      }
+      await this.syncPublicMetadataForLobby(id, lobbyData);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `lobbies/${id}`);
     }
@@ -540,6 +548,10 @@ export const lobbyService = {
   },
 
   async updateLobby(id: string, updates: Partial<Lobby>): Promise<void> {
+    const webhookUrl = updates.discordWebhookUrl;
+    const lobbyUpdates = cleanData({ ...updates });
+    delete lobbyUpdates.discordWebhookUrl;
+
     if (IS_DEV) {
       const current = getLocalLobby(id) || ({ ...MOCK_LOBBY_TEMPLATE, id } as Lobby);
       const updated = { ...current, ...updates, lastActivityAt: Date.now() as any };
@@ -548,10 +560,22 @@ export const lobbyService = {
       return;
     }
     try {
-      await updateDoc(doc(db, 'lobbies', id), cleanData({
-        ...updates,
-        lastActivityAt: now()
-      }));
+      if (Object.keys(lobbyUpdates).length > 0) {
+        await updateDoc(doc(db, 'lobbies', id), {
+          ...lobbyUpdates,
+          lastActivityAt: now()
+        });
+      }
+
+      if (webhookUrl !== undefined) {
+        if (webhookUrl) {
+          await setDoc(doc(db, 'lobby_secrets', id), { discordWebhookUrl: webhookUrl }, { merge: true });
+        } else {
+          // Can't directly delete with setDoc and merge easily without `deleteField()`, 
+          // but we can just set it to null or empty string.
+          await setDoc(doc(db, 'lobby_secrets', id), { discordWebhookUrl: null }, { merge: true });
+        }
+      }
       
       const statusChanged = updates.status === 'finished' || updates.status === 'waiting' || updates.status === 'INCOMPLETE';
       const isVisibilityUpdate = updates.isHidden !== undefined;

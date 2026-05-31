@@ -3,6 +3,7 @@
 // 🔥 CORREÇÃO DE CUSTOS: Remoção do loop de gravação de status e uso de Batch
 
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
+const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { setGlobalOptions } = require("firebase-functions/v2");
 
 const { defineSecret, defineString } = require("firebase-functions/params");
@@ -22,6 +23,7 @@ const TARGET_ORIGIN = 'https://mythosdraft.com';
 
 const DISCORD_CLIENT_SECRET = defineSecret('DISCORD_CLIENT_SECRET');
 const DISCORD_CLIENT_ID = defineSecret('DISCORD_CLIENT_ID');
+const ADMIN_PASSWORD = defineSecret('ADMIN_PASSWORD');
 const FORJA_ADMIN_IDS = defineString('FORJA_ADMIN_IDS', { default: '' });
 
 // Owner IDs are emergency callable admins only. Firestore rules still require
@@ -263,11 +265,15 @@ exports.verifydiscordtoken = onRequest({ cors: true, secrets: [DISCORD_CLIENT_SE
 
     // Validate redirectUri against allowlist
     const allowedRedirectUris = [
-      'https://mythosdraft.com/forja',
-      'http://localhost:8080/forja',
-      'http://localhost:5173/forja',
-      'http://localhost:4173/forja'
+      'https://mythosdraft.com/forja'
     ];
+    if (process.env.FUNCTIONS_EMULATOR === 'true') {
+      allowedRedirectUris.push(
+        'http://localhost:8080/forja',
+        'http://localhost:5173/forja',
+        'http://localhost:4173/forja'
+      );
+    }
 
     if (!redirectUri || typeof redirectUri !== 'string' || !allowedRedirectUris.includes(redirectUri)) {
       res.status(400).json({ error: "Invalid redirect URI" });
@@ -321,4 +327,76 @@ exports.verifydiscordtoken = onRequest({ cors: true, secrets: [DISCORD_CLIENT_SE
       const errorMessage = error.response?.data?.error || "Falha na autenticação com Discord";
       res.status(500).json({ error: errorMessage });
     }
+});
+
+exports.authenticateadminpass = onCall({ secrets: [ADMIN_PASSWORD] }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const { password } = request.data;
+  
+  if (password !== ADMIN_PASSWORD.value()) {
+    throw new HttpsError('permission-denied', 'Invalid admin password');
+  }
+
+  await admin.auth().setCustomUserClaims(request.auth.uid, { admin: true });
+  return { success: true };
+});
+
+exports.onlobbyupdated = onDocumentWritten("lobbies/{lobbyId}", async (event) => {
+  if (!event.data) return;
+  const before = event.data.before.data();
+  const after = event.data.after.data();
+  
+  if (!after) return; // deleted
+
+  // Determine if there was a meaningful state change for discord
+  const getFingerprint = (data) => `${data?.phase}-${data?.turn}-${data?.status}-${data?.scoreA}-${data?.scoreB}-${data?.selectedMap}-${data?.currentGame}`;
+  if (before && getFingerprint(before) === getFingerprint(after)) return;
+
+  const db = getFirestore();
+  const secretDoc = await db.collection("lobby_secrets").doc(event.params.lobbyId).get();
+  if (!secretDoc.exists) return;
+  
+  const webhookUrl = secretDoc.data()?.discordWebhookUrl;
+  if (!webhookUrl) return;
+
+  const sanitizeForDiscord = (text) => text ? text.replace(/[`*_~|]/g, '\\$&').replace(/@(everyone|here)/gi, '@\u200b$1').slice(0, 2000) : '';
+  const statusMap = { waiting: '⌛ Aguardando', drafting: '⚔️ Em Draft', finished: '🏁 Finalizado' };
+
+  const embed = {
+    title: `Draft Lobby: ${sanitizeForDiscord(event.params.lobbyId)}`,
+    description: `**Status:** ${statusMap[after.status] || after.status}\n**Fase:** ${sanitizeForDiscord(after.phase || 'N/A')}`,
+    color: after.status === 'drafting' ? 0x00ff00 : (after.status === 'finished' ? 0xff0000 : 0xffff00),
+    fields: [
+      { name: 'Capitão A', value: sanitizeForDiscord((after.teamAName || after.captain1Name) || after.captain1 || 'Vago'), inline: true },
+      { name: 'Capitão B', value: sanitizeForDiscord((after.teamBName || after.captain2Name) || after.captain2 || 'Vago'), inline: true }
+    ],
+    timestamp: new Date().toISOString(),
+    footer: { text: 'Mythos Draft System' }
+  };
+
+  try {
+    let response;
+    const existingMsgId = after.discordMessageId;
+    
+    if (existingMsgId) {
+      const match = webhookUrl.match(/webhooks\/(\d+)\/([a-zA-Z0-9_-]+)/);
+      if (match) {
+        const baseUrl = `https://discord.com/api/webhooks/${match[1]}/${match[2]}`;
+        response = await axios.patch(`${baseUrl}/messages/${existingMsgId}`, { embeds: [embed] });
+      }
+    } else {
+      const url = new URL(webhookUrl);
+      url.searchParams.set('wait', 'true');
+      response = await axios.post(url.toString(), { embeds: [embed] });
+      
+      if (response && response.data && response.data.id) {
+        await db.collection("lobbies").doc(event.params.lobbyId).update({ discordMessageId: response.data.id });
+      }
+    }
+  } catch (error) {
+    console.error("Discord webhook error:", error.message);
+  }
 });

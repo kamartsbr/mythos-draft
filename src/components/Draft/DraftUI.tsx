@@ -49,7 +49,7 @@ interface DraftUIProps {
   showSpectatorModal: boolean;
   setShowSpectatorModal: (val: boolean) => void;
   isAdmin: boolean;
-  authenticateAdmin: (token: string) => boolean;
+  authenticateAdmin: (token: string) => Promise<boolean>;
   logoutAdmin: () => void;
   forceReset: () => void;
   resetCurrentGame: () => void;

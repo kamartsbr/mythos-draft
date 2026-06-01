@@ -300,14 +300,20 @@ export function processTurnAction(
   }
 
   // Timer Check
+  // Manual picks use a generous grace period to absorb clock skew between
+  // clients and Firestore transaction latency. The auto-timeout path (timer
+  // worker) keeps a tight 1 s threshold so random picks fire promptly.
   let isTimerExpired = false;
+  const MANUAL_GRACE_MS = 10_000;
+  const gracePeriodMs = options?.isTimeoutAutoResolve ? 1000 : MANUAL_GRACE_MS;
   const turnEndTime = timestampToMillis(lobby.turnEndsAt);
   if (turnEndTime !== null && Number.isFinite(turnEndTime)) {
-    isTimerExpired = currentTimeMs >= turnEndTime + 1000;
+    isTimerExpired = currentTimeMs >= turnEndTime + gracePeriodMs;
   } else {
     const startTime = timestampToMillis(lobby.timerStart);
     const duration = lobby.config.timerDuration || 60;
-    if (startTime !== null && currentTimeMs >= startTime + (duration + 1) * 1000) {
+    const graceSeconds = options?.isTimeoutAutoResolve ? 1 : (MANUAL_GRACE_MS / 1000);
+    if (startTime !== null && currentTimeMs >= startTime + (duration + graceSeconds) * 1000) {
       isTimerExpired = true;
     }
   }

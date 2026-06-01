@@ -400,8 +400,10 @@ describe('pureDraftEngine > processTurnAction', () => {
       { player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' }
     ];
 
-    expect(() => processTurnAction(mapLobby, 'ghost_lake', 'A', undefined, undefined, undefined, 63_000)).toThrow("Turn timed out");
-    expect(() => processTurnAction(mapLobby, 'ghost_lake', 'A', undefined, undefined, { isRandom: true }, 63_000)).toThrow("Turn timed out");
+    // timerStart=1ms, duration=60s → turnEnd≈61001ms. Manual grace=10s → expires at 71001ms.
+    // 72_000 > 71001 → expired for manual actions.
+    expect(() => processTurnAction(mapLobby, 'ghost_lake', 'A', undefined, undefined, undefined, 72_000)).toThrow("Turn timed out");
+    expect(() => processTurnAction(mapLobby, 'ghost_lake', 'A', undefined, undefined, { isRandom: true }, 72_000)).toThrow("Turn timed out");
 
     const godLobby = createBaseLobby('drafting');
     godLobby.timerStart = 1;
@@ -409,8 +411,8 @@ describe('pureDraftEngine > processTurnAction', () => {
       { playerId: 1, godId: null, team: 'A', color: 'red', position: 'corner', playerName: 'PlayerOne' }
     ];
 
-    expect(() => processTurnAction(godLobby, 'huitzilopochtli', 'A', 1, 'PlayerOne', undefined, 63_000)).toThrow("Turn timed out");
-    expect(() => processTurnAction(godLobby, 'huitzilopochtli', 'A', 1, 'PlayerOne', { isRandom: true }, 63_000)).toThrow("Turn timed out");
+    expect(() => processTurnAction(godLobby, 'huitzilopochtli', 'A', 1, 'PlayerOne', undefined, 72_000)).toThrow("Turn timed out");
+    expect(() => processTurnAction(godLobby, 'huitzilopochtli', 'A', 1, 'PlayerOne', { isRandom: true }, 72_000)).toThrow("Turn timed out");
   });
 
   it('Scenario D3: Should use turnEndsAt as the authoritative timer boundary when present', () => {
@@ -422,10 +424,14 @@ describe('pureDraftEngine > processTurnAction', () => {
       { player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' }
     ];
 
+    // turnEndsAt=120 is treated as seconds by timestampToMillis (< 10B threshold),
+    // so effective turnEndTime = 120_000ms. Manual grace = 10s → expires at 130_000ms.
+    // 63_000 < 130_000 → still valid.
     const updated = processTurnAction(lobby, 'oasis', 'A', undefined, undefined, undefined, 63_000);
     expect(updated.selectedMap).toBe('oasis');
 
-    expect(() => processTurnAction(lobby, 'oasis', 'A', undefined, undefined, undefined, 121_000)).toThrow("Turn timed out");
+    // 131_000 > 130_000 → expired for manual actions.
+    expect(() => processTurnAction(lobby, 'oasis', 'A', undefined, undefined, undefined, 131_000)).toThrow("Turn timed out");
   });
 
   // Scenario E: Auto-pick MAP on timeout or null actionId

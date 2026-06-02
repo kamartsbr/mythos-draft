@@ -364,6 +364,9 @@ function AppContent() {
       return;
     }
 
+    if (isAdmin) {
+      lobbyService.migrateLobbies();
+    }
     lobbyService.getLobbiesPaginated(true).then((lbs) => {
       setPaginatedLobbies(lbs);
       setHasMore(lbs.length >= 20);

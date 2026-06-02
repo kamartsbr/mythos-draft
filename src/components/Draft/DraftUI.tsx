@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Dices } from 'lucide-react';
 import { useTimer } from '../../hooks/useTimer';
-import { soundService } from '../../services/soundService';
+
 import { Lobby } from '../../types';
 import { DraftHeader } from './DraftHeader';
 import { AdminBar } from './AdminBar';
@@ -103,21 +103,7 @@ export function DraftUI(props: DraftUIProps) {
       // Logic for spectators during ongoing draft if needed
     }
   }, [lobby.status, lobby.phase, props.isSpectator]);
-  const picks = Array.isArray(lobby.picks) ? lobby.picks : [];
-  const bans = Array.isArray(lobby.bans) ? lobby.bans : [];
-  const prevPicksCount = useRef(picks.length);
-  const prevBansCount = useRef(bans.length);
 
-  useEffect(() => {
-    if (picks.length > prevPicksCount.current) {
-      soundService.play('pick');
-    }
-    if (bans.length > prevBansCount.current) {
-      soundService.play('ban');
-    }
-    prevPicksCount.current = picks.length;
-    prevBansCount.current = bans.length;
-  }, [picks.length, bans.length]);
 
   const seriesMapsList = useMemo(() => (Array.isArray(lobby.seriesMaps) ? lobby.seriesMaps : Object.values(lobby.seriesMaps || {})) as string[], [lobby.seriesMaps]);
 

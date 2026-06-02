@@ -363,13 +363,37 @@ export const lobbyService = {
     }
   },
 
+  async migrateLobbies() {
+    if (IS_DEV) return;
+    try {
+      const q = query(collection(db, 'lobbies'), limit(100));
+      const snap = await getDocs(q);
+      const batch = writeBatch(db);
+      let count = 0;
+      snap.docs.forEach(d => {
+        const data = d.data();
+        if (!data.hasCaptain && (data.captain1 || data.captain2)) {
+          batch.update(d.ref, { hasCaptain: true });
+          count++;
+        }
+      });
+      if (count > 0) {
+        await batch.commit();
+        console.log(`Migrated ${count} lobbies to have hasCaptain=true`);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  },
+
   async getLobbiesPaginated(isFirstPage: boolean = true) {
     if (IS_DEV) return getLocalIndex();
     try {
       let lobbyQuery = query(
         collection(db, 'lobbies'), 
+        where('hasCaptain', '==', true),
         orderBy('createdAt', 'desc'), 
-        limit(40) // LOBBIES_PER_PAGE (increased to handle post-filter reductions)
+        limit(20)
       );
 
       // 2. Se n├úo for a primeira p├ígina, come├ºa ap├│s o ├║ltimo documento visto
@@ -385,7 +409,7 @@ export const lobbyService = {
       return snapshot.docs
         .filter(doc => {
           const data = doc.data();
-          return !!((data.captain1 || data.captain2) && (!data.config || !data.config.isPrivate) && data.isHidden !== true);
+          return !!((!data.config || !data.config.isPrivate) && data.isHidden !== true);
         })
         .map(doc => {
           const normalized = normalizeLobbyData(doc.data());
@@ -489,8 +513,9 @@ export const lobbyService = {
 
       const q = query(
         collection(db, 'lobbies'),
+        where('hasCaptain', '==', true),
         orderBy('createdAt', 'desc'),
-        limit(30) // 🚨 OTIMIZAÇÃO: Alterado de 100 para 30 para economizar leituras!
+        limit(20)
       );
 
       const snap = await getDocs(q);
@@ -1254,8 +1279,9 @@ export const lobbyService = {
 
       const q = query(
         collection(db, 'lobbies'),
+        where('hasCaptain', '==', true),
         orderBy('createdAt', 'desc'),
-        limit(30)
+        limit(20)
       );
 
       const snap = await getDocs(q);
@@ -1308,6 +1334,7 @@ export const lobbyService = {
           }
           updates.captain1 = guestId;
           updates.captain1Active = true;
+          updates.hasCaptain = true;
 
           const is1v1 = data.config.teamSize === 1;
           const defaultNames = ['Team A (Host)', 'Time A (Host)', 'Team A', 'Time A', 'Host', 'Time A (Host)'];
@@ -1338,6 +1365,7 @@ export const lobbyService = {
           }
           updates.captain2 = guestId;
           updates.captain2Active = true;
+          updates.hasCaptain = true;
 
           const is1v1 = data.config.teamSize === 1;
           const defaultNames = ['Team B (Guest)', 'Time B (Guest)', 'Team B', 'Time B', 'Guest', 'Time B (Convidado)', 'Convidado'];

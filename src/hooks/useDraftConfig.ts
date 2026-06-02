@@ -140,6 +140,8 @@ export function useDraftConfig() {
         newConfig.customGameCount = 3;
         newConfig.mapBanCount = 0;
         newConfig.banCount = 0;
+        newConfig.hasBans = false;
+        newConfig.hasPerMapBans = false;
         newConfig.acePick = false;
         newConfig.isExclusive = false;
         newConfig.pickType = 'alternated';
@@ -160,6 +162,8 @@ export function useDraftConfig() {
         newConfig.customGameCount = 3;
         newConfig.mapBanCount = 0;
         newConfig.banCount = 0;
+        newConfig.hasBans = false;
+        newConfig.hasPerMapBans = false;
         newConfig.acePick = false;
         newConfig.isExclusive = false;
         newConfig.pickType = 'alternated';

@@ -35,7 +35,7 @@ export function PresetBuilder({ onSave, onClose, t }: PresetBuilderProps) {
 
   const [customTurnOrder, setCustomTurnOrder] = useState<DraftTurn[]>([]);
 
-  const addStep = (action: any, target: any, player: 'A' | 'B' | 'BOTH') => {
+  const addStep = (action: any, target: any, player: 'A' | 'B' | 'BOTH' | 'ADMIN') => {
     setCustomTurnOrder([...customTurnOrder, { 
       action, 
       target, 

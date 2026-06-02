@@ -338,7 +338,7 @@ export function LobbyCreation({
                       onClick={() => setConfig((prev: any) => ({
                         ...prev,
                         tournamentStage: 'PLAYOFFS',
-                        hasPerMapBans: true,
+                        hasPerMapBans: false,
                         hasMap3RandomRoll: true,
                         isOfficialForjaMatch: false,
                         isCustomDraft: true,

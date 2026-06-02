@@ -228,6 +228,7 @@ export type Lobby = {
   mapBans: string[];
   turn: number;
   phase: DraftPhase;
+  hasCaptain?: boolean;
   bans: string[];
   picks: PickEntry[];
   scoreA: number;

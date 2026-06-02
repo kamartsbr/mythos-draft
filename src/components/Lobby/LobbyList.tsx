@@ -177,10 +177,13 @@ export function LobbyList({ lobbies, t, isAdmin, onJoin, onDelete, onClearAll, o
           {!isLoadingLobbies && filteredLobbies.length > 0 && (
             <>
               {filteredLobbies.map(pub => (
-                <button
+                <div
                   key={pub.id}
                   onClick={() => onJoin(pub.id)}
-                  className="w-full p-4 rounded-2xl bg-slate-900 border border-slate-800 hover:border-blue-500/50 transition-all text-left flex items-center justify-between group"
+                  role="button"
+                  tabIndex={0}
+                  className="w-full p-4 rounded-2xl bg-slate-900 border border-slate-800 hover:border-blue-500/50 transition-all text-left flex items-center justify-between group cursor-pointer"
+                  onKeyDown={(e) => e.key === 'Enter' && onJoin(pub.id)}
                 >
                   <div>
                     <div className="flex items-center gap-2 mb-1">
@@ -188,7 +191,7 @@ export function LobbyList({ lobbies, t, isAdmin, onJoin, onDelete, onClearAll, o
                       <span className="text-xs bg-slate-800 px-2 py-0.5 rounded text-slate-400 font-mono">{pub.id}</span>
                     </div>
                     <p className="text-sm text-slate-500">
-                      {pub.captain1Name || 'Captain 1'} vs {pub.captain2Name || 'Captain 2'} • {getLobbyStatus(pub)}
+                      {pub.captain1Name || 'Captain 1'} vs {pub.captain2Name || 'Captain 2'} ? {getLobbyStatus(pub)}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
@@ -200,7 +203,7 @@ export function LobbyList({ lobbies, t, isAdmin, onJoin, onDelete, onClearAll, o
                             onDelete(pub.id);
                           }
                         }}
-                        className="p-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all border border-red-500/20"
+                        className="p-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all border border-red-500/20 cursor-pointer"
                         title={t.deleteLobby || "Delete Lobby"}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -208,7 +211,7 @@ export function LobbyList({ lobbies, t, isAdmin, onJoin, onDelete, onClearAll, o
                     )}
                     <ChevronRight className="w-5 h-5 text-slate-700 group-hover:text-blue-500 transition-colors" />
                   </div>
-                </button>
+                </div>
               ))}
               {hasMore && onLoadMore && (
                 <button

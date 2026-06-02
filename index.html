@@ -23,6 +23,17 @@
     <meta name="twitter:image" content="https://mythosdraft.com/mythosdraftmainpage.png" />
   </head>
   <body>
+    <!-- UNREGISTER STUCK SERVICE WORKERS -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for(let registration of registrations) {
+            registration.unregister();
+            console.log('ServiceWorker forcefully unregistered');
+          }
+        });
+      }
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

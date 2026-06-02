@@ -1034,7 +1034,7 @@ function AppContent() {
                       hasMore={hasMore}
                       onFetchLobbies={handleFetchLobbies}
                       isLoadingLobbies={lobbyListLoading}
-                      hasBeenFetched={isAdmin || lobbyListFetched}
+                      hasBeenFetched={lobbyListFetched}
                     />
                   </div>
                 </div>

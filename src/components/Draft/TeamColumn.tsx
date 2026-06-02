@@ -380,7 +380,7 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
               
               // Find the first player in this team who hasn't picked a god yet
               const nextPickForTeam = teamPicks.find(p => p.godId === null);
-              const isCurrentPlayerTurn = isGodTurn && isTeamTurn && pick === nextPickForTeam;
+              const isCurrentPlayerTurn = isGodTurn && turn?.action === 'PICK' && isTeamTurn && pick === nextPickForTeam;
               
               const hoveredGodId = team === 'A' ? lobby.hoveredGodIdA : lobby.hoveredGodIdB;
               const committedGod = pick.godId ? MAJOR_GODS.find(g => g.id === pick.godId) : undefined;
@@ -434,7 +434,7 @@ export function TeamColumn({ team, lobby, isCurrentTurn, t, isCaptain1, isCaptai
               
               // Find the first player in this team who hasn't picked a god yet
               const nextPickForTeam = teamPicks.find(p => p.godId === null);
-              const isCurrentPlayerTurn = isGodTurn && isTeamTurn && pick === nextPickForTeam;
+              const isCurrentPlayerTurn = isGodTurn && turn?.action === 'PICK' && isTeamTurn && pick === nextPickForTeam;
               
               // Hide name from enemy team until god is picked
               const isMyTeamOverride = IS_DEV || (isCaptain1 && team === 'A') || (isCaptain2 && team === 'B');

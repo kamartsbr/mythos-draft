@@ -588,6 +588,7 @@ function AppContent() {
     };
 
     await create(id, newLobby);
+    setLobbyId(id);
     setShowJoinModal(true);
   };
 

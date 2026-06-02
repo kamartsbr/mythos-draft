@@ -688,7 +688,7 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
       isPrivate: false,
       timerDuration: 60,
       hasMap3RandomRoll: true,
-      hasPerMapBans: isPlayoffs,
+      hasPerMapBans: false,
       captainA_discordId: teamA?.captain_id,
       captainB_discordId: teamB?.captain_id,
       scheduledDate: (() => {

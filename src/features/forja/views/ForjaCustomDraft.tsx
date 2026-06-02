@@ -90,7 +90,7 @@ function buildForjaConfig(
 
     // ── Flags Exclusivas FORJA ─────────────────────────────────────────
     hasMap3RandomRoll: true,
-    hasPerMapBans: isPlayoffs,
+    hasPerMapBans: false,
   };
 }
 

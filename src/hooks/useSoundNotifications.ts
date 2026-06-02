@@ -57,7 +57,7 @@ export function useSoundNotifications(lobby: Lobby | null, timeLeft: number | nu
     // 0. Draft Started Notification
     if (currentStatus === 'drafting' && prevStatus.current !== 'drafting') {
       if (isPlayer) {
-        soundService.play('yourTurn'); // We can reuse yourTurn or add a specific matchFound sound later
+        // We can reuse yourTurn or add a specific matchFound sound later
         sendBrowserNotification("Draft Started!", "The draft has begun. Return to the lobby.");
       }
     }
@@ -69,7 +69,6 @@ export function useSoundNotifications(lobby: Lobby | null, timeLeft: number | nu
                        (turnData.player === 'BOTH' && (isCaptain1 || isCaptain2));
       
       if (isMyTurn && lobby.status === 'drafting') {
-        soundService.play('yourTurn');
         sendBrowserNotification("Your Turn!", `It is your turn to ${turnData.action} a ${turnData.target}.`);
       }
       
@@ -79,7 +78,6 @@ export function useSoundNotifications(lobby: Lobby | null, timeLeft: number | nu
 
     // 2. Draft Complete Notification
     if (currentPhase === 'post_draft' && prevPhase.current !== 'post_draft') {
-      soundService.play('complete');
       if (isPlayer) {
         sendBrowserNotification("Draft Complete!", "The draft has concluded.");
       }
@@ -92,7 +90,6 @@ export function useSoundNotifications(lobby: Lobby | null, timeLeft: number | nu
                        (turnData.player === 'BOTH' && (isCaptain1 || isCaptain2)));
       
       if (isMyTurn && lobby.status === 'drafting') {
-        soundService.play('timerLow');
         hasPlayedTimerLow.current = true;
       }
     }

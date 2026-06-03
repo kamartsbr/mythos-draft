@@ -162,7 +162,8 @@ export function useDraft(
 
     setIsProcessing(true);
     try {
-      const result = await draftService.handleAction(lobby, actionId, effectiveIsCaptain1, effectiveIsCaptain2, playerId, playerName, options);
+      const enhancedOptions = { ...options, turnIndex: options?.turnIndex ?? lobby.turn };
+      const result = await draftService.handleAction(lobby, actionId, effectiveIsCaptain1, effectiveIsCaptain2, playerId, playerName, enhancedOptions);
       if (!result.success) {
         if (result.error !== "Not your turn") {
           setError(result.error || "Action failed");

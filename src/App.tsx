@@ -365,12 +365,12 @@ function AppContent() {
     }
 
     if (isAdmin) {
-      lobbyService.migrateLobbies();
+      lobbyService.getLobbiesPaginated(true).then((lbs) => {
+        setPaginatedLobbies(lbs);
+        setHasMore(lbs.length >= 20);
+      });
+      return;
     }
-    lobbyService.getLobbiesPaginated(true).then((lbs) => {
-      setPaginatedLobbies(lbs);
-      setHasMore(lbs.length >= 20);
-    });
   }, [publicLobbies, isAdmin, lobbyId, isForjaRoute, isOverlay, isStreamerHud, isStreamerDock, isLobbyPath]);
 
   const handleFetchLobbies = async () => {

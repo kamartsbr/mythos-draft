@@ -363,29 +363,6 @@ export const lobbyService = {
     }
   },
 
-  async migrateLobbies() {
-    if (IS_DEV) return;
-    try {
-      const q = query(collection(db, 'lobbies'), limit(100));
-      const snap = await getDocs(q);
-      const batch = writeBatch(db);
-      let count = 0;
-      snap.docs.forEach(d => {
-        const data = d.data();
-        if (!data.hasCaptain && (data.captain1 || data.captain2)) {
-          batch.update(d.ref, { hasCaptain: true });
-          count++;
-        }
-      });
-      if (count > 0) {
-        await batch.commit();
-        console.log(`Migrated ${count} lobbies to have hasCaptain=true`);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  },
-
   async getLobbiesPaginated(isFirstPage: boolean = true) {
     if (IS_DEV) return getLocalIndex();
     try {
@@ -393,7 +370,7 @@ export const lobbyService = {
         collection(db, 'lobbies'), 
         where('hasCaptain', '==', true),
         orderBy('createdAt', 'desc'), 
-        limit(20)
+        limit(30)
       );
 
       // 2. Se n├úo for a primeira p├ígina, come├ºa ap├│s o ├║ltimo documento visto
@@ -515,7 +492,7 @@ export const lobbyService = {
         collection(db, 'lobbies'),
         where('hasCaptain', '==', true),
         orderBy('createdAt', 'desc'),
-        limit(20)
+        limit(30)
       );
 
       const snap = await getDocs(q);
@@ -1875,10 +1852,23 @@ export const lobbyService = {
 
   async leaveSlot(id: string, team: 'A' | 'B'): Promise<void> {
     try {
-      const updates = team === 'A' 
-        ? { captain1: null, captain1Active: false } 
-        : { captain2: null, captain2Active: false };
-      await updateDoc(doc(db, 'lobbies', id), cleanData(updates));
+      await runTransaction(db, async (transaction) => {
+        const docRef = doc(db, 'lobbies', id);
+        const docSnap = await transaction.get(docRef);
+        if (!docSnap.exists()) return;
+        
+        const data = docSnap.data();
+        const updates: any = team === 'A' 
+          ? { captain1: null, captain1Active: false } 
+          : { captain2: null, captain2Active: false };
+          
+        const otherCaptain = team === 'A' ? data.captain2 : data.captain1;
+        if (!otherCaptain) {
+          updates.hasCaptain = false;
+        }
+        
+        transaction.update(docRef, cleanData(updates));
+      });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
     }

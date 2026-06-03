@@ -47,6 +47,7 @@ export type DraftActionOptions = {
   isRandom?: boolean;
   force?: boolean;
   isTimeoutAutoResolve?: boolean;
+  turnIndex?: number;
 };
 
 export type TeamSize = 1 | 2 | 3;

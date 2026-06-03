@@ -191,7 +191,7 @@ export function LobbyList({ lobbies, t, isAdmin, onJoin, onDelete, onClearAll, o
                       <span className="text-xs bg-slate-800 px-2 py-0.5 rounded text-slate-400 font-mono">{pub.id}</span>
                     </div>
                     <p className="text-sm text-slate-500">
-                      {pub.captain1Name || 'Captain 1'} vs {pub.captain2Name || 'Captain 2'} ? {getLobbyStatus(pub)}
+                      {pub.captain1Name || 'Captain 1'} vs {pub.captain2Name || 'Captain 2'} — {getLobbyStatus(pub)}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">

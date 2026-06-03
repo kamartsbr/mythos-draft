@@ -258,6 +258,39 @@ describe('pureDraftEngine > calculateNextTurnOrder', () => {
     const game3 = calculateNextTurnOrder(config, 3, 'A');
     expect(game3.godOrder[0]).toMatchObject({ player: 'A', action: 'BAN' });
   });
+
+  it('Forja Group: no per-map bans unless explicitly configured', () => {
+    const config = createConfig({
+      preset: 'FORJA',
+      tournamentStage: 'GROUP',
+      hasPerMapBans: false,
+    });
+    const { godOrder } = calculateNextTurnOrder(config, 1, null);
+    const bans = godOrder.filter(t => t.action === 'BAN');
+    expect(bans).toHaveLength(0);
+  });
+
+  it('Forja Playoffs BO3/BO5: per-map bans enabled automatically', () => {
+    const config = createConfig({
+      preset: 'FORJA',
+      tournamentStage: 'PLAYOFFS',
+      hasPerMapBans: false,
+    });
+    const { godOrder } = calculateNextTurnOrder(config, 1, null);
+    const bans = godOrder.filter(t => t.action === 'BAN');
+    expect(bans).toHaveLength(2);
+  });
+
+  it('unknown/undefined tournamentStage does NOT accidentally enable per-map bans', () => {
+    const config = createConfig({
+      preset: 'FORJA',
+      tournamentStage: 'CUSTOM_INVALID' as any,
+      hasPerMapBans: false,
+    });
+    const { godOrder } = calculateNextTurnOrder(config, 1, null);
+    const bans = godOrder.filter(t => t.action === 'BAN');
+    expect(bans).toHaveLength(0);
+  });
 });
 
 describe('pureDraftEngine > processTurnAction', () => {
@@ -434,6 +467,48 @@ describe('pureDraftEngine > processTurnAction', () => {
     expect(() => processTurnAction(lobby, 'oasis', 'A', undefined, undefined, undefined, 131_000)).toThrow("Turn timed out");
   });
 
+  it('Timer: manual pick before grace threshold accepted, exactly at threshold rejected, after threshold rejected', () => {
+    const lobby = createBaseLobby('drafting');
+    const startMs = 1_600_000_000_000;
+    lobby.timerStart = startMs;
+    lobby.config.timerDuration = 60; // duration 60s
+    // grace = 10s. total window = 70s = 70_000ms.
+    // Threshold = startMs + 70_000.
+    const threshold = startMs + 70_000;
+
+    lobby.turnOrder = [
+      { player: 'A', action: 'PICK', target: 'GOD', modifier: 'EXCLUSIVE', execution: 'NORMAL' }
+    ];
+    lobby.picks = [
+      { playerId: 1, godId: null, team: 'A', color: 'red', position: 'corner', playerName: 'PlayerOne' }
+    ];
+
+    // threshold - 1ms
+    const before = processTurnAction({ ...lobby, picks: [{ playerId: 1, godId: null, team: 'A', color: 'red', position: 'corner' }] }, 'zeus', 'A', undefined, undefined, undefined, threshold - 1);
+    expect(before.picks[0].godId).toBe('zeus');
+
+    // exactly at threshold
+    expect(() => processTurnAction(lobby, 'zeus', 'A', undefined, undefined, undefined, threshold)).toThrow("Turn timed out");
+
+    // after threshold
+    expect(() => processTurnAction(lobby, 'zeus', 'A', undefined, undefined, undefined, threshold + 1000)).toThrow("Turn timed out");
+  });
+
+  it('Timer: stale manual action rejected & duplicate auto-resolve rejected', () => {
+    const lobby = createBaseLobby('drafting');
+    lobby.turn = 1;
+    lobby.turnOrder = [
+      { player: 'A', action: 'PICK', target: 'GOD', modifier: 'EXCLUSIVE', execution: 'NORMAL' },
+      { player: 'B', action: 'PICK', target: 'GOD', modifier: 'EXCLUSIVE', execution: 'NORMAL' }
+    ];
+
+    // Manual pick with stale turnIndex (0 instead of 1)
+    expect(() => processTurnAction(lobby, 'zeus', 'B', undefined, undefined, { turnIndex: 0 })).toThrow("Stale action");
+
+    // Auto resolve with stale turnIndex
+    expect(() => processTurnAction(lobby, null as any, 'B', undefined, undefined, { turnIndex: 0, isTimeoutAutoResolve: true }, 1000)).toThrow("Stale action");
+  });
+
   // Scenario E: Auto-pick MAP on timeout or null actionId
   it('Scenario E: Should auto-pick a random map when target is MAP and actionId is null', () => {
     const lobby = createBaseLobby('drafting');
@@ -470,6 +545,40 @@ describe('pureDraftEngine > processTurnAction', () => {
     expect(updated.replayLog[0].isRandom).toBe(true);
     expect(updated.replayLog[0].playerId).toBe(10);
     expect(updated.replayLog[0].target).toBe('GOD');
+  });
+
+  it('Random timeout player: real roster names used, no duplicates, no fallback if roster exists', () => {
+    const lobby = createBaseLobby('drafting');
+    lobby.config.allowedPantheons = ['greek'];
+    lobby.picks = [
+      { playerId: 1, godId: null, team: 'A', color: 'red', position: 'corner', playerName: 'P1' }, // Placeholders
+      { playerId: 2, godId: 'zeus', team: 'A', color: 'red', position: 'corner', playerName: '1111' } // Already assigned real name '1111'
+    ];
+    lobby.teamAPlayers = [
+      { name: '1111', position: 0 },
+      { name: 'John Doe', position: 1 },
+      { name: 'Alice', position: 2 }
+    ];
+    lobby.turnOrder = [
+      { player: 'A', action: 'PICK', target: 'GOD', modifier: 'EXCLUSIVE', execution: 'NORMAL' }
+    ];
+
+    // Mock Math.random to deterministically pick 'John Doe' from remaining available ['John Doe', 'Alice']
+    // availablePlayers.length = 2. If Math.random() < 0.5, it picks index 0 ('John Doe').
+    const originalRandom = Math.random;
+    Math.random = () => 0.1; // Will select the first available valid name
+
+    try {
+      const updated = processTurnAction(lobby, null as any, 'A', undefined, undefined, { isTimeoutAutoResolve: true }, 1000);
+      
+      expect(updated.picks[0].godId).toBeDefined();
+      expect(updated.picks[0].playerName).toBe('John Doe'); // Deterministically John Doe instead of P1
+      
+      // Ensure it did not pick '1111' (since 1111 is already assigned)
+      expect(updated.picks[0].playerName).not.toBe('1111');
+    } finally {
+      Math.random = originalRandom; // Restore
+    }
   });
 
   // Scenario G: Auto-pick BAN on timeout or null actionId

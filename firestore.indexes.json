@@ -13,6 +13,34 @@
           "order": "ASCENDING"
         },
         {
+          "fieldPath": "config.scheduledDate",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "lobbies",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "hasCaptain",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "presets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "upvotes",
+          "order": "DESCENDING"
+        },
+        {
           "fieldPath": "createdAt",
           "order": "DESCENDING"
         }

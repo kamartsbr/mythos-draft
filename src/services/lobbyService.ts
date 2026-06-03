@@ -368,8 +368,9 @@ export const lobbyService = {
     try {
       let lobbyQuery = query(
         collection(db, 'lobbies'), 
+        where('hasCaptain', '==', true),
         orderBy('createdAt', 'desc'), 
-        limit(40) // LOBBIES_PER_PAGE (increased to handle post-filter reductions)
+        limit(30)
       );
 
       // 2. Se n├úo for a primeira p├ígina, come├ºa ap├│s o ├║ltimo documento visto
@@ -385,7 +386,7 @@ export const lobbyService = {
       return snapshot.docs
         .filter(doc => {
           const data = doc.data();
-          return !!((data.captain1 || data.captain2) && (!data.config || !data.config.isPrivate) && data.isHidden !== true);
+          return !!((!data.config || !data.config.isPrivate) && data.isHidden !== true);
         })
         .map(doc => {
           const normalized = normalizeLobbyData(doc.data());
@@ -489,8 +490,9 @@ export const lobbyService = {
 
       const q = query(
         collection(db, 'lobbies'),
+        where('hasCaptain', '==', true),
         orderBy('createdAt', 'desc'),
-        limit(30) // 🚨 OTIMIZAÇÃO: Alterado de 100 para 30 para economizar leituras!
+        limit(30)
       );
 
       const snap = await getDocs(q);
@@ -1254,8 +1256,9 @@ export const lobbyService = {
 
       const q = query(
         collection(db, 'lobbies'),
+        where('hasCaptain', '==', true),
         orderBy('createdAt', 'desc'),
-        limit(30)
+        limit(20)
       );
 
       const snap = await getDocs(q);
@@ -1308,6 +1311,7 @@ export const lobbyService = {
           }
           updates.captain1 = guestId;
           updates.captain1Active = true;
+          updates.hasCaptain = true;
 
           const is1v1 = data.config.teamSize === 1;
           const defaultNames = ['Team A (Host)', 'Time A (Host)', 'Team A', 'Time A', 'Host', 'Time A (Host)'];
@@ -1338,6 +1342,7 @@ export const lobbyService = {
           }
           updates.captain2 = guestId;
           updates.captain2Active = true;
+          updates.hasCaptain = true;
 
           const is1v1 = data.config.teamSize === 1;
           const defaultNames = ['Team B (Guest)', 'Time B (Guest)', 'Team B', 'Time B', 'Guest', 'Time B (Convidado)', 'Convidado'];
@@ -1847,10 +1852,23 @@ export const lobbyService = {
 
   async leaveSlot(id: string, team: 'A' | 'B'): Promise<void> {
     try {
-      const updates = team === 'A' 
-        ? { captain1: null, captain1Active: false } 
-        : { captain2: null, captain2Active: false };
-      await updateDoc(doc(db, 'lobbies', id), cleanData(updates));
+      await runTransaction(db, async (transaction) => {
+        const docRef = doc(db, 'lobbies', id);
+        const docSnap = await transaction.get(docRef);
+        if (!docSnap.exists()) return;
+        
+        const data = docSnap.data();
+        const updates: any = team === 'A' 
+          ? { captain1: null, captain1Active: false } 
+          : { captain2: null, captain2Active: false };
+          
+        const otherCaptain = team === 'A' ? data.captain2 : data.captain1;
+        if (!otherCaptain) {
+          updates.hasCaptain = false;
+        }
+        
+        transaction.update(docRef, cleanData(updates));
+      });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lobbies/${id}`);
     }

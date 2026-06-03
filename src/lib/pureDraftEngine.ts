@@ -4,6 +4,31 @@ import { MAPS, MAPS_BY_ID } from '../data/maps';
 import { MAJOR_GODS, MAJOR_GODS_BY_ID } from '../data/gods';
 import { phaseAfterDraftQueue } from '../domain/draft/rules/phaseTransitions';
 
+export function isForjaPlayoffStage(stage?: string | null): boolean {
+  const normalized = String(stage ?? '').toUpperCase();
+
+  return [
+    'PLAYOFFS',
+    'PLAYOFF',
+    'QUARTERFINAL',
+    'QUARTER_FINAL',
+    'SEMIFINAL',
+    'SEMI_FINAL',
+    'FINAL',
+    'GRAND_FINAL',
+  ].includes(normalized);
+}
+
+export function resolveHasPerMapBans(cfg: LobbyConfig): boolean {
+  if (cfg.hasPerMapBans) return true;
+
+  if (cfg.preset === 'FORJA' && isForjaPlayoffStage(cfg.tournamentStage)) {
+    return true;
+  }
+
+  return false;
+}
+
 const timestampToMillis = (value: unknown): number | null => {
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) return null;
@@ -161,7 +186,7 @@ export function calculateNextTurnOrder(
     (usesLoserPriority && gameNumber > 1 && lastWinner === 'A');
 
   // God Ban Phase
-  if (cfg.hasPerMapBans) {
+  if (resolveHasPerMapBans(cfg)) {
     godOrder.push({
       player: startsWithB ? 'B' : 'A',
       action: 'BAN',
@@ -299,15 +324,31 @@ export function processTurnAction(
     throw new Error("No turn found");
   }
 
+  if (options?.turnIndex !== undefined && options.turnIndex !== lobby.turn) {
+    throw new Error("Stale action");
+  }
+
   // Timer Check
+  // Manual picks use a generous grace period to absorb clock skew between
+  // clients and Firestore transaction latency. The auto-timeout path (timer
+  // worker) keeps a tight 1 s threshold so random picks fire promptly.
   let isTimerExpired = false;
+  /**
+   * @deprecated [Technical Debt]
+   * Temporary client-clock grace window to reduce false timeout rejections.
+   * This is NOT authoritative security.
+   * Timeout ownership must move to server-authoritative time / Cloud Function / Cloud Task.
+   */
+  const MANUAL_GRACE_MS = 10_000;
+  const gracePeriodMs = options?.isTimeoutAutoResolve ? 1000 : MANUAL_GRACE_MS;
   const turnEndTime = timestampToMillis(lobby.turnEndsAt);
   if (turnEndTime !== null && Number.isFinite(turnEndTime)) {
-    isTimerExpired = currentTimeMs >= turnEndTime + 1000;
+    isTimerExpired = currentTimeMs >= turnEndTime + gracePeriodMs;
   } else {
     const startTime = timestampToMillis(lobby.timerStart);
     const duration = lobby.config.timerDuration || 60;
-    if (startTime !== null && currentTimeMs >= startTime + (duration + 1) * 1000) {
+    const graceSeconds = options?.isTimeoutAutoResolve ? 1 : (MANUAL_GRACE_MS / 1000);
+    if (startTime !== null && currentTimeMs >= startTime + (duration + graceSeconds) * 1000) {
       isTimerExpired = true;
     }
   }

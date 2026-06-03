@@ -47,6 +47,7 @@ export type DraftActionOptions = {
   isRandom?: boolean;
   force?: boolean;
   isTimeoutAutoResolve?: boolean;
+  turnIndex?: number;
 };
 
 export type TeamSize = 1 | 2 | 3;
@@ -228,6 +229,7 @@ export type Lobby = {
   mapBans: string[];
   turn: number;
   phase: DraftPhase;
+  hasCaptain?: boolean;
   bans: string[];
   picks: PickEntry[];
   scoreA: number;

@@ -1,7 +1,6 @@
-import { Sword, Users, Copy, Volume2, VolumeX, Bug, User, X, Check, Shield, Key, Coffee } from 'lucide-react';
+import { Sword, Users, Copy, Bug, User, X, Check, Shield, Key, Coffee } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Lobby } from '../../types';
-import { soundService } from '../../services/soundService';
 import { useState, useEffect } from 'react';
 import { LanguageToggle } from './LanguageToggle';
 import { BugReportModal } from './BugReportModal';
@@ -49,7 +48,7 @@ export function Header({
   authenticateAdmin,
   logoutAdmin
 }: HeaderProps) {
-  const [isSoundEnabled, setIsSoundEnabled] = useState(true);
+
   const [isEditingNick, setIsEditingNick] = useState(false);
   const [tempNickname, setTempNickname] = useState(nickname);
   const [copySuccess, setCopySuccess] = useState(false);
@@ -67,11 +66,7 @@ export function Header({
     }
   };
 
-  const toggleSound = () => {
-    const newState = !isSoundEnabled;
-    setIsSoundEnabled(newState);
-    soundService.setEnabled(newState);
-  };
+
 
   const handleCopyPix = () => {
     navigator.clipboard.writeText("41345391889")
@@ -231,17 +226,7 @@ export function Header({
               {spectatorCount}
             </span>
           </button>
-          <button 
-            onClick={toggleSound} 
-            className="p-2 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 transition-all group"
-            title={isSoundEnabled ? "Mute Sounds" : "Unmute Sounds"}
-          >
-            {isSoundEnabled ? (
-              <Volume2 className="w-4 h-4 text-slate-400 group-hover:text-white transition-colors" />
-            ) : (
-              <VolumeX className="w-4 h-4 text-red-500 group-hover:text-red-400 transition-colors" />
-            )}
-          </button>
+
 
           {/* Discreet Admin Login Button */}
           {authenticateAdmin && (

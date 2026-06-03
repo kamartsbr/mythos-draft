@@ -9,7 +9,8 @@ export type DraftTransitionKey =
   | 'god-ban'
   | 'god-pick'
   | 'solo-draft-complete'
-  | 'team-draft-complete';
+  | 'team-draft-complete'
+  | 'coin-toss';
 
 export const DRAFT_PHASE_TRANSITIONS: Record<DraftTransitionKey, DraftPhase> = {
   'map-ban': 'map_ban',

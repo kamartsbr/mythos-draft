@@ -90,7 +90,6 @@ function buildForjaConfig(
 
     // ── Flags Exclusivas FORJA ─────────────────────────────────────────
     hasMap3RandomRoll: true,
-    hasPerMapBans: isPlayoffs,
   };
 }
 
@@ -175,10 +174,8 @@ function PhaseBadge({ phase, selected, onClick }: {
   onClick: () => void;
 }) {
   const isGroups = phase === 'grupos';
-  const label    = isGroups ? 'Fase de Grupos (BO3)' : 'Playoffs (BO3 + Bans)';
-  const desc     = isGroups
-    ? 'Sem bans de deuses · Mapa 3 sorteado'
-    : '1 Ban por time por mapa · Mapa 3 sorteado';
+  const label    = isGroups ? 'Fase de Grupos (BO3)' : 'Playoffs (BO3)';
+  const desc     = 'Sem bans de deuses · Mapa 3 sorteado';
   const icon     = isGroups ? '⚔️' : '🏆';
   const color    = isGroups ? '#3b82f6' : '#f59e0b';
 
@@ -234,15 +231,6 @@ function RulesSummary({ phase }: { phase: DraftPhase }) {
       icon: '🥇',
       text: 'Quem perdeu o Jogo 2 escolhe primeiro (lado/deus) no Jogo 3',
     },
-    ...(isGroups
-      ? []
-      : [
-          {
-            icon: '🚫',
-            text: 'Playoffs: 1 Ban de Deus por time antes dos picks em cada mapa',
-            highlight: true,
-          },
-        ]),
   ];
 
   return (

@@ -364,10 +364,13 @@ function AppContent() {
       return;
     }
 
-    lobbyService.getLobbiesPaginated(true).then((lbs) => {
-      setPaginatedLobbies(lbs);
-      setHasMore(lbs.length >= 20);
-    });
+    if (isAdmin) {
+      lobbyService.getLobbiesPaginated(true).then((lbs) => {
+        setPaginatedLobbies(lbs);
+        setHasMore(lbs.length >= 20);
+      });
+      return;
+    }
   }, [publicLobbies, isAdmin, lobbyId, isForjaRoute, isOverlay, isStreamerHud, isStreamerDock, isLobbyPath]);
 
   const handleFetchLobbies = async () => {
@@ -588,6 +591,7 @@ function AppContent() {
     };
 
     await create(id, newLobby);
+    setLobbyId(id);
     setShowJoinModal(true);
   };
 
@@ -1030,7 +1034,7 @@ function AppContent() {
                       hasMore={hasMore}
                       onFetchLobbies={handleFetchLobbies}
                       isLoadingLobbies={lobbyListLoading}
-                      hasBeenFetched={isAdmin || lobbyListFetched}
+                      hasBeenFetched={lobbyListFetched}
                     />
                   </div>
                 </div>

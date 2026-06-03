@@ -344,7 +344,10 @@ exports.authenticateadminpass = onCall({ secrets: [ADMIN_PASSWORD] }, async (req
   return { success: true };
 });
 
-exports.onlobbyupdated = onDocumentWritten("lobbies/{lobbyId}", async (event) => {
+exports.onlobbyupdated = onDocumentWritten({
+  document: "lobbies/{lobbyId}",
+  database: "mythosdraft-prod"
+}, async (event) => {
   if (!event.data) return;
   const before = event.data.before.data();
   const after = event.data.after.data();

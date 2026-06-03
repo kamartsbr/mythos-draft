@@ -34,6 +34,28 @@ describe('FORJA match summary helpers', () => {
     expect(summary.config?.forjaGroupId).toBe('A');
   });
 
+  it('keeps FORJA playoff bracket metadata in compact summaries', () => {
+    const summary = forjaLobbyToLiveMatchSummary({
+      id: 'qf1-lobby',
+      status: 'waiting',
+      scoreA: 0,
+      scoreB: 0,
+      config: {
+        name: 'QF1 - Team Alpha x Team Delta',
+        preset: 'FORJA',
+        isOfficialForjaMatch: true,
+        tournamentStage: 'PLAYOFFS_BO3',
+        forjaTeamA: 'team-alpha',
+        forjaTeamB: 'team-delta',
+        forjaPlayoffMatchId: 'QF1',
+        forjaPlayoffRound: 'QUARTERFINALS',
+      },
+    });
+
+    expect(summary.config?.forjaPlayoffMatchId).toBe('QF1');
+    expect(summary.config?.forjaPlayoffRound).toBe('QUARTERFINALS');
+  });
+
   it('only treats official FORJA lobbies as standings sources', () => {
     expect(isOfficialForjaLobbyData({
       config: {

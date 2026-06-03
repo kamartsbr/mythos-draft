@@ -1,3 +1,5 @@
+import type { ForjaPlayoffMatchId, ForjaPlayoffRound } from '../../types';
+
 /**
  * ============================================================
  *  FORJA DE HEFESTO — Type Definitions (Revisão Major)
@@ -123,6 +125,10 @@ export interface ForjaLiveMatchSummary {
     forjaTeamB?: string;
     forjaGroupId?: string;
     tournamentStage?: string;
+    forjaPlayoffMatchId?: ForjaPlayoffMatchId;
+    forjaPlayoffRound?: ForjaPlayoffRound;
+    forjaPlayoffSourceA?: ForjaPlayoffMatchId;
+    forjaPlayoffSourceB?: ForjaPlayoffMatchId;
     externalLink?: string;
     scheduledDate?: FirestoreTimestamp;
     scheduledTime?: string;

@@ -60,6 +60,7 @@ function playoffMatch(
   scoreB: number,
   status: string = 'completed'
 ): ForjaLiveMatchSummary {
+  const tournamentStage = id.startsWith('QF') ? 'PLAYOFFS_BO3' : 'PLAYOFFS_BO5';
   const round = id.startsWith('QF')
     ? 'QUARTERFINALS'
     : id.startsWith('SF')
@@ -73,11 +74,11 @@ function playoffMatch(
     status,
     scoreA,
     scoreB,
-    stage: id === 'FINAL' ? 'PLAYOFFS_BO5' : 'PLAYOFFS_BO3',
+    stage: tournamentStage,
     config: {
       forjaTeamA: teamA,
       forjaTeamB: teamB,
-      tournamentStage: id === 'FINAL' ? 'PLAYOFFS_BO5' : 'PLAYOFFS_BO3',
+      tournamentStage,
       forjaPlayoffMatchId: id,
       forjaPlayoffRound: round,
     },
@@ -125,6 +126,24 @@ describe('FORJA playoffs', () => {
       { id: 'QF2', teamA: 'C1', teamB: 'B2' },
       { id: 'QF3', teamA: 'B1', teamB: 'C2' },
       { id: 'QF4', teamA: 'D1', teamB: 'A2' },
+    ]);
+  });
+
+  it('uses MD3 for quarterfinals and MD5 for semifinals, final, and third place', () => {
+    const bracket = buildForjaPlayoffBracket(groupTeams(), GROUPS.flatMap(completeGroupMatches));
+
+    expect(bracket.matches.map((match) => ({
+      id: match.id,
+      seriesType: match.seriesType,
+    }))).toEqual([
+      { id: 'QF1', seriesType: 'BO3' },
+      { id: 'QF2', seriesType: 'BO3' },
+      { id: 'QF3', seriesType: 'BO3' },
+      { id: 'QF4', seriesType: 'BO3' },
+      { id: 'SF1', seriesType: 'BO5' },
+      { id: 'SF2', seriesType: 'BO5' },
+      { id: 'FINAL', seriesType: 'BO5' },
+      { id: 'THIRD', seriesType: 'BO5' },
     ]);
   });
 

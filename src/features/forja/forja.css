@@ -793,7 +793,9 @@
 .forja-bracket-match{position:relative;display:flex;flex-direction:column;gap:.8rem;padding:.9rem;border:1px solid rgba(51,65,85,.68);border-radius:.85rem;background:radial-gradient(circle at top left,rgba(245,158,11,.11),transparent 42%),rgba(15,23,42,.82);box-shadow:0 14px 40px rgba(0,0,0,.25)}
 .forja-bracket-match--final,.forja-bracket-match--third_place{border-color:rgba(245,158,11,.32);background:radial-gradient(circle at top,rgba(245,158,11,.16),transparent 50%),rgba(15,23,42,.88)}
 .forja-bracket-match__top{display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem}
+.forja-bracket-match__meta{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap}
 .forja-bracket-match__label{display:block;color:#f59e0b;font-size:.6rem;font-weight:950;letter-spacing:.12em;text-transform:uppercase}
+.forja-bracket-series{display:inline-flex;align-items:center;justify-content:center;border:1px solid rgba(245,158,11,.28);border-radius:999px;padding:.12rem .38rem;background:rgba(245,158,11,.08);color:#facc15;font-size:.55rem;font-weight:950;letter-spacing:.08em}
 .forja-bracket-match h4{margin:.15rem 0 0;color:#cbd5e1;font-size:.72rem;line-height:1.25;font-weight:850}
 .forja-bracket-status{flex-shrink:0;border:1px solid rgba(148,163,184,.22);border-radius:999px;padding:.22rem .48rem;color:#94a3b8;background:rgba(148,163,184,.08);font-size:.58rem;font-weight:950;letter-spacing:.08em;text-transform:uppercase}
 .forja-bracket-status--done{border-color:rgba(74,222,128,.3);background:rgba(74,222,128,.1);color:#4ade80}
@@ -802,6 +804,8 @@
 .forja-bracket-slot{display:flex;align-items:center;justify-content:space-between;gap:.65rem;min-height:2.65rem;padding:.58rem .65rem;border:1px solid rgba(51,65,85,.58);border-radius:.65rem;background:rgba(2,6,23,.62);color:#cbd5e1}
 .forja-bracket-slot--winner{border-color:rgba(74,222,128,.35);background:linear-gradient(90deg,rgba(22,101,52,.28),rgba(2,6,23,.68));color:#ecfdf5}
 .forja-bracket-slot--pending{color:#64748b;border-style:dashed}
+.forja-bracket-team-logo{flex-shrink:0;width:2rem;height:2rem;border-radius:.55rem;overflow:hidden;border:1px solid rgba(245,158,11,.24);background:linear-gradient(135deg,rgba(30,41,59,.92),rgba(2,6,23,.9));display:flex;align-items:center;justify-content:center;color:#facc15;font-size:.72rem;font-weight:950;text-transform:uppercase;box-shadow:0 8px 18px rgba(0,0,0,.22)}
+.forja-bracket-team-logo img{width:100%;height:100%;object-fit:cover;display:block}
 .forja-bracket-slot__team{display:flex;align-items:center;gap:.45rem;min-width:0;font-size:.78rem;font-weight:850;line-height:1.15}
 .forja-bracket-slot__team span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .forja-bracket-seed{flex-shrink:0;min-width:1.6rem;text-align:center;border:1px solid rgba(245,158,11,.3);border-radius:.35rem;padding:.12rem .24rem;color:#facc15;background:rgba(245,158,11,.08);font-size:.6rem;font-weight:950}

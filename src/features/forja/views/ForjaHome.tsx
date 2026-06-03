@@ -85,6 +85,10 @@ function getSlotSeed(slot: ForjaBracketSlot): string | null {
   return slot.kind === 'team' ? slot.seedLabel ?? null : null;
 }
 
+function getForjaSeriesDisplayLabel(seriesType: Extract<SeriesType, 'BO3' | 'BO5'>): string {
+  return seriesType === 'BO5' ? 'MD5' : 'MD3';
+}
+
 /**
  * Renders a team member row with avatar, nickname, and an optional captain badge.
  *
@@ -535,9 +539,28 @@ function PlayoffSlotRow({
   isWinner: boolean;
 }) {
   const seed = getSlotSeed(slot);
+  const [imageFailed, setImageFailed] = useState(false);
+  const team = slot.kind === 'team' ? slot.team : null;
+  const imageUrl = team?.image_url && !imageFailed ? team.image_url : null;
+  const fallbackInitial = team?.team_name.trim().charAt(0).toUpperCase() || seed?.charAt(0) || '?';
 
   return (
     <div className={cn("forja-bracket-slot", isWinner && "forja-bracket-slot--winner", slot.kind === 'pending' && "forja-bracket-slot--pending")}>
+      {team && (
+        <div className="forja-bracket-team-logo" aria-hidden="true">
+          {imageUrl ? (
+            <img
+              src={imageUrl}
+              alt=""
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onError={() => setImageFailed(true)}
+            />
+          ) : (
+            <span>{fallbackInitial}</span>
+          )}
+        </div>
+      )}
       <div className="forja-bracket-slot__team">
         {seed && <span className="forja-bracket-seed">{seed}</span>}
         <span>{getSlotLabel(slot)}</span>
@@ -578,7 +601,10 @@ function PlayoffMatchCard({
     <article className={cn("forja-bracket-match", `forja-bracket-match--${match.round.toLowerCase()}`)}>
       <div className="forja-bracket-match__top">
         <div>
-          <span className="forja-bracket-match__label">{match.label}</span>
+          <div className="forja-bracket-match__meta">
+            <span className="forja-bracket-match__label">{match.label}</span>
+            <span className="forja-bracket-series">{getForjaSeriesDisplayLabel(match.seriesType)}</span>
+          </div>
           <h4>{match.title}</h4>
         </div>
         <span className={cn("forja-bracket-status", completed && "forja-bracket-status--done", lobby?.status === 'drafting' && "forja-bracket-status--live")}>

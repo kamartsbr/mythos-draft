@@ -55,6 +55,8 @@ vi.mock('../../data/draft', () => ({
   getMCLPicks: vi.fn(() => []),
   getMCLTeamOrder: vi.fn(() => []),
   shouldUseGame2MclOrder: vi.fn(() => false),
+  hydrateMclPicksWithRosterNames: vi.fn(() => []),
+  isMclStylePreset: vi.fn(() => false),
 }));
 
 vi.mock('../../features/forja/services/forjaService', () => ({

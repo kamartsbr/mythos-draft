@@ -27,7 +27,7 @@ import { ForjaLiveMatchSummary, ForjaLiveMatchesSummaryDoc } from '../features/f
 import { invalidateForjaOfficialMatchesCache, updateCachedLiveMatchesSummary } from '../features/forja/services/forjaService';
 import { forjaLobbyToLiveMatchSummary, isOfficialForjaLobbyData, sortForjaLiveMatches } from '../features/forja/forjaMatchSummary';
 import { PLAYER_COLORS, MCL_ROUND_MAPS } from '../constants';
-import { getMCLPicks, getMCLTeamOrder, shouldUseGame2MclOrder } from '../data/draft';
+import { hydrateMclPicksWithRosterNames, isMclStylePreset } from '../data/draft';
 
 
 // --- SHIELDING: MOCK LAYER CONFIG ---
@@ -1687,8 +1687,16 @@ export const lobbyService = {
               }
 
               // INITIALIZE PICKS
-              if (data.config.preset === 'MCL' || data.config.preset === 'FORJA') {
-                updates.picks = getMCLPicks(data.currentGame || 1);
+              if (isMclStylePreset(data.config.preset)) {
+                updates.picks = hydrateMclPicksWithRosterNames(
+                  data.currentGame || 1,
+                  data.teamAPlayers,
+                  data.teamBPlayers,
+                  {
+                    turnOrder: finalTurnOrder,
+                    existingPicks: data.picks,
+                  }
+                );
               }
             } else if (data.phase === 'ready_picker') {
               updates.phase = 'god_picker';
@@ -1780,7 +1788,15 @@ export const lobbyService = {
           ] : [{ name: 'Bot B', position: 0 }])
         );
 
-        const updatedPicks = getMCLPicks(lobby.currentGame || 1);
+        const updatedPicks = hydrateMclPicksWithRosterNames(
+          lobby.currentGame || 1,
+          lobby.teamAPlayers,
+          lobby.teamBPlayers,
+          {
+            turnOrder: lobby.turnOrder,
+            existingPicks: lobby.picks,
+          }
+        );
 
         setLocalLobby(id, { 
             ...lobby, 
@@ -1828,19 +1844,16 @@ export const lobbyService = {
         }
 
         // 🔥 INITIALIZE PICKS WITH PLAYER NAMES (Anti-Generic Name Bug)
-        if (data.config.preset === 'MCL' || data.config.preset === 'FORJA') {
-          const initialPicks = getMCLPicks(data.currentGame || 1);
-          const useGame2Order = shouldUseGame2MclOrder(data.turnOrder);
-          const teamAOrder = getMCLTeamOrder('A', null, useGame2Order);
-          const teamBOrder = getMCLTeamOrder('B', null, useGame2Order);
-
-          updates.picks = initialPicks.map(p => {
-            const teamPlayers = p.team === 'A' ? (updates.teamAPlayers || data.teamAPlayers) : (updates.teamBPlayers || data.teamBPlayers);
-            const teamOrder = p.team === 'A' ? teamAOrder : teamBOrder;
-            const rosterIdx = teamOrder.indexOf(p.playerId);
-            const player = teamPlayers?.[rosterIdx];
-            return { ...p, playerName: player?.name || '' };
-          });
+        if (isMclStylePreset(data.config.preset)) {
+          updates.picks = hydrateMclPicksWithRosterNames(
+            data.currentGame || 1,
+            updates.teamAPlayers || data.teamAPlayers,
+            updates.teamBPlayers || data.teamBPlayers,
+            {
+              turnOrder: data.turnOrder,
+              existingPicks: data.picks,
+            }
+          );
         }
 
         transaction.update(docRef, cleanData(updates));
@@ -1918,7 +1931,15 @@ export const lobbyService = {
           ] : [{ name: `${nickname} (B)`, position: 0 }])
         );
 
-        const updatedPicks = getMCLPicks(lobby.currentGame || 1);
+        const updatedPicks = hydrateMclPicksWithRosterNames(
+          lobby.currentGame || 1,
+          lobby.teamAPlayers,
+          lobby.teamBPlayers,
+          {
+            turnOrder: lobby.turnOrder,
+            existingPicks: lobby.picks,
+          }
+        );
 
         setLocalLobby(lobbyId, { 
           ...lobby, 

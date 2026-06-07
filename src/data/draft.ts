@@ -1,4 +1,4 @@
-import { PickEntry } from '../types';
+import { DraftTurn, PickEntry, TeamPlayer } from '../types';
 import {
   getDraftTimeline as domainGetDraftTimeline,
   getMCLTeamOrder as domainGetMCLTeamOrder,
@@ -27,6 +27,81 @@ export const PLAYER_POSITION_MAP = {
 export const getDraftTimeline = domainGetDraftTimeline;
 export const getMCLTeamOrder = domainGetMCLTeamOrder;
 export const shouldUseGame2MclOrder = domainShouldUseGame2MclOrder;
+
+const GENERIC_ROSTER_NAME_PATTERNS = [
+  /^host$/i,
+  /^guest$/i,
+  /^team\s*a$/i,
+  /^team\s*b$/i,
+  /^time\s*a$/i,
+  /^time\s*b$/i,
+  /^bot\s*a$/i,
+  /^bot\s*b$/i,
+  /^player\s*\d+$/i,
+  /^p\d+$/i,
+  /^captain\s*\d+$/i,
+  /^selecting\.{3}$/i,
+];
+
+const normalizeRosterName = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+
+const isRealRosterName = (value: unknown): boolean => {
+  const normalized = normalizeRosterName(value);
+  if (!normalized) return false;
+  return !GENERIC_ROSTER_NAME_PATTERNS.some((pattern) => pattern.test(normalized));
+};
+
+export function isMclStylePreset(preset?: string | null): boolean {
+  const normalized = String(preset ?? '').toUpperCase();
+  return normalized === 'MCL' || normalized === 'FORJA' || normalized === 'MCL_PLAYOFFS' || normalized === 'MCL_TIEBREAKER';
+}
+
+const resolveHydratedPlayerName = (
+  candidateName: unknown,
+  existingName: unknown,
+  rosterAvailable: boolean
+): string => {
+  const existing = normalizeRosterName(existingName);
+
+  if (!rosterAvailable) {
+    return existing;
+  }
+
+  if (isRealRosterName(candidateName)) {
+    return normalizeRosterName(candidateName);
+  }
+
+  return isRealRosterName(existing) ? existing : '';
+};
+
+export function hydrateMclPicksWithRosterNames(
+  gameNumber: number,
+  teamAPlayers?: TeamPlayer[] | null,
+  teamBPlayers?: TeamPlayer[] | null,
+  options?: {
+    turnOrder?: DraftTurn[] | null;
+    existingPicks?: PickEntry[] | null;
+  }
+): PickEntry[] {
+  const freshPicks = getMCLPicks(gameNumber);
+  const useGame2Order = options?.turnOrder ? shouldUseGame2MclOrder(options.turnOrder) : gameNumber % 2 === 0;
+  const teamAOrder = getMCLTeamOrder('A', null, useGame2Order);
+  const teamBOrder = getMCLTeamOrder('B', null, useGame2Order);
+  const existingPicks = options?.existingPicks ?? [];
+
+  return freshPicks.map((pick) => {
+    const teamPlayers = pick.team === 'A' ? teamAPlayers : teamBPlayers;
+    const teamOrder = pick.team === 'A' ? teamAOrder : teamBOrder;
+    const rosterIndex = teamOrder.indexOf(pick.playerId);
+    const existingPick = existingPicks.find((existing) => existing.playerId === pick.playerId && existing.team === pick.team);
+    const candidateName = rosterIndex !== -1 ? teamPlayers?.[rosterIndex]?.name : undefined;
+
+    return {
+      ...pick,
+      playerName: resolveHydratedPlayerName(candidateName, existingPick?.playerName, Array.isArray(teamPlayers) && teamPlayers.length > 0),
+    };
+  });
+}
 
 export const getMCLPicks = (gameNumber: number): PickEntry[] => {
   const timeline = getDraftTimeline(gameNumber);

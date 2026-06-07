@@ -1,5 +1,5 @@
 import { LobbyConfig, DraftTurn, Lobby, DraftActionOptions } from '../types';
-import { getMCLPicks, getMCLTeamOrder, shouldUseGame2MclOrder } from '../data/draft';
+import { getMCLTeamOrder, hydrateMclPicksWithRosterNames, isMclStylePreset, shouldUseGame2MclOrder } from '../data/draft';
 import { MAPS, MAPS_BY_ID } from '../data/maps';
 import { MAJOR_GODS, MAJOR_GODS_BY_ID } from '../data/gods';
 import { phaseAfterDraftQueue } from '../domain/draft/rules/phaseTransitions';
@@ -443,8 +443,16 @@ export function processTurnAction(
 
         nextLobby.selectedMap = id;
 
-        if (nextLobby.config.preset === 'MCL' || nextLobby.config.preset === 'FORJA' || nextLobby.config.preset === 'MCL_PLAYOFFS' || nextLobby.config.preset === 'MCL_TIEBREAKER') {
-          nextLobby.picks = getMCLPicks(nextLobby.currentGame);
+        if (isMclStylePreset(nextLobby.config.preset)) {
+          nextLobby.picks = hydrateMclPicksWithRosterNames(
+            nextLobby.currentGame,
+            nextLobby.teamAPlayers,
+            nextLobby.teamBPlayers,
+            {
+              turnOrder: nextLobby.turnOrder,
+              existingPicks: nextLobby.picks,
+            }
+          );
         }
       } else {
         // God PICK
@@ -620,22 +628,38 @@ export function processTurnAction(
             if (targetPlayerId === undefined) {
               targetPlayerId = nextLobby.picks[pickIndex].playerId;
             }
-            
-            const isPlaceholder = (name?: string) => !name || /^P\d+$/i.test(name) || /^Player \d+$/i.test(name);
-            
-            if (!playerName || isPlaceholder(playerName)) {
+
+            if (isMclStylePreset(nextLobby.config.preset)) {
+              const currentPick = nextLobby.picks[pickIndex];
+              const teamPlayers = executionTeam === 'A' ? nextLobby.teamAPlayers : nextLobby.teamBPlayers;
+              const useGame2Order = shouldUseGame2MclOrder(nextLobby.turnOrder);
+              const teamOrder = executionTeam === 'A'
+                ? getMCLTeamOrder('A', null, useGame2Order)
+                : getMCLTeamOrder('B', null, useGame2Order);
+              const rosterIndex = teamOrder.indexOf(currentPick.playerId);
+              const rosterName = rosterIndex !== -1 ? teamPlayers?.[rosterIndex]?.name?.trim() : '';
+              const existingPickName = currentPick.playerName?.trim() || '';
+              const isMeaningfulRosterName = (value?: string | null) => {
+                const normalized = value?.trim() || '';
+                return Boolean(normalized) && !/^(host|guest|team\s*a|team\s*b|time\s*a|time\s*b|bot\s*a|bot\s*b|player\s*\d+|p\d+|captain\s*\d+)$/i.test(normalized);
+              };
+
+              if (!playerName || !playerName.trim()) {
+                playerName = isMeaningfulRosterName(rosterName) ? rosterName : (isMeaningfulRosterName(existingPickName) ? existingPickName : '');
+              }
+            } else if (!playerName || !playerName.trim()) {
               const teamPlayers = executionTeam === 'A' ? nextLobby.teamAPlayers : nextLobby.teamBPlayers;
               const assignedPlayerNames = nextLobby.picks
                 .filter(p => p.team === executionTeam && p.godId !== null)
                 .map(p => p.playerName)
                 .filter(Boolean);
-              
+
               const availablePlayers = teamPlayers?.filter(tp => tp.name && !assignedPlayerNames.includes(tp.name)) || [];
-              
+
               if (availablePlayers.length > 0) {
                 playerName = availablePlayers[Math.floor(Math.random() * availablePlayers.length)].name;
               } else {
-                playerName = nextLobby.picks[pickIndex].playerName || `Player ${targetPlayerId}`;
+                playerName = nextLobby.picks[pickIndex].playerName || '';
               }
             }
           }
@@ -879,24 +903,18 @@ export function processReportAction(
         nextLobby.readyA_report = false;
         nextLobby.readyB_report = false;
 
-        if (nextLobby.config.preset === 'MCL' || nextLobby.config.preset === 'FORJA' || nextLobby.config.preset === 'MCL_PLAYOFFS' || nextLobby.config.preset === 'MCL_TIEBREAKER') {
+        if (isMclStylePreset(nextLobby.config.preset)) {
           const nextGameMap = (nextLobby.seriesMaps || [])[nextLobby.currentGame - 1];
           if (nextGameMap && nextGameMap !== '') {
-            const newMCLPicks = getMCLPicks(nextLobby.currentGame);
-            const teamAPlayers = nextLobby.teamAPlayers || [];
-            const teamBPlayers = nextLobby.teamBPlayers || [];
-            const useGame2Order = shouldUseGame2MclOrder(nextLobby.turnOrder);
-            const teamAOrder = getMCLTeamOrder('A', nextGameMap, useGame2Order);
-            const teamBOrder = getMCLTeamOrder('B', nextGameMap, useGame2Order);
-
-            nextLobby.picks = newMCLPicks.map(p => {
-              const existingPick = (lobby.picks || []).find(ep => ep.playerId === p.playerId);
-              const teamPlayers = p.team === 'A' ? teamAPlayers : teamBPlayers;
-              const teamOrder = p.team === 'A' ? teamAOrder : teamBOrder;
-              const rosterIdx = teamOrder.indexOf(p.playerId);
-              const player = teamPlayers?.[rosterIdx];
-              return { ...p, playerName: player?.name || existingPick?.playerName || '' };
-            });
+            nextLobby.picks = hydrateMclPicksWithRosterNames(
+              nextLobby.currentGame,
+              nextLobby.teamAPlayers,
+              nextLobby.teamBPlayers,
+              {
+                turnOrder: nextLobby.turnOrder,
+                existingPicks: lobby.picks,
+              }
+            );
             nextLobby.selectedMap = nextGameMap;
           } else {
             nextLobby.picks = nextLobby.picks.map(p => ({ ...p, godId: null, isRandom: false, turnIndex: undefined }));

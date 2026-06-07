@@ -14,7 +14,7 @@ import { ConfirmModal } from './components/UI/ConfirmModal';
 import { BugReportModal } from './components/UI/BugReportModal';
 import { PatchNotesModal } from './components/UI/PatchNotesModal';
 import { SettingsModal } from './components/UI/SettingsModal';
-import { TRANSLATIONS, PLAYER_COLORS, MCL_ROUND_MAPS, MCL_PLAYOFFS_PHASES, getMCLPicks } from './constants';
+import { TRANSLATIONS, PLAYER_COLORS, MCL_ROUND_MAPS, MCL_PLAYOFFS_PHASES, hydrateMclPicksWithRosterNames } from './constants';
 import { DraftTurn, Lobby, PickEntry, LobbySummary } from './types';
 import { lobbyService, PUBLIC_LOBBIES_PAGE_SIZE } from './services/lobbyService';
 import { cn } from './lib/utils';
@@ -469,7 +469,7 @@ function AppContent() {
     const initialSeriesMaps: string[] = [];
 
     if (config.preset === 'MCL' || config.preset === 'MCL_PLAYOFFS' || config.preset === 'MCL_TIEBREAKER') {
-      const mclPicks = getMCLPicks(1);
+      const mclPicks = hydrateMclPicksWithRosterNames(1);
       picks.push(...mclPicks);
     } else {
       let picksPerTeam = teamSize;

@@ -26,7 +26,7 @@ import {
   type ForjaGroupId,
   type ForjaStandingRow,
 } from '../forjaPlayoffs';
-import { FORJA_MAP_POOL, getMCLPicks } from '../../../constants';
+import { FORJA_MAP_POOL, hydrateMclPicksWithRosterNames } from '../../../constants';
 import { LobbyConfig, Lobby, TeamPlayer, SeriesType, ForjaPlayoffMatchId, ForjaPlayoffRound } from '../../../types';
 import { lobbyService, generateId, lobbyToForjaLiveMatchSummary, upsertForjaLiveMatchSummary, removeForjaLiveMatchSummary } from '../../../services/lobbyService';
 import { MAJOR_GODS } from '../../../data/gods';
@@ -945,6 +945,8 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
     }
 
     const customGameCount = input.seriesType === 'BO5' ? 5 : 3;
+    const teamAPlayers = buildTeamPlayers(input.teamA);
+    const teamBPlayers = buildTeamPlayers(input.teamB);
     const config: LobbyConfig = {
       name: input.matchName,
       preset: 'FORJA',
@@ -994,8 +996,8 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
       captain2Name: input.teamB.team_name,
       teamAName: input.teamA.team_name,
       teamBName: input.teamB.team_name,
-      teamAPlayers: buildTeamPlayers(input.teamA),
-      teamBPlayers: buildTeamPlayers(input.teamB),
+      teamAPlayers,
+      teamBPlayers,
       readyA: false,
       readyB: false,
       readyA_report: false,
@@ -1014,7 +1016,7 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
       turn: 0,
       turnOrder: [],
       bans: [],
-      picks: getMCLPicks(1),
+      picks: hydrateMclPicksWithRosterNames(1, teamAPlayers, teamBPlayers),
       scoreA: 0,
       scoreB: 0,
       reportVoteA: null,

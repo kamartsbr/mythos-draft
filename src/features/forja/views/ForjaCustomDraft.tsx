@@ -16,7 +16,7 @@ import { ForjaViewProps } from '../types';
 import { lobbyService, generateId } from '../../../services/lobbyService';
 import { serverTimestamp } from 'firebase/firestore';
 import { Lobby, LobbyConfig } from '../../../types';
-import { getMCLPicks } from '../../../constants';
+import { hydrateMclPicksWithRosterNames } from '../../../constants';
 import { FORJA_MAP_POOL } from '../../../data/maps';
 import { MAJOR_GODS } from '../../../data/gods';
 import { auth } from '../../../firebase';
@@ -134,7 +134,7 @@ function buildInitialLobby(id: string, config: LobbyConfig): Lobby {
     bans: [],
     // Skeleton de picks 3v3 (mesmo formato MCL): 6 slots corner/middle × 2 times.
     // Necessário para a DraftUI renderizar os slots de jogadores antes do primeiro mapa.
-    picks: getMCLPicks(1),
+    picks: hydrateMclPicksWithRosterNames(1, [], []),
     scoreA: 0,
     scoreB: 0,
     reportVoteA: null,

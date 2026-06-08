@@ -1,8 +1,43 @@
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite'; 
 import path from 'path';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv, type ViteDevServer } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { createBuildVersion, createVersionJson } from './scripts/version.mjs';
+
+function versionAssetPlugin() {
+  const buildVersion = createBuildVersion();
+
+  return {
+    name: 'version-asset',
+    config() {
+      return {
+        define: {
+          'import.meta.env.VITE_APP_BUILD_VERSION': JSON.stringify(buildVersion.version),
+        },
+      };
+    },
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: createVersionJson(buildVersion),
+      });
+    },
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use('/version.json', (req, res, next) => {
+        if (req.method && req.method !== 'GET' && req.method !== 'HEAD') {
+          return next();
+        }
+
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.end(createVersionJson(buildVersion));
+      });
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
@@ -11,6 +46,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       tailwindcss(),
+      versionAssetPlugin(),
       VitePWA({
         registerType: 'autoUpdate',
         workbox: {

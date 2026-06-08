@@ -49,7 +49,7 @@ export function isLobbyEligibleForPublicList(data: {
 }
 
 export function lobbyDocToSummary(id: string, normalized: Lobby): LobbySummary {
-  return {
+  return sanitizeLobbySummary({
     id,
     captain1: normalized.captain1 ?? null,
     captain2: normalized.captain2 ?? null,
@@ -64,7 +64,7 @@ export function lobbyDocToSummary(id: string, normalized: Lobby): LobbySummary {
     preset: normalized.config?.preset ?? null,
     lastActivityAt: (normalized.lastActivityAt as DraftTimestampRead | null | undefined) ?? null,
     createdAt: normalized.createdAt ?? null
-  };
+  });
 }
 
 export function filterPublicSummaries(summaries: LobbySummary[]): LobbySummary[] {
@@ -82,13 +82,13 @@ export function sortLobbySummaries(summaries: LobbySummary[]): LobbySummary[] {
 }
 
 export function upsertLobbySummary(summaries: LobbySummary[], summary: LobbySummary): LobbySummary[] {
-  const next = summaries.filter((item) => item.id !== summary.id);
-  next.push(summary);
+  const next = sanitizeLobbySummaryList(summaries.filter((item) => item.id !== summary.id));
+  next.push(sanitizeLobbySummary(summary));
   return filterPublicSummaries(sortLobbySummaries(next));
 }
 
 export function removeLobbySummary(summaries: LobbySummary[], lobbyId: string): LobbySummary[] {
-  return filterPublicSummaries(sortLobbySummaries(summaries.filter((item) => item.id !== lobbyId)));
+  return filterPublicSummaries(sortLobbySummaries(sanitizeLobbySummaryList(summaries.filter((item) => item.id !== lobbyId))));
 }
 
 function isOfficialForjaLobby(lobby: Lobby): boolean {
@@ -103,13 +103,13 @@ export function upsertForjaLiveMatchSummary(
   matches: ForjaLiveMatchSummary[],
   match: ForjaLiveMatchSummary
 ): ForjaLiveMatchSummary[] {
-  const next = matches.filter((item) => item.id !== match.id);
-  next.push(match);
+  const next = sanitizeForjaLiveMatchSummaryList(matches.filter((item) => item.id !== match.id));
+  next.push(sanitizeForjaLiveMatchSummary(match));
   return sortForjaLiveMatches(next);
 }
 
 export function removeForjaLiveMatchSummary(matches: ForjaLiveMatchSummary[], lobbyId: string): ForjaLiveMatchSummary[] {
-  return matches.filter((item) => item.id !== lobbyId);
+  return sanitizeForjaLiveMatchSummaryList(matches.filter((item) => item.id !== lobbyId));
 }
 
 /**
@@ -118,6 +118,42 @@ export function removeForjaLiveMatchSummary(matches: ForjaLiveMatchSummary[], lo
  */
 export const isSoloAdminLobby = (lobby: { captain1?: string | null; captain2?: string | null }): boolean =>
   !!(lobby.captain1 && lobby.captain2 && lobby.captain1 === lobby.captain2);
+
+const isFirestoreFieldValueSentinel = (value: unknown): boolean =>
+  !!value && typeof value === 'object' && '_methodName' in value;
+
+function sanitizePublicTimestamp<T>(value: T | null | undefined): T | null {
+  if (value === null || value === undefined) return null;
+  if (isFirestoreFieldValueSentinel(value)) return null;
+  return value;
+}
+
+function sanitizeLobbySummary(summary: LobbySummary): LobbySummary {
+  return {
+    ...summary,
+    lastActivityAt: sanitizePublicTimestamp(summary.lastActivityAt),
+    createdAt: sanitizePublicTimestamp(summary.createdAt),
+  };
+}
+
+function sanitizeLobbySummaryList(summaries: LobbySummary[]): LobbySummary[] {
+  return summaries.map((summary) => sanitizeLobbySummary(summary));
+}
+
+function sanitizeForjaLiveMatchSummary(match: ForjaLiveMatchSummary): ForjaLiveMatchSummary {
+  return {
+    ...match,
+    scheduledDate: sanitizePublicTimestamp(match.scheduledDate) ?? undefined,
+    config: match.config ? {
+      ...match.config,
+      scheduledDate: sanitizePublicTimestamp(match.config.scheduledDate) ?? undefined,
+    } : undefined,
+  };
+}
+
+function sanitizeForjaLiveMatchSummaryList(matches: ForjaLiveMatchSummary[]): ForjaLiveMatchSummary[] {
+  return matches.map((match) => sanitizeForjaLiveMatchSummary(match));
+}
 
 const now = () => IS_DEV ? Date.now() : serverTimestamp();
 
@@ -421,12 +457,16 @@ export const lobbyService = {
       const lobbyIndexRef = doc(db, 'metadata', 'lobby_index');
       const lobbyIndexSnap = await transaction.get(lobbyIndexRef);
       const lobbyIndexData = lobbyIndexSnap.exists() ? (lobbyIndexSnap.data() as Partial<LobbyIndex>) : {};
-      const currentSummaries = Array.isArray(lobbyIndexData.activeLobbies) ? lobbyIndexData.activeLobbies : [];
+      const currentSummaries = Array.isArray(lobbyIndexData.activeLobbies)
+        ? sanitizeLobbySummaryList(lobbyIndexData.activeLobbies)
+        : [];
 
       const liveMatchesRef = doc(db, 'forja_meta', 'live_matches_summary');
       const liveMatchesSnap = await transaction.get(liveMatchesRef);
       const liveMatchesData = liveMatchesSnap.exists() ? (liveMatchesSnap.data() as Partial<ForjaLiveMatchesSummaryDoc>) : {};
-      const currentMatches = Array.isArray(liveMatchesData.matches) ? liveMatchesData.matches : [];
+      const currentMatches = Array.isArray(liveMatchesData.matches)
+        ? sanitizeForjaLiveMatchSummaryList(liveMatchesData.matches)
+        : [];
 
       const nextSummaries = resolvedLobby && isLobbyEligibleForPublicList(resolvedLobby)
         ? upsertLobbySummary(currentSummaries, lobbyDocToSummary(id, resolvedLobby))
@@ -459,12 +499,16 @@ export const lobbyService = {
       const lobbyIndexRef = doc(db, 'metadata', 'lobby_index');
       const lobbyIndexSnap = await transaction.get(lobbyIndexRef);
       const lobbyIndexData = lobbyIndexSnap.exists() ? (lobbyIndexSnap.data() as Partial<LobbyIndex>) : {};
-      const currentSummaries = Array.isArray(lobbyIndexData.activeLobbies) ? lobbyIndexData.activeLobbies : [];
+      const currentSummaries = Array.isArray(lobbyIndexData.activeLobbies)
+        ? sanitizeLobbySummaryList(lobbyIndexData.activeLobbies)
+        : [];
 
       const liveMatchesRef = doc(db, 'forja_meta', 'live_matches_summary');
       const liveMatchesSnap = await transaction.get(liveMatchesRef);
       const liveMatchesData = liveMatchesSnap.exists() ? (liveMatchesSnap.data() as Partial<ForjaLiveMatchesSummaryDoc>) : {};
-      const currentMatches = Array.isArray(liveMatchesData.matches) ? liveMatchesData.matches : [];
+      const currentMatches = Array.isArray(liveMatchesData.matches)
+        ? sanitizeForjaLiveMatchSummaryList(liveMatchesData.matches)
+        : [];
 
       transaction.set(lobbyIndexRef, cleanData({
         activeLobbies: removeLobbySummary(currentSummaries, id),
@@ -513,7 +557,7 @@ export const lobbyService = {
 
       const liveMatches = normalizedForjaLobbies
         .filter((lobby) => isOfficialForjaLobby(lobby))
-        .map((lobby) => lobbyToForjaLiveMatchSummary(lobby));
+        .map((lobby) => sanitizeForjaLiveMatchSummary(lobbyToForjaLiveMatchSummary(lobby)));
 
       await setDoc(doc(db, 'metadata', 'lobby_index'), cleanData({
         activeLobbies: summaries,
@@ -1250,7 +1294,7 @@ export const lobbyService = {
       if (indexSnap.exists()) {
         const data = indexSnap.data() as any;
         if (data.initialized === true && Array.isArray(data.activeLobbies)) {
-          return data.activeLobbies;
+          return sanitizeLobbySummaryList(data.activeLobbies);
         }
       }
 

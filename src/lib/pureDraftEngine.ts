@@ -769,16 +769,16 @@ export function processTurnAction(
 }
 
 /**
- * Update lobby reporting state and either advance the series to the next game or mark the match finished based on a reported winner.
+ * Record a match report vote, finalize the game when both teams agree, and either advance the series to the next game or mark the match finished.
  *
- * This records the reporting team's vote (or mirrors votes when `isAdminOverride`), starts the report timer when voting begins, and when both sides agree appends a game entry to history, increments the winning team's score, and decides whether the series is complete. If the series continues, the function advances to the next game, resets draft/report fields, recomputes the next turn order, and applies preset-specific reinitialization (e.g., MCL/FORJA pick assignment); if the series finishes, it sets the lobby to the finished state.
- *
- * @param lobby - Current immutable Lobby state
- * @param winner - Reported game winner (`'A'` or `'B'`); must be non-null when submitting a vote
- * @param reportingTeam - Team submitting this report vote (`'A'` or `'B'`)
+ * @param lobby - The current Lobby state (treated immutably)
+ * @param winner - The reported game winner; required when submitting a vote
+ * @param reportingTeam - The team submitting this report vote
  * @param currentTimeMs - Current timestamp in milliseconds used for time fields and history entries
- * @param options.isAdminOverride - When true, apply the reported winner to both teams' votes immediately
- * @returns The updated Lobby reflecting the report action
+ * @param options - Optional flags for the report action
+ * @param options.isAdminOverride - When true, apply `winner` to both teams' votes immediately
+ * @returns The updated Lobby reflecting the recorded vote and any resulting history, score, phase, and game advancement
+ * @throws Error when `winner` is null
  */
 export function processReportAction(
   lobby: Lobby,

@@ -182,6 +182,14 @@ const ROUND_LABELS: Record<ForjaPlayoffRound, string> = {
   THIRD_PLACE: '3o Lugar',
 };
 
+/**
+ * Map a free-form string to a Forja group identifier ('A' | 'B' | 'C' | 'D') when present.
+ *
+ * Accepts values that directly equal a group id or strings that contain a group id at the end (e.g., "Group A", "stage-B").
+ *
+ * @param groupId - Input string that may represent a group identifier
+ * @returns `ForjaGroupId` when a valid group id is found, `null` otherwise
+ */
 function normalizeGroupId(groupId?: string | null): ForjaGroupId | null {
   if (!groupId) return null;
   const upper = groupId.trim().toUpperCase();
@@ -190,19 +198,43 @@ function normalizeGroupId(groupId?: string | null): ForjaGroupId | null {
   return trailing && FORJA_GROUP_IDS.includes(trailing as ForjaGroupId) ? trailing as ForjaGroupId : null;
 }
 
+/**
+ * Determines whether a live match summary represents a completed match.
+ *
+ * @param match - The live match summary to evaluate
+ * @returns `true` if `match.status` is `'completed'` or `'finished'`, `false` otherwise.
+ */
 function isCompletedMatch(match: ForjaLiveMatchSummary): boolean {
   return match.status === 'completed' || match.status === 'finished';
 }
 
+/**
+ * Determines whether a match has valid numeric scores for both teams.
+ *
+ * @param match - The live match summary to inspect
+ * @returns `true` if both `scoreA` and `scoreB` are finite numbers, `false` otherwise.
+ */
 function hasScore(match: ForjaLiveMatchSummary): boolean {
   return Number.isFinite(match.scoreA) && Number.isFinite(match.scoreB);
 }
 
+/**
+ * Produce a canonical unordered key for a pair of team IDs.
+ *
+ * @param teamAId - First team identifier (optional)
+ * @param teamBId - Second team identifier (optional)
+ * @returns The canonical pair key in the form `"<id1>__<id2>"` with IDs sorted lexicographically, or `null` if either ID is missing or both IDs are identical.
+ */
 function getPairKey(teamAId?: string, teamBId?: string): string | null {
   if (!teamAId || !teamBId || teamAId === teamBId) return null;
   return [teamAId, teamBId].sort().join('__');
 }
 
+/**
+ * Determine whether a live match belongs to the specified Forja group and has both team assignments.
+ *
+ * @returns `true` if the match is a group-stage match for `groupId` and both team slots are present, `false` otherwise.
+ */
 function isGroupMatch(match: ForjaLiveMatchSummary, groupId: ForjaGroupId): boolean {
   return match.stage === 'GROUP'
     && normalizeGroupId(match.config?.forjaGroupId) === groupId
@@ -210,6 +242,12 @@ function isGroupMatch(match: ForjaLiveMatchSummary, groupId: ForjaGroupId): bool
     && !!match.config?.forjaTeamB;
 }
 
+/**
+ * Builds display labels for every unique unordered pair of teams.
+ *
+ * @param teams - Array of teams to generate pair labels from; each team must have `id` and `team_name`
+ * @returns A Map where keys are canonical unordered pair keys and values are labels in the form `"<teamA> x <teamB>"`
+ */
 function getExpectedPairLabels(teams: ForjaTeam[]): Map<string, string> {
   const labels = new Map<string, string>();
   for (let left = 0; left < teams.length; left += 1) {
@@ -221,10 +259,23 @@ function getExpectedPairLabels(teams: ForjaTeam[]): Map<string, string> {
   return labels;
 }
 
+/**
+ * Get the display label for a Forja playoff round.
+ *
+ * @param round - The playoff round identifier
+ * @returns The Portuguese label corresponding to `round`
+ */
 export function getForjaPlayoffRoundLabel(round: ForjaPlayoffRound): string {
   return ROUND_LABELS[round];
 }
 
+/**
+ * Finds the live match corresponding to a given Forja playoff match id.
+ *
+ * @param matches - Array of live match summaries to search
+ * @param matchId - Forja playoff match identifier to locate
+ * @returns The matching live match summary if found, `null` otherwise
+ */
 export function findForjaPlayoffMatch(
   matches: ForjaLiveMatchSummary[],
   matchId: ForjaPlayoffMatchId
@@ -232,6 +283,11 @@ export function findForjaPlayoffMatch(
   return matches.find((match) => match.config?.forjaPlayoffMatchId === matchId) ?? null;
 }
 
+/**
+ * Determine the winning team's id for a completed Forja match.
+ *
+ * @returns The winning team's id as a `string`, or `null` if the match is missing, not completed, lacks a valid score, or ended in a tie.
+ */
 export function getForjaMatchWinnerTeamId(match: ForjaLiveMatchSummary | null | undefined): string | null {
   if (!match || !isCompletedMatch(match) || !hasScore(match)) return null;
   if (match.scoreA === match.scoreB) return null;
@@ -240,6 +296,12 @@ export function getForjaMatchWinnerTeamId(match: ForjaLiveMatchSummary | null | 
     : match.config?.forjaTeamB ?? null;
 }
 
+/**
+ * Get the losing team's id from a completed Forja match.
+ *
+ * @param match - Live match summary for a Forja match (may be `null` or `undefined`)
+ * @returns The id of the losing team, or `null` if the match is missing, not completed, has no valid score, or ended in a tie
+ */
 export function getForjaMatchLoserTeamId(match: ForjaLiveMatchSummary | null | undefined): string | null {
   if (!match || !isCompletedMatch(match) || !hasScore(match)) return null;
   if (match.scoreA === match.scoreB) return null;
@@ -248,6 +310,14 @@ export function getForjaMatchLoserTeamId(match: ForjaLiveMatchSummary | null | u
     : match.config?.forjaTeamA ?? null;
 }
 
+/**
+ * Compute standings for a specific Forja group.
+ *
+ * @param teams - All known teams; only teams whose normalized groupId matches `groupId` are considered.
+ * @param matches - Live match summaries; only completed group matches with valid scores are considered.
+ * @param groupId - The target group identifier (`'A' | 'B' | 'C' | 'D'`).
+ * @returns An array of `ForjaStandingRow` for the group's teams. Each row includes `gamesWon`, `gamesLost`, `matchesPlayed`, `matchWins`, `matchLosses`, `points` (equal to `gamesWon`), and `differential` (`gamesWon - gamesLost`). The array is sorted by: points (descending), differential (descending), matchWins (descending), gamesWon (descending), and `team_name` (ascending).
+ */
 export function calculateForjaGroupStandings(
   teams: ForjaTeam[],
   matches: ForjaLiveMatchSummary[],
@@ -296,6 +366,20 @@ export function calculateForjaGroupStandings(
   ));
 }
 
+/**
+ * Computes completion status for a Forja group, returning counts and any missing pairings.
+ *
+ * @param teams - All tournament teams; only teams whose normalized `groupId` matches `groupId` are considered
+ * @param matches - Live match summaries used to detect completed group matches with valid scores
+ * @param groupId - The group identifier to evaluate (A–D)
+ * @returns An object describing group completion:
+ *  - `groupId`: the evaluated group id
+ *  - `teamsCount`: number of teams found in the group
+ *  - `requiredMatches`: total expected unique pairings for the group
+ *  - `completedMatches`: count of expected pairings that have a completed match with a score
+ *  - `isComplete`: `true` when there are exactly 4 teams, `requiredMatches` is 6, and no pairings are missing; `false` otherwise
+ *  - `missingPairs`: array of human-readable labels for expected pairings that lack a completed match
+ */
 export function getForjaGroupCompletion(
   teams: ForjaTeam[],
   matches: ForjaLiveMatchSummary[],
@@ -326,6 +410,13 @@ export function getForjaGroupCompletion(
   };
 }
 
+/**
+ * Maps the top two standings from each completed group to Forja seed keys (A1..D2).
+ *
+ * @param standingsByGroup - Object mapping each group id to its ordered standings (index 0 is first place).
+ * @param groupCompletion - Object mapping each group id to its completion status.
+ * @returns A record with keys `A1`..`D2` pointing to the corresponding `ForjaStandingRow` when every group is complete and has at least two teams; `null` otherwise.
+ */
 export function getForjaQualifiedSeeds(
   standingsByGroup: Record<ForjaGroupId, ForjaStandingRow[]>,
   groupCompletion: Record<ForjaGroupId, ForjaGroupCompletion>
@@ -346,11 +437,23 @@ export function getForjaQualifiedSeeds(
   };
 }
 
+/**
+ * Finds a team by its id in the provided team list.
+ *
+ * @returns The matching `ForjaTeam` if found, `null` when `teamId` is `null` or no matching team exists.
+ */
 function getTeamById(teams: ForjaTeam[], teamId: string | null): ForjaTeam | null {
   if (!teamId) return null;
   return teams.find((team) => team.id === teamId) ?? null;
 }
 
+/**
+ * Resolve a bracket slot from the qualified seeds or produce a pending slot placeholder.
+ *
+ * @param seeds - Mapping of seed keys to standing rows, or `null` if seeds are not available
+ * @param seedKey - The seed key to resolve (e.g. `A1`, `B2`); may be `undefined` to indicate no specific seed
+ * @returns A `team` slot with the resolved standing and `seedLabel` when both `seeds` and `seedKey` are provided; otherwise a `pending` slot whose `label` is `Classificado <seedKey>` if `seedKey` is present, or `A definir` when not
+ */
 function resolveSeedSlot(
   seeds: Record<ForjaSeedKey, ForjaStandingRow> | null,
   seedKey: ForjaSeedKey | undefined
@@ -359,6 +462,14 @@ function resolveSeedSlot(
   return { kind: 'team', team: seeds[seedKey], seedLabel: seedKey };
 }
 
+/**
+ * Resolve a bracket slot from a playoff source into either a concrete team slot or a pending slot with a label.
+ *
+ * @param source - Playoff source (match id and whether to take the `winner` or `loser`); if undefined a pending slot labeled "A definir" is returned
+ * @param teams - List of teams to resolve a team id to a team object
+ * @param matches - Live match summaries used to locate the referenced playoff match
+ * @returns A `ForjaBracketSlot` that is `{ kind: 'team', team }` when the referenced match result resolves to a known team, or `{ kind: 'pending', label }` when unresolved (labels are "A definir" or "Vencedor <matchId>" / "Perdedor <matchId>")
+ */
 function resolveSourceSlot(
   source: ForjaBracketSource | undefined,
   teams: ForjaTeam[],
@@ -376,6 +487,16 @@ function resolveSourceSlot(
   return { kind: 'pending', label: `${sourceLabel} ${source.matchId}` };
 }
 
+/**
+ * Resolve the participant for a bracket definition slot ('A' or 'B').
+ *
+ * @param definition - The bracket match definition which may specify a fixed seed or a source dependency
+ * @param slot - Which side to resolve: `'A'` or `'B'`
+ * @param seeds - Mapping of seed keys to standings; may be `null` when seeds are not yet available
+ * @param teams - All known teams used to map resolved team IDs back to team objects
+ * @param matches - Live match summaries used to resolve source-based slots (winner/loser)
+ * @returns A `ForjaBracketSlot` representing either a resolved team entry or a pending placeholder label
+ */
 function resolveBracketSlot(
   definition: ForjaBracketDefinition,
   slot: 'A' | 'B',
@@ -393,10 +514,23 @@ function resolveBracketSlot(
     : resolveSourceSlot(definition.sourceB, teams, matches);
 }
 
+/**
+ * Checks whether a bracket slot is resolved to a team.
+ *
+ * @param slot - The bracket slot to inspect
+ * @returns `true` if the slot represents a resolved team, `false` otherwise.
+ */
 export function isForjaBracketSlotReady(slot: ForjaBracketSlot): slot is Extract<ForjaBracketSlot, { kind: 'team' }> {
   return slot.kind === 'team';
 }
 
+/**
+ * Assembles the full Forja playoff bracket state from the provided teams and live match summaries.
+ *
+ * @param teams - All tournament teams used to compute group standings and resolve seed assignments
+ * @param matches - Live match summaries used to compute group results, determine playoff match winners/losers, and locate existing playoff lobbies
+ * @returns The complete ForjaPlayoffBracketState, containing per-group standings, group completion info, qualified seeds (when available), the list of playoff matches with resolved slots and lobby info, and flags describing lobby/generation readiness
+ */
 export function buildForjaPlayoffBracket(
   teams: ForjaTeam[],
   matches: ForjaLiveMatchSummary[]

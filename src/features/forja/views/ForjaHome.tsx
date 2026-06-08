@@ -61,30 +61,71 @@ const PLAYOFF_FORMAT_LABEL: Record<string, string> = {
 const UPCOMING_MATCH_LIMIT = 6;
 const FORJA_PLAYOFF_RULES_COPY = 'Times do mesmo grupo ficam em lados opostos na chave principal do campeonato e só podem se reencontrar na Final. A disputa de 3º lugar pode reunir times do mesmo grupo dependendo dos resultados das semifinais.';
 
+/**
+ * Extracts a human-readable message from an error value.
+ *
+ * @param error - The value to extract a message from
+ * @returns `error.message` when `error` is an `Error`, `'Erro desconhecido.'` otherwise
+ */
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Erro desconhecido.';
 }
 
+/**
+ * Type guard that checks whether a string is a valid Forja match stage.
+ *
+ * @param value - The string to test
+ * @returns `true` if `value` is `'GROUP'`, `'PLAYOFFS_BO3'`, or `'PLAYOFFS_BO5'`, `false` otherwise.
+ */
 function isForjaMatchStage(value: string): value is ForjaMatchStage {
   return value === 'GROUP' || value === 'PLAYOFFS_BO3' || value === 'PLAYOFFS_BO5';
 }
 
+/**
+ * Determines whether a string is a valid Forja group identifier ('A'–'D').
+ *
+ * @param value - The string to test
+ * @returns `true` if `value` is one of `'A'`, `'B'`, `'C'`, or `'D'`, `false` otherwise.
+ */
 function isForjaGroupId(value: string): value is ForjaGroupId {
   return value === 'A' || value === 'B' || value === 'C' || value === 'D';
 }
 
+/**
+ * Determines whether a match is in a completed state.
+ *
+ * @returns `true` if the match's status is `'completed'` or `'finished'`, `false` otherwise.
+ */
 function isMatchCompleted(match: ForjaLiveMatchSummary | null | undefined): boolean {
   return match?.status === 'completed' || match?.status === 'finished';
 }
 
+/**
+ * Get the human-readable label for a bracket slot.
+ *
+ * @param slot - The bracket slot to obtain a label for
+ * @returns The team's name when the slot represents a team, otherwise the slot's configured label
+ */
 function getSlotLabel(slot: ForjaBracketSlot): string {
   return slot.kind === 'team' ? slot.team.team_name : slot.label;
 }
 
+/**
+ * Get the seed label for a bracket slot when it represents a team.
+ *
+ * @param slot - The bracket slot to read the seed from; may represent a team or a placeholder.
+ * @returns The slot's `seedLabel` when `slot.kind === 'team'` and a seed label exists, `null` otherwise.
+ */
 function getSlotSeed(slot: ForjaBracketSlot): string | null {
   return slot.kind === 'team' ? slot.seedLabel ?? null : null;
 }
 
+/**
+ * Get the display label for a match series (MD3 or MD5).
+ *
+ * @param seriesType - The series type, either `'BO3'` or `'BO5'`
+ * @returns `"MD5"` when `seriesType` is `"BO5"`, `"MD3"` otherwise.
+ */
 function getForjaSeriesDisplayLabel(seriesType: Extract<SeriesType, 'BO3' | 'BO5'>): string {
   return seriesType === 'BO5' ? 'MD5' : 'MD3';
 }
@@ -405,17 +446,11 @@ function MatchConfrontationCard({ lobby, isAdmin, onEdit, onDelete, teams, playe
 }
 
 /**
- * Renders a match countdown card showing stage, name, localized scheduled date/time, dynamic countdown or live/ongoing status, streamer and lobby links, and an optional admin edit control.
+ * Render a match countdown card that shows stage, name, localized scheduled date/time, a dynamic countdown or live/ongoing status, and streamer and lobby actions.
  *
- * Displays:
- * - Stage badge ("Fase de Grupos" or "Playoffs") and a live pill when the match status is `drafting`.
- * - Localized weekday and time label using the pt-BR locale.
- * - A dynamic countdown in the form "Começa em: Xd Yh Zm" while the match is in the future, switches to "AO VIVO" when `status === 'drafting'` or to "Em andamento" when the scheduled time has passed.
- * - Streamer link (prepends `https://` when the URL does not start with `http`) and a lobby link to `/lobby/{match.id}`.
- *
- * @param match - The upcoming match object containing id, name, stage, status, optional scheduledDate (string|Date|Firebase Timestamp), optional scheduledTime ("HH:MM"), and optional streamerUrl.
- * @param isAdmin - When true, shows an edit button that invokes `onEdit`.
- * @param onEdit - Callback invoked with the match when the admin edit button is clicked.
+ * @param match - The match summary used to display name, stage, status, scheduled date/time, and optional streamer URL.
+ * @param isAdmin - When true, shows an edit button for administrative editing.
+ * @param onEdit - Callback invoked with `match` when the admin edit button is clicked.
  * @returns The rendered match card element.
  */
 function MatchCountdownCard({ match, isAdmin, onEdit }: { match: ForjaLiveMatchSummary; isAdmin?: boolean; onEdit?: (m: ForjaLiveMatchSummary) => void }) {
@@ -529,6 +564,14 @@ function MatchCountdownCard({ match, isAdmin, onEdit }: { match: ForjaLiveMatchS
   );
 }
 
+/**
+ * Renders a playoff bracket slot row showing seed, team label, optional logo (with fallback) and score.
+ *
+ * @param slot - The bracket slot object (may represent a team slot or a pending/placeholder slot).
+ * @param score - The numeric score for this slot, or `null` when no score is available.
+ * @param isWinner - `true` if this slot is the match winner; otherwise `false`.
+ * @returns The JSX element for the bracket slot row.
+ */
 function PlayoffSlotRow({
   slot,
   score,
@@ -570,6 +613,13 @@ function PlayoffSlotRow({
   );
 }
 
+/**
+ * Render a playoff bracket match card showing team slots, match status, scores and available actions for admins.
+ *
+ * @param onCreateMatch - Callback invoked to create an official lobby for this bracket match when no lobby exists.
+ * @param onReportMatch - Callback invoked to report an existing lobby's result; receives the lobby summary.
+ * @returns A React element representing the playoff match card.
+ */
 function PlayoffMatchCard({
   match,
   isAdmin,
@@ -649,6 +699,20 @@ function PlayoffMatchCard({
   );
 }
 
+/**
+ * Renders the official FORJA playoffs panel including group completion status, admin controls and the bracket rounds.
+ *
+ * Displays overall progress (completed vs expected group matches), per-group completion chips, a "playoffs blocked"
+ * notice when not all groups are complete, and a column for each playoff round containing match cards.
+ *
+ * @param bracket - The computed playoff bracket structure (matches, standings and per-group completion).
+ * @param isAdmin - When true, shows admin actions (generate quarterfinals and per-match create/report controls).
+ * @param busyMatchId - Id of a match currently being processed or `'QUARTERFINALS'` when quarterfinal generation is in progress; used to disable buttons.
+ * @param onGenerateQuarterfinals - Callback invoked when the admin requests automatic quarterfinal generation.
+ * @param onCreateMatch - Callback invoked to create an official lobby for a specific bracket match.
+ * @param onReportMatch - Callback invoked to report/close an existing live match associated with a bracket match.
+ * @returns The playoffs panel JSX element.
+ */
 function PlayoffBracketPanel({
   bracket,
   isAdmin,

@@ -103,6 +103,16 @@ export function isOfficialForjaLobbyData(lobby: unknown): boolean {
     && (config.isOfficialForjaMatch === true || !!config.forjaTeamA);
 }
 
+/**
+ * Builds a ForjaLiveMatchSummary object from a lobby source.
+ *
+ * Produces a summary that maps lobby fields and nested config into a normalized match summary.
+ * Missing values are filled with sensible defaults: `name` -> "Partida", `status` -> "waiting",
+ * `scoreA`/`scoreB` -> 0, `stage` -> "GROUP", and `externalLink` -> "".
+ *
+ * @param lobby - Source lobby object containing `id`, optional `status`, scores and an optional `config` with scheduling and Forja-specific fields.
+ * @returns A ForjaLiveMatchSummary populated from the lobby and its config, including nested `config` fields such as teams, group/round/playoff identifiers, scheduling, and links.
+ */
 export function forjaLobbyToLiveMatchSummary(lobby: ForjaLobbySummarySource): ForjaLiveMatchSummary {
   const config = lobby.config ?? {};
   return {

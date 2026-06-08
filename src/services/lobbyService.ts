@@ -48,6 +48,13 @@ export function isLobbyEligibleForPublicList(data: {
   return !!(data.captain1 || data.captain2);
 }
 
+/**
+ * Create a LobbySummary from a normalized lobby document, filling defaults for missing fields and sanitizing timestamps.
+ *
+ * @param id - Firestore document id of the lobby
+ * @param normalized - Lobby object that has already been normalized/cleaned
+ * @returns The constructed LobbySummary with default values applied and timestamp fields sanitized
+ */
 export function lobbyDocToSummary(id: string, normalized: Lobby): LobbySummary {
   return sanitizeLobbySummary({
     id,
@@ -67,12 +74,23 @@ export function lobbyDocToSummary(id: string, normalized: Lobby): LobbySummary {
   });
 }
 
+/**
+ * Filter lobby summaries to those eligible for the public list and cap the result to the public page size.
+ *
+ * @returns An array of summaries that have at least one captain (`captain1` or `captain2`), limited to `PUBLIC_LOBBIES_PAGE_SIZE` entries.
+ */
 export function filterPublicSummaries(summaries: LobbySummary[]): LobbySummary[] {
   return summaries
     .filter((s) => !!(s.captain1 || s.captain2))
     .slice(0, PUBLIC_LOBBIES_PAGE_SIZE);
 }
 
+/**
+ * Orders lobby summaries by most recent activity, newest first.
+ *
+ * @param summaries - Array of lobby summaries to sort
+ * @returns The summaries ordered descending by `lastActivityAt` (falls back to `createdAt` when `lastActivityAt` is missing); most recent entries come first
+ */
 export function sortLobbySummaries(summaries: LobbySummary[]): LobbySummary[] {
   return [...summaries].sort((left, right) => {
     const leftTs = getMillis(left.lastActivityAt ?? left.createdAt ?? 0);
@@ -81,16 +99,36 @@ export function sortLobbySummaries(summaries: LobbySummary[]): LobbySummary[] {
   });
 }
 
+/**
+ * Insert or replace a lobby summary in an existing list, then sanitize, sort, and apply the public-page limit.
+ *
+ * @param summaries - Existing list of lobby summaries to update
+ * @param summary - Lobby summary to upsert (replaces any entry with the same `id`)
+ * @returns An array of sanitized `LobbySummary` objects sorted by most recent activity and trimmed to the public page size
+ */
 export function upsertLobbySummary(summaries: LobbySummary[], summary: LobbySummary): LobbySummary[] {
   const next = sanitizeLobbySummaryList(summaries.filter((item) => item.id !== summary.id));
   next.push(sanitizeLobbySummary(summary));
   return filterPublicSummaries(sortLobbySummaries(next));
 }
 
+/**
+ * Remove a lobby summary by id and return a sanitized, sorted, and paginated summaries list.
+ *
+ * @param summaries - The existing list of lobby summaries to update
+ * @param lobbyId - The id of the lobby summary to remove
+ * @returns An array of lobby summaries with the specified lobby removed; summaries are sanitized, sorted by recent activity (most recent first), and truncated to the public page size
+ */
 export function removeLobbySummary(summaries: LobbySummary[], lobbyId: string): LobbySummary[] {
   return filterPublicSummaries(sortLobbySummaries(sanitizeLobbySummaryList(summaries.filter((item) => item.id !== lobbyId))));
 }
 
+/**
+ * Determines whether a lobby corresponds to an official Forja live match.
+ *
+ * @param lobby - The lobby object to evaluate
+ * @returns `true` if the lobby represents an official Forja lobby, `false` otherwise.
+ */
 function isOfficialForjaLobby(lobby: Lobby): boolean {
   return isOfficialForjaLobbyData(lobby);
 }
@@ -99,6 +137,13 @@ export function lobbyToForjaLiveMatchSummary(lobby: Lobby): ForjaLiveMatchSummar
   return forjaLobbyToLiveMatchSummary(lobby);
 }
 
+/**
+ * Insert or replace a Forja live-match summary in a list, sanitize timestamps, and return the sorted result.
+ *
+ * @param matches - Existing list of Forja live-match summaries
+ * @param match - The Forja live-match summary to upsert
+ * @returns A new array of sanitized Forja live-match summaries with `match` inserted or replaced and sorted via `sortForjaLiveMatches`
+ */
 export function upsertForjaLiveMatchSummary(
   matches: ForjaLiveMatchSummary[],
   match: ForjaLiveMatchSummary
@@ -108,6 +153,15 @@ export function upsertForjaLiveMatchSummary(
   return sortForjaLiveMatches(next);
 }
 
+/**
+ * Produce a new list of Forja live-match summaries with the entry for the specified lobby removed.
+ *
+ * The remaining summaries are sanitized to remove Firestore sentinel values and stabilize timestamp fields.
+ *
+ * @param matches - The array of Forja live-match summaries to filter.
+ * @param lobbyId - The lobby id whose summary should be removed.
+ * @returns The filtered and sanitized array of Forja live-match summaries.
+ */
 export function removeForjaLiveMatchSummary(matches: ForjaLiveMatchSummary[], lobbyId: string): ForjaLiveMatchSummary[] {
   return sanitizeForjaLiveMatchSummaryList(matches.filter((item) => item.id !== lobbyId));
 }
@@ -122,12 +176,24 @@ export const isSoloAdminLobby = (lobby: { captain1?: string | null; captain2?: s
 const isFirestoreFieldValueSentinel = (value: unknown): boolean =>
   !!value && typeof value === 'object' && '_methodName' in value;
 
+/**
+ * Convert missing or Firestore sentinel timestamp values into `null` for public-facing data.
+ *
+ * @param value - A timestamp-like value or other field that may be a Firestore FieldValue sentinel
+ * @returns `null` when `value` is `null`, `undefined`, or a Firestore FieldValue sentinel; otherwise returns `value`
+ */
 function sanitizePublicTimestamp<T>(value: T | null | undefined): T | null {
   if (value === null || value === undefined) return null;
   if (isFirestoreFieldValueSentinel(value)) return null;
   return value;
 }
 
+/**
+ * Produce a copy of a lobby summary with its public timestamp fields sanitized.
+ *
+ * @param summary - The lobby summary to sanitize
+ * @returns The input `LobbySummary` where `lastActivityAt` and `createdAt` are `null` when missing or when they contain Firestore sentinel values; otherwise those fields are preserved
+ */
 function sanitizeLobbySummary(summary: LobbySummary): LobbySummary {
   return {
     ...summary,
@@ -136,10 +202,22 @@ function sanitizeLobbySummary(summary: LobbySummary): LobbySummary {
   };
 }
 
+/**
+ * Produce a new list of lobby summaries with Firestore sentinel timestamp values sanitized.
+ *
+ * @param summaries - The array of `LobbySummary` objects to sanitize.
+ * @returns A new array where each summary has been sanitized (timestamp fields such as `lastActivityAt` and `createdAt` replaced or nullified when they were Firestore sentinel values).
+ */
 function sanitizeLobbySummaryList(summaries: LobbySummary[]): LobbySummary[] {
   return summaries.map((summary) => sanitizeLobbySummary(summary));
 }
 
+/**
+ * Create a copy of a Forja live-match summary with Firestore sentinel timestamps sanitized.
+ *
+ * @param match - The Forja live-match summary to sanitize
+ * @returns The sanitized `ForjaLiveMatchSummary` where top-level `scheduledDate` and `config.scheduledDate` are set to `undefined` if they were Firestore sentinel values or null/undefined, otherwise preserved
+ */
 function sanitizeForjaLiveMatchSummary(match: ForjaLiveMatchSummary): ForjaLiveMatchSummary {
   return {
     ...match,
@@ -151,6 +229,15 @@ function sanitizeForjaLiveMatchSummary(match: ForjaLiveMatchSummary): ForjaLiveM
   };
 }
 
+/**
+ * Produce a sanitized copy of a list of Forja live-match summaries.
+ *
+ * Each entry is processed to replace Firestore sentinel values in its `scheduledDate`
+ * fields (top-level and inside `config`) with `null` while preserving other fields and order.
+ *
+ * @param matches - The list of Forja live-match summaries to sanitize
+ * @returns The sanitized list of Forja live-match summaries
+ */
 function sanitizeForjaLiveMatchSummaryList(matches: ForjaLiveMatchSummary[]): ForjaLiveMatchSummary[] {
   return matches.map((match) => sanitizeForjaLiveMatchSummary(match));
 }

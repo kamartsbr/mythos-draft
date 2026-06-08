@@ -6,6 +6,13 @@ type Props = {
   onReload: () => void;
 };
 
+/**
+ * Render a fixed top-center status banner that prompts the user to reload when a new version is available.
+ *
+ * @param open - Controls whether the banner is visible.
+ * @param onReload - Callback invoked when the user activates the update button.
+ * @returns The banner element; renders no visible banner when `open` is `false`.
+ */
 export function VersionUpdateBanner({ open, onReload }: Props) {
   return (
     <AnimatePresence>

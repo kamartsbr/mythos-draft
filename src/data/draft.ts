@@ -51,6 +51,12 @@ const isRealRosterName = (value: unknown): boolean => {
   return !GENERIC_ROSTER_NAME_PATTERNS.some((pattern) => pattern.test(normalized));
 };
 
+/**
+ * Detects whether a preset string corresponds to an MCL-style preset.
+ *
+ * @param preset - Preset identifier (may be null or undefined)
+ * @returns `true` if `preset` equals `MCL`, `FORJA`, `MCL_PLAYOFFS`, or `MCL_TIEBREAKER` (case-insensitive); `false` otherwise.
+ */
 export function isMclStylePreset(preset?: string | null): boolean {
   const normalized = String(preset ?? '').toUpperCase();
   return normalized === 'MCL' || normalized === 'FORJA' || normalized === 'MCL_PLAYOFFS' || normalized === 'MCL_TIEBREAKER';
@@ -74,6 +80,16 @@ const resolveHydratedPlayerName = (
   return isRealRosterName(existing) ? existing : '';
 };
 
+/**
+ * Hydrates MCL draft picks for a given game with roster-derived player names, preserving valid existing names when appropriate.
+ *
+ * @param gameNumber - Game number used to determine pick and team ordering
+ * @param teamAPlayers - Optional roster for Team A used to source player names (ordered by team slot)
+ * @param teamBPlayers - Optional roster for Team B used to source player names (ordered by team slot)
+ * @param options.turnOrder - Optional draft turn order that influences whether the "Game 2" MCL order is used
+ * @param options.existingPicks - Optional array of prior picks whose `playerName` values may be preserved if they are considered real
+ * @returns An array of `PickEntry` objects where each entry's `playerName` is set from the corresponding roster name when available and considered real; otherwise an existing real name is preserved, or the name is set to an empty string
+ */
 export function hydrateMclPicksWithRosterNames(
   gameNumber: number,
   teamAPlayers?: TeamPlayer[] | null,

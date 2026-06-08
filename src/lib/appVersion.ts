@@ -8,6 +8,12 @@ export type AppVersionSnapshot = {
   buildStamp?: string;
 };
 
+/**
+ * Validates and normalizes an unknown value into an AppVersionSnapshot.
+ *
+ * @param payload - The raw value (typically parsed JSON) expected to contain a string `version` and optional `appVersion` and `buildStamp` fields.
+ * @returns An `AppVersionSnapshot` with trimmed string fields when `version` is a non-empty string, `null` otherwise.
+ */
 export function parseAppVersionSnapshot(payload: unknown): AppVersionSnapshot | null {
   if (!payload || typeof payload !== 'object') return null;
 
@@ -22,10 +28,23 @@ export function parseAppVersionSnapshot(payload: unknown): AppVersionSnapshot | 
   };
 }
 
+/**
+ * Determines whether the remote app version differs from the current version.
+ *
+ * @returns `true` if the versions differ, `false` otherwise.
+ */
 export function isAppVersionUpdate(currentVersion: string, remoteVersion: string): boolean {
   return currentVersion !== remoteVersion;
 }
 
+/**
+ * Fetches the remote app version from the VERSION_ENDPOINT.
+ *
+ * Attempts to retrieve and parse the version snapshot; returns the snapshot's `version` when present and valid, or `null` on network errors, non-OK responses, or invalid payloads.
+ *
+ * @param fetchImpl - Optional fetch implementation to use instead of the global `fetch` (useful for testing or alternate runtimes)
+ * @returns The remote version string if available, `null` otherwise
+ */
 export async function readRemoteAppVersion(fetchImpl: typeof fetch = fetch): Promise<string | null> {
   try {
     const response = await fetchImpl(VERSION_ENDPOINT, { cache: 'no-store' });

@@ -6,6 +6,13 @@ import {
   readRemoteAppVersion,
 } from '../lib/appVersion';
 
+/**
+ * Detects when a newer application build is available and provides an action to reload the page.
+ *
+ * @returns An object containing:
+ * - `updateAvailable`: `true` if a remote app build is newer than the current build, `false` otherwise.
+ * - `reloadApp`: a function that reloads the current page when invoked.
+ */
 export function useAppVersion() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
 

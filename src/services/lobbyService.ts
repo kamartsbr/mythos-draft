@@ -1921,8 +1921,8 @@ export const lobbyService = {
 
         const updatedPicks = hydrateMclPicksWithRosterNames(
           lobby.currentGame || 1,
-          lobby.teamAPlayers,
-          lobby.teamBPlayers,
+          mockPlayersA,
+          mockPlayersB,
           {
             turnOrder: lobby.turnOrder,
             existingPicks: lobby.picks,
@@ -2064,8 +2064,8 @@ export const lobbyService = {
 
         const updatedPicks = hydrateMclPicksWithRosterNames(
           lobby.currentGame || 1,
-          lobby.teamAPlayers,
-          lobby.teamBPlayers,
+          mockPlayersA,
+          mockPlayersB,
           {
             turnOrder: lobby.turnOrder,
             existingPicks: lobby.picks,

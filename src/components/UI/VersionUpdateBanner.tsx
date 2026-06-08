@@ -39,6 +39,7 @@ export function VersionUpdateBanner({ open, onReload }: Props) {
             <button
               type="button"
               onClick={onReload}
+              data-testid="version-update-reload-button"
               className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-950 transition-colors hover:bg-amber-400"
             >
               <RotateCcw className="h-4 w-4" />

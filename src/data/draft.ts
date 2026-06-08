@@ -45,7 +45,7 @@ const GENERIC_ROSTER_NAME_PATTERNS = [
 
 const normalizeRosterName = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
 
-const isRealRosterName = (value: unknown): boolean => {
+export const isRealRosterName = (value: unknown): boolean => {
   const normalized = normalizeRosterName(value);
   if (!normalized) return false;
   return !GENERIC_ROSTER_NAME_PATTERNS.some((pattern) => pattern.test(normalized));

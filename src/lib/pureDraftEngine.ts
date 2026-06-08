@@ -1,5 +1,5 @@
 import { LobbyConfig, DraftTurn, Lobby, DraftActionOptions } from '../types';
-import { getMCLTeamOrder, hydrateMclPicksWithRosterNames, isMclStylePreset, shouldUseGame2MclOrder } from '../data/draft';
+import { getMCLTeamOrder, hydrateMclPicksWithRosterNames, isMclStylePreset, isRealRosterName, shouldUseGame2MclOrder } from '../data/draft';
 import { MAPS, MAPS_BY_ID } from '../data/maps';
 import { MAJOR_GODS, MAJOR_GODS_BY_ID } from '../data/gods';
 import { phaseAfterDraftQueue } from '../domain/draft/rules/phaseTransitions';
@@ -639,13 +639,8 @@ export function processTurnAction(
               const rosterIndex = teamOrder.indexOf(currentPick.playerId);
               const rosterName = rosterIndex !== -1 ? teamPlayers?.[rosterIndex]?.name?.trim() : '';
               const existingPickName = currentPick.playerName?.trim() || '';
-              const isMeaningfulRosterName = (value?: string | null) => {
-                const normalized = value?.trim() || '';
-                return Boolean(normalized) && !/^(host|guest|team\s*a|team\s*b|time\s*a|time\s*b|bot\s*a|bot\s*b|player\s*\d+|p\d+|captain\s*\d+)$/i.test(normalized);
-              };
-
               if (!playerName || !playerName.trim()) {
-                playerName = isMeaningfulRosterName(rosterName) ? rosterName : (isMeaningfulRosterName(existingPickName) ? existingPickName : '');
+                playerName = isRealRosterName(rosterName) ? rosterName : (isRealRosterName(existingPickName) ? existingPickName : '');
               }
             } else if (!playerName || !playerName.trim()) {
               const teamPlayers = executionTeam === 'A' ? nextLobby.teamAPlayers : nextLobby.teamBPlayers;

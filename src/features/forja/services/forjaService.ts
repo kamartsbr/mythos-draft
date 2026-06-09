@@ -18,7 +18,7 @@ import {
   ForjaRole, ForjaTournamentConfig, ForjaRulesBlock, ForjaMapPool,
   ForjaLiveMatchSummary, ForjaLiveMatchesSummaryDoc,
 } from '../types';
-import { FORJA_MAP_POOL } from '../../../data/maps';
+import { FORJA_MAP_POOL, MAPS } from '../../../data/maps';
 import { fetchAomProfileForPlayer, type AomApiResult } from './aomProfileService';
 import { getDiscordDefaultAvatarUrl } from '../utils/avatar';
 import { forjaLobbyToLiveMatchSummary, isOfficialForjaLobbyData, sortForjaLiveMatches } from '../forjaMatchSummary';
@@ -1421,7 +1421,7 @@ export async function movePlayerToPool(
 
 const MAP_POOL_DOC_ID = 'map_pool';
 const MIN_POOL_SIZE   = 8;
-const MAX_POOL_SIZE   = 15;
+const MAX_POOL_SIZE   = MAPS.length;
 
 /**
  * Subscription em tempo real ao documento da pool ativa de mapas.
@@ -1472,7 +1472,7 @@ export async function saveForjaMapPool(
   updatedBy: string
 ): Promise<void> {
   if (poolSize < MIN_POOL_SIZE || poolSize > MAX_POOL_SIZE) {
-    throw new Error(`Tamanho da pool deve ser entre ${MIN_POOL_SIZE} e ${MAX_POOL_SIZE}.`);
+    throw new Error(`Tamanho da pool deve ser entre ${MIN_POOL_SIZE} e ${MAX_POOL_SIZE} mapas.`);
   }
   if (activeMapIds.length > poolSize) {
     throw new Error(`A pool tem ${activeMapIds.length} mapas, mas o limite é ${poolSize}.`);

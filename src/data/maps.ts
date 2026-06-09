@@ -83,8 +83,10 @@ export const MAPS: MapInfo[] = [
   { id: 'midgard', name: 'Midgard', image: 'https://static.wikia.nocookie.net/ageofempires/images/f/ff/AoMR_Midgard_map_icon.png/revision/latest?cb=20240920075322', isRanked: true, positions: DEFAULT_POSITIONS },
   { id: 'mirage', name: 'Mirage', image: 'https://static.wikia.nocookie.net/ageofempires/images/a/af/AoMR_Mirage_map_icon.png/revision/latest?cb=20240721082851', isRanked: true, positions: DEFAULT_POSITIONS },
   { id: 'nile_shallows', name: 'Nile Shallows', image: 'https://static.wikia.nocookie.net/ageofempires/images/8/82/AoMR_Nile_Shallows_map_icon.png/revision/latest?cb=20240716202129', isRanked: true, positions: DEFAULT_POSITIONS },
+  { id: 'nomad', name: 'Nomade', image: 'https://static.wikia.nocookie.net/ageofempires/images/6/68/AoMR_Nomad_map_icon.png/revision/latest?cb=20240920075324', isRanked: true, positions: DEFAULT_POSITIONS },
   { id: 'oasis', name: 'Oasis', image: 'https://static.wikia.nocookie.net/ageofempires/images/3/30/AoMR_Oasis_map_icon.png/revision/latest?cb=20240920075325', isRanked: true, positions: DEFAULT_POSITIONS },
   { id: 'okuchichibu', name: 'Okuchichibu', image: 'https://static.wikia.nocookie.net/ageofempires/images/6/60/Okuchichibu_icon_AoMR.png/revision/latest?cb=20251004175037', isRanked: true, positions: DEFAULT_POSITIONS },
+  { id: 'jotunheim', name: 'Jotunheim', image: 'https://static.wikia.nocookie.net/ageofempires/images/8/8a/AoMR_Jotunheim_map_icon.png/revision/latest?cb=20240920074954', isRanked: true, positions: DEFAULT_POSITIONS },
   { id: 'qinghai_lake', name: 'Qinghai Lake', image: 'https://static.wikia.nocookie.net/ageofempires/images/8/85/AoMR_Qinghai_Lake.png/revision/latest?cb=20250303105325', isRanked: true, positions: DEFAULT_POSITIONS },
   { id: 'savannah', name: 'Savannah', image: 'https://static.wikia.nocookie.net/ageofempires/images/4/49/AoMR_Savannah_map_icon.png/revision/latest?cb=20240920075331', isRanked: true, positions: DEFAULT_POSITIONS },
   { id: 'silk_road', name: 'Silk Road', image: 'https://static.wikia.nocookie.net/ageofempires/images/7/7e/AoMR_Silk_Road_map.png/revision/latest?cb=20250303105325', isRanked: true, positions: DEFAULT_POSITIONS },
@@ -127,6 +129,23 @@ export const FORJA_MAP_POOL = [
   'anatolia', 'elysium', 'ghost_lake', 'gold_rush', 'marsh', 
   'mediterranean', 'megalopolis', 'oasis', 'tundra', 'valley_of_kings',
   'giza', 'steppe', 'alfheim', 'savannah'
+];
+
+export const FORJA_PLAYOFFS_EXTRA_MAPS = [
+  'arena',
+  'mirage',
+  'silk_road',
+  'team_migration',
+  'obsidian_ridge',
+  'blood_river_crossing',
+  'nile_shallows',
+  'nomad',
+  'erebus',
+  'jotunheim',
+];
+
+export const FORJA_PLAYOFFS_MAP_POOL = [
+  ...new Set([...FORJA_MAP_POOL, ...FORJA_PLAYOFFS_EXTRA_MAPS]),
 ];
 
 export const RANKED_MAP_POOL = [

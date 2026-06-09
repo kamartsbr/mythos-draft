@@ -332,6 +332,26 @@ export function useDraft(
         if (currentTurn.action === 'PICK' || currentTurn.action === 'BAN') {
           // ── FORJA: Sorteio do Mapa 3 via pool cacheada (Cold Fetch) ───────────
           if (
+            lobby.config.isCustomDraft &&
+            lobby.config.hasMap3RandomRoll &&
+            lobby.config.preset === 'FORJA' &&
+            ((lobby.config.seriesType === 'BO3' && lobby.currentGame === 3) ||
+              (lobby.config.seriesType === 'BO5' && lobby.currentGame === 5))
+          ) {
+            const allowedMaps = Array.isArray(lobby.config.allowedMaps) && lobby.config.allowedMaps.length > 0
+              ? lobby.config.allowedMaps
+              : MAPS.map(m => m.id);
+            const available = allowedMaps.filter(id =>
+              !mapBans.includes(id) &&
+              !seriesMaps.includes(id)
+            );
+            if (available.length > 0) {
+              const randomId = available[Math.floor(Math.random() * available.length)];
+              handleAction(randomId, undefined, undefined, { force: true });
+            }
+            return;
+          }
+          if (
             lobby.config.hasMap3RandomRoll &&
             lobby.currentGame === 3 &&
             lobby.config.preset === 'FORJA'

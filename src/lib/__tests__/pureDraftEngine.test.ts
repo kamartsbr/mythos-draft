@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { calculateNextTurnOrder, processTurnAction, processReportAction } from '../pureDraftEngine';
 import { getMCLPicks, hydrateMclPicksWithRosterNames, isMclStylePreset } from '../../data/draft';
+import { FORJA_MAP_POOL, FORJA_PLAYOFFS_EXTRA_MAPS, FORJA_PLAYOFFS_MAP_POOL } from '../../data/maps';
 import { LobbyConfig, Lobby } from '../../types';
 
 const createConfig = (overrides: Partial<LobbyConfig>): LobbyConfig => ({
@@ -286,6 +287,77 @@ describe('pureDraftEngine > calculateNextTurnOrder', () => {
     const { godOrder } = calculateNextTurnOrder(config, 1, null);
     const bans = godOrder.filter(t => t.action === 'BAN');
     expect(bans).toHaveLength(2);
+  });
+
+  it('Forja Group BO3: keeps group-stage map order and does not force per-map bans', () => {
+    const config = createConfig({
+      preset: 'FORJA',
+      tournamentStage: 'GROUP',
+      seriesType: 'BO3',
+      customGameCount: 3,
+      hasPerMapBans: false,
+    });
+
+    expect(calculateNextTurnOrder(config, 1, null).mapOrder[0]).toMatchObject({ player: 'A', action: 'PICK', target: 'MAP' });
+    expect(calculateNextTurnOrder(config, 2, 'A').mapOrder[0]).toMatchObject({ player: 'B', action: 'PICK', target: 'MAP' });
+    expect(calculateNextTurnOrder(config, 3, 'A').mapOrder[0]).toMatchObject({ player: 'ADMIN', action: 'PICK', target: 'MAP' });
+    expect(calculateNextTurnOrder(config, 1, null).godOrder.filter(turn => turn.action === 'BAN')).toHaveLength(0);
+  });
+
+  it('Forja Playoffs BO3: Game 2 stays with Team B map pick and Game 3 is ADMIN random', () => {
+    const config = createConfig({
+      preset: 'FORJA',
+      tournamentStage: 'PLAYOFFS_BO3',
+      seriesType: 'BO3',
+      customGameCount: 3,
+      hasPerMapBans: true,
+    });
+
+    const game1 = calculateNextTurnOrder(config, 1, null);
+    const game2AfterAWin = calculateNextTurnOrder(config, 2, 'A');
+    const game2AfterBWin = calculateNextTurnOrder(config, 2, 'B');
+    const game3 = calculateNextTurnOrder(config, 3, 'A');
+
+    expect(game1.mapOrder[0]).toMatchObject({ player: 'A', action: 'PICK', target: 'MAP' });
+    expect(game2AfterAWin.mapOrder[0]).toMatchObject({ player: 'B', action: 'PICK', target: 'MAP' });
+    expect(game2AfterBWin.mapOrder[0]).toMatchObject({ player: 'B', action: 'PICK', target: 'MAP' });
+    expect(game3.mapOrder[0]).toMatchObject({ player: 'ADMIN', action: 'PICK', target: 'MAP' });
+    expect(game1.godOrder.slice(0, 3).map(turnSignature)).toEqual([
+      { player: 'A', action: 'BAN', target: 'GOD' },
+      { player: 'B', action: 'BAN', target: 'GOD' },
+      { player: 'A', action: 'PICK', target: 'GOD' },
+    ]);
+  });
+
+  it('Forja Playoffs BO5: loser picks Games 3 and 4, final map is ADMIN random', () => {
+    const config = createConfig({
+      preset: 'FORJA',
+      tournamentStage: 'PLAYOFFS_BO5',
+      seriesType: 'BO5',
+      customGameCount: 5,
+      hasPerMapBans: true,
+    });
+
+    expect(calculateNextTurnOrder(config, 1, null).mapOrder[0]).toMatchObject({ player: 'A' });
+    expect(calculateNextTurnOrder(config, 2, 'A').mapOrder[0]).toMatchObject({ player: 'B' });
+    expect(calculateNextTurnOrder(config, 3, 'A').mapOrder[0]).toMatchObject({ player: 'B' });
+    expect(calculateNextTurnOrder(config, 3, 'B').mapOrder[0]).toMatchObject({ player: 'A' });
+    expect(calculateNextTurnOrder(config, 4, 'A').mapOrder[0]).toMatchObject({ player: 'B' });
+    expect(calculateNextTurnOrder(config, 4, 'B').mapOrder[0]).toMatchObject({ player: 'A' });
+    expect(calculateNextTurnOrder(config, 5, 'A').mapOrder[0]).toMatchObject({ player: 'ADMIN' });
+
+    expect(calculateNextTurnOrder(config, 3, 'A').godOrder[0]).toMatchObject({ player: 'B', action: 'BAN' });
+    expect(calculateNextTurnOrder(config, 3, 'B').godOrder[0]).toMatchObject({ player: 'A', action: 'BAN' });
+  });
+
+  it('FORJA_PLAYOFFS_MAP_POOL includes groups pool, extra playoff maps, and no duplicates', () => {
+    FORJA_MAP_POOL.forEach((mapId) => {
+      expect(FORJA_PLAYOFFS_MAP_POOL).toContain(mapId);
+    });
+    FORJA_PLAYOFFS_EXTRA_MAPS.forEach((mapId) => {
+      expect(FORJA_PLAYOFFS_MAP_POOL).toContain(mapId);
+    });
+    expect(new Set(FORJA_PLAYOFFS_MAP_POOL).size).toBe(FORJA_PLAYOFFS_MAP_POOL.length);
   });
 
   it('unknown/undefined tournamentStage does NOT accidentally enable per-map bans', () => {

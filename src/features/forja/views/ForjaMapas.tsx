@@ -4,7 +4,7 @@
  *
  *  Público: escuta a pool ativa no Firestore em tempo real.
  *  Admin:   painel de gestão com grid de todos os mapas disponíveis,
- *           toggle visual, controle de tamanho (8–15) e botão Salvar.
+ *           toggle visual, controle de tamanho (8 até o total de mapas) e botão Salvar.
  * ============================================================
  */
 import React, { useState, useEffect } from 'react';

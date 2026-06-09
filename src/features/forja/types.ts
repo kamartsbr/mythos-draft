@@ -204,7 +204,7 @@ export interface ForjaTournamentConfig {
 export interface ForjaMapPool {
   /** IDs dos mapas na pool ativa (subset de MAPS[]) */
   active_map_ids: string[];
-  /** Tamanho máximo da pool (8–15) */
+  /** Tamanho máximo da pool (8 até o total de mapas cadastrados) */
   pool_size: number;
   updated_at?: FirestoreTimestamp;
   updated_by?: string;

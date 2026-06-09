@@ -9,6 +9,8 @@ export function isForjaPlayoffStage(stage?: string | null): boolean {
 
   return [
     'PLAYOFFS',
+    'PLAYOFFS_BO3',
+    'PLAYOFFS_BO5',
     'PLAYOFF',
     'QUARTERFINAL',
     'QUARTER_FINAL',
@@ -79,9 +81,29 @@ export function calculateNextTurnOrder(
 
   const mapOrder: DraftTurn[] = [];
   const godOrder: DraftTurn[] = [];
+  const isForjaPlayoffs = cfg.preset === 'FORJA' && isForjaPlayoffStage(cfg.tournamentStage);
+  const forjaPlayoffGameCount = cfg.seriesType === 'BO5'
+    ? 5
+    : cfg.seriesType === 'BO3'
+      ? 3
+      : (cfg.customGameCount || 3);
 
   // 1. Map Draft Turn Order
-  if (cfg.preset === 'MCL' || cfg.preset === 'FORJA') {
+  if (isForjaPlayoffs) {
+    const isFinalGame = gameNumber === forjaPlayoffGameCount;
+
+    if (gameNumber === 1) {
+      mapOrder.push({ player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
+    } else if (gameNumber === 2) {
+      mapOrder.push({ player: 'B', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
+    } else if (isFinalGame) {
+      mapOrder.push({ player: 'ADMIN', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
+    } else {
+      // Safe fallback for inconsistent playoff state: missing winner still yields Team B next picker.
+      const mapPicker: 'A' | 'B' = lastWinner === 'B' ? 'A' : 'B';
+      mapOrder.push({ player: mapPicker, action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
+    }
+  } else if (cfg.preset === 'MCL' || cfg.preset === 'FORJA') {
     if (gameNumber === 1) {
       mapOrder.push({ player: 'A', action: 'PICK', target: 'MAP', modifier: 'GLOBAL', execution: 'NORMAL' });
     } else if (gameNumber === 2) {
@@ -180,6 +202,8 @@ export function calculateNextTurnOrder(
   const usesTiebreakerParityPriority = cfg.preset === 'MCL_TIEBREAKER';
   const usesLoserPriority = cfg.preset === 'MCL_PLAYOFFS';
   const startsWithB =
+    (isForjaPlayoffs && gameNumber === 2) ||
+    (isForjaPlayoffs && gameNumber > 2 && lastWinner !== 'B') ||
     (usesFixedMclPriority && gameNumber === 2) ||
     (usesFixedMclPriority && gameNumber > 2 && lastWinner === 'A') ||
     (usesTiebreakerParityPriority && gameNumber % 2 === 0) ||

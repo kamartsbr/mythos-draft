@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { calculateNextTurnOrder, processTurnAction, processReportAction } from '../pureDraftEngine';
+import { getMCLPicks, hydrateMclPicksWithRosterNames, isMclStylePreset } from '../../data/draft';
 import { LobbyConfig, Lobby } from '../../types';
 
 const createConfig = (overrides: Partial<LobbyConfig>): LobbyConfig => ({
@@ -30,6 +31,12 @@ const turnSignature = (turn: ReturnType<typeof calculateNextTurnOrder>['godOrder
   action: turn.action,
   target: turn.target,
 });
+
+const buildRoster = (prefix: string) => [
+  { name: `${prefix} 1`, position: 0 },
+  { name: `${prefix} 2`, position: 1 },
+  { name: `${prefix} 3`, position: 2 },
+];
 
 describe('pureDraftEngine > calculateNextTurnOrder', () => {
   // Scenario A: Preset MCL or FORJA, Game 1
@@ -598,6 +605,111 @@ describe('pureDraftEngine > processTurnAction', () => {
     expect(updated.replayLog).toHaveLength(1);
     expect(updated.replayLog[0].isRandom).toBe(true);
     expect(updated.replayLog[0].action).toBe('BAN');
+  });
+
+  it('hydrates MCL_PLAYOFFS Game 1 roster names before the first god pick and preserves them through timeout resolution', () => {
+    const config: LobbyConfig = createConfig({
+      preset: 'MCL_PLAYOFFS',
+      teamSize: 3,
+      hasBans: false,
+      hasPerMapBans: false,
+      seriesType: 'BO5',
+      pickType: 'alternated',
+      allowedMaps: ['ghost_lake', 'oasis', 'marsh'],
+      allowedPantheons: ['greek', 'egyptian', 'norse'],
+    });
+    const turnOrder = calculateNextTurnOrder(config, 1, null);
+    const lobby: Lobby = {
+      ...createBaseLobby('drafting'),
+      config,
+      phase: 'map_pick',
+      turn: 0,
+      turnOrder: [...turnOrder.mapOrder, ...turnOrder.godOrder],
+      selectedMap: null,
+      seriesMaps: ['', '', '', '', ''],
+      picks: getMCLPicks(1),
+      teamAPlayers: buildRoster('Alpha'),
+      teamBPlayers: buildRoster('Beta'),
+    };
+
+    const afterMapPick = processTurnAction(lobby, 'ghost_lake', 'A', undefined, undefined, undefined, 1000);
+
+    expect(afterMapPick.selectedMap).toBe('ghost_lake');
+    expect(afterMapPick.phase).toBe('god_pick');
+    expect(afterMapPick.picks.map((pick) => pick.playerId)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(afterMapPick.picks.filter((pick) => pick.team === 'A').map((pick) => pick.playerId)).toEqual([1, 4, 5]);
+    expect(afterMapPick.picks.filter((pick) => pick.team === 'B').map((pick) => pick.playerId)).toEqual([2, 3, 6]);
+    expect(afterMapPick.picks.find((pick) => pick.playerId === 1)?.playerName).toBe('Alpha 1');
+    expect(afterMapPick.picks.find((pick) => pick.playerId === 4)?.playerName).toBe('Alpha 2');
+    expect(afterMapPick.picks.find((pick) => pick.playerId === 5)?.playerName).toBe('Alpha 3');
+    expect(afterMapPick.picks.find((pick) => pick.playerId === 2)?.playerName).toBe('Beta 1');
+    expect(afterMapPick.picks.find((pick) => pick.playerId === 3)?.playerName).toBe('Beta 2');
+    expect(afterMapPick.picks.find((pick) => pick.playerId === 6)?.playerName).toBe('Beta 3');
+
+    const afterTimeout = processTurnAction(
+      afterMapPick,
+      null as any,
+      'A',
+      undefined,
+      undefined,
+      { isTimeoutAutoResolve: true },
+      2000
+    );
+
+    expect(afterTimeout.picks.find((pick) => pick.playerId === 1)?.playerName).toBe('Alpha 1');
+    expect(afterTimeout.picks.find((pick) => pick.playerId === 1)?.godId).toBeDefined();
+    expect(afterTimeout.replayLog[afterTimeout.replayLog.length - 1]).toMatchObject({
+      playerId: 1,
+      target: 'GOD',
+      isRandom: true,
+    });
+  });
+});
+
+describe('MCL style pick hydration helpers', () => {
+  it.each(['MCL', 'FORJA', 'MCL_PLAYOFFS', 'MCL_TIEBREAKER'] as const)(
+    '%s hydrates roster names without changing the intended Game 2 slot order',
+    (preset) => {
+      expect(isMclStylePreset(preset)).toBe(true);
+      const hydrated = hydrateMclPicksWithRosterNames(
+        2,
+        buildRoster('Alpha'),
+        buildRoster('Beta')
+      );
+
+      expect(hydrated.filter((pick) => pick.team === 'A').map((pick) => pick.playerId)).toEqual([4, 1, 5]);
+      expect(hydrated.filter((pick) => pick.team === 'B').map((pick) => pick.playerId)).toEqual([3, 2, 6]);
+      expect(hydrated.find((pick) => pick.playerId === 4)?.playerName).toBe('Alpha 1');
+      expect(hydrated.find((pick) => pick.playerId === 1)?.playerName).toBe('Alpha 2');
+      expect(hydrated.find((pick) => pick.playerId === 5)?.playerName).toBe('Alpha 3');
+      expect(hydrated.find((pick) => pick.playerId === 3)?.playerName).toBe('Beta 1');
+      expect(hydrated.find((pick) => pick.playerId === 2)?.playerName).toBe('Beta 2');
+      expect(hydrated.find((pick) => pick.playerId === 6)?.playerName).toBe('Beta 3');
+    }
+  );
+
+  it('preserves existing names when roster data is missing and does not invent placeholders', () => {
+    const existingPicks = getMCLPicks(1).map((pick, index) => ({
+      ...pick,
+      playerName: `Legacy ${index + 1}`,
+    }));
+
+    const preserved = hydrateMclPicksWithRosterNames(1, undefined, undefined, {
+      existingPicks,
+    });
+
+    expect(preserved.map((pick) => pick.playerName)).toEqual(existingPicks.map((pick) => pick.playerName));
+    expect(preserved.every((pick) => pick.playerName.startsWith('Legacy '))).toBe(true);
+  });
+
+  it('does not persist generic placeholder roster names', () => {
+    const placeholderHydrated = hydrateMclPicksWithRosterNames(
+      1,
+      [{ name: 'Host', position: 0 }, { name: 'Team A', position: 1 }, { name: 'Player 1', position: 2 }],
+      [{ name: 'Guest', position: 0 }, { name: 'Team B', position: 1 }, { name: 'Bot B', position: 2 }]
+    );
+
+    expect(placeholderHydrated.every((pick) => pick.playerName === '')).toBe(true);
   });
 });
 

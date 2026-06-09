@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { ForjaViewProps, ForjaPlayer, ForjaTeam, ForjaLiveMatchSummary } from '../types';
+import { ForjaViewProps, ForjaPlayer, ForjaTeam, ForjaLiveMatchSummary, ForjaPrizeConfig } from '../types';
 import { useForjaSettings } from '../hooks/useForjaSettings';
 import { useForjaTeams } from '../hooks/useForjaTeams';
 import { useForjaPlayers } from '../hooks/useForjaPlayers';
@@ -15,8 +15,19 @@ import {
   getForjaOfficialMatchesOnce,
 } from '../services/forjaService';
 import { formatForjaDateInputValue, mergeForjaLiveMatches, resolveForjaMatchDateTime } from '../forjaMatchSummary';
-import { FORJA_MAP_POOL, getMCLPicks } from '../../../constants';
-import { LobbyConfig, Lobby } from '../../../types';
+import {
+  buildForjaPlayoffBracket,
+  FORJA_BRACKET_ROUNDS,
+  FORJA_GROUP_IDS,
+  getForjaPlayoffRoundLabel,
+  isForjaBracketSlotReady,
+  type ForjaBracketMatch,
+  type ForjaBracketSlot,
+  type ForjaGroupId,
+  type ForjaStandingRow,
+} from '../forjaPlayoffs';
+import { FORJA_MAP_POOL, hydrateMclPicksWithRosterNames } from '../../../constants';
+import { LobbyConfig, Lobby, TeamPlayer, SeriesType, ForjaPlayoffMatchId, ForjaPlayoffRound } from '../../../types';
 import { lobbyService, generateId, lobbyToForjaLiveMatchSummary, upsertForjaLiveMatchSummary, removeForjaLiveMatchSummary } from '../../../services/lobbyService';
 import { MAJOR_GODS } from '../../../data/gods';
 import { db } from '../../../firebase';
@@ -27,12 +38,11 @@ import { getForjaAvatarUrl } from '../utils/avatar';
 
 // ─── Tipos locais ─────────────────────────────────────────────────────────────
 
-interface StandingRow extends ForjaTeam {
-  gamesWon: number;
-  gamesLost: number;
-  matchesPlayed: number;
-  points: number;
-}
+type StandingRow = ForjaStandingRow;
+type ForjaMatchStage = 'GROUP' | 'PLAYOFFS_BO3' | 'PLAYOFFS_BO5';
+type ForjaMatchCenterPhase = ForjaGroupId | 'PLAYOFFS';
+
+const MATCH_CENTER_PHASES: readonly ForjaMatchCenterPhase[] = ['A', 'B', 'C', 'D', 'PLAYOFFS'];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -49,6 +59,76 @@ const PLAYOFF_FORMAT_LABEL: Record<string, string> = {
 };
 
 const UPCOMING_MATCH_LIMIT = 6;
+const FORJA_PLAYOFF_RULES_COPY = 'Times do mesmo grupo ficam em lados opostos na chave principal do campeonato e só podem se reencontrar na Final. A disputa de 3º lugar pode reunir times do mesmo grupo dependendo dos resultados das semifinais.';
+
+/**
+ * Extracts a human-readable message from an error value.
+ *
+ * @param error - The value to extract a message from
+ * @returns `error.message` when `error` is an `Error`, `'Erro desconhecido.'` otherwise
+ */
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Erro desconhecido.';
+}
+
+/**
+ * Type guard that checks whether a string is a valid Forja match stage.
+ *
+ * @param value - The string to test
+ * @returns `true` if `value` is `'GROUP'`, `'PLAYOFFS_BO3'`, or `'PLAYOFFS_BO5'`, `false` otherwise.
+ */
+function isForjaMatchStage(value: string): value is ForjaMatchStage {
+  return value === 'GROUP' || value === 'PLAYOFFS_BO3' || value === 'PLAYOFFS_BO5';
+}
+
+/**
+ * Determines whether a string is a valid Forja group identifier ('A'–'D').
+ *
+ * @param value - The string to test
+ * @returns `true` if `value` is one of `'A'`, `'B'`, `'C'`, or `'D'`, `false` otherwise.
+ */
+function isForjaGroupId(value: string): value is ForjaGroupId {
+  return value === 'A' || value === 'B' || value === 'C' || value === 'D';
+}
+
+/**
+ * Determines whether a match is in a completed state.
+ *
+ * @returns `true` if the match's status is `'completed'` or `'finished'`, `false` otherwise.
+ */
+function isMatchCompleted(match: ForjaLiveMatchSummary | null | undefined): boolean {
+  return match?.status === 'completed' || match?.status === 'finished';
+}
+
+/**
+ * Get the human-readable label for a bracket slot.
+ *
+ * @param slot - The bracket slot to obtain a label for
+ * @returns The team's name when the slot represents a team, otherwise the slot's configured label
+ */
+function getSlotLabel(slot: ForjaBracketSlot): string {
+  return slot.kind === 'team' ? slot.team.team_name : slot.label;
+}
+
+/**
+ * Get the seed label for a bracket slot when it represents a team.
+ *
+ * @param slot - The bracket slot to read the seed from; may represent a team or a placeholder.
+ * @returns The slot's `seedLabel` when `slot.kind === 'team'` and a seed label exists, `null` otherwise.
+ */
+function getSlotSeed(slot: ForjaBracketSlot): string | null {
+  return slot.kind === 'team' ? slot.seedLabel ?? null : null;
+}
+
+/**
+ * Get the display label for a match series (MD3 or MD5).
+ *
+ * @param seriesType - The series type, either `'BO3'` or `'BO5'`
+ * @returns `"MD5"` when `seriesType` is `"BO5"`, `"MD3"` otherwise.
+ */
+function getForjaSeriesDisplayLabel(seriesType: Extract<SeriesType, 'BO3' | 'BO5'>): string {
+  return seriesType === 'BO5' ? 'MD5' : 'MD3';
+}
 
 /**
  * Renders a team member row with avatar, nickname, and an optional captain badge.
@@ -234,9 +314,9 @@ function CompactStandings({
  */
 
 function MatchConfrontationCard({ lobby, isAdmin, onEdit, onDelete, teams, players }: {
-  lobby: any;
+  lobby: ForjaLiveMatchSummary;
   isAdmin: boolean;
-  onEdit: (lobby: any) => void;
+  onEdit: (lobby: ForjaLiveMatchSummary) => void;
   onDelete: (lobbyId: string) => void;
   teams: ForjaTeam[];
   players: ForjaPlayer[];
@@ -244,18 +324,18 @@ function MatchConfrontationCard({ lobby, isAdmin, onEdit, onDelete, teams, playe
   const teamA = teams.find(t => t.id === lobby.config?.forjaTeamA);
   const teamB = teams.find(t => t.id === lobby.config?.forjaTeamB);
 
-  const getCaptainNick = (team: any) => {
+  const getCaptainNick = (team: ForjaTeam | undefined) => {
     if (!team || !team.captain_id) return '';
     const cap = players.find(p => p.discord_id === team.captain_id);
     return cap ? ` (Cap. ${cap.nick})` : '';
   };
 
-  const nameA = teamA ? `${teamA.team_name}${getCaptainNick(teamA)}` : lobby.config?.teamAName ?? 'Time A';
-  const nameB = teamB ? `${teamB.team_name}${getCaptainNick(teamB)}` : lobby.config?.teamBName ?? 'Time B';
+  const nameA = teamA ? `${teamA.team_name}${getCaptainNick(teamA)}` : 'Time A';
+  const nameB = teamB ? `${teamB.team_name}${getCaptainNick(teamB)}` : 'Time B';
 
-  const isCompleted = lobby.status === 'completed' || lobby.status === 'finished';
-  const scoreA = lobby.scoreA ?? lobby.teamAScore ?? 0;
-  const scoreB = lobby.scoreB ?? lobby.teamBScore ?? 0;
+  const isCompleted = isMatchCompleted(lobby);
+  const scoreA = lobby.scoreA ?? 0;
+  const scoreB = lobby.scoreB ?? 0;
   const safeExternalLink = toSafeExternalUrl(lobby.externalLink);
 
   return (
@@ -366,17 +446,11 @@ function MatchConfrontationCard({ lobby, isAdmin, onEdit, onDelete, teams, playe
 }
 
 /**
- * Renders a match countdown card showing stage, name, localized scheduled date/time, dynamic countdown or live/ongoing status, streamer and lobby links, and an optional admin edit control.
+ * Render a match countdown card that shows stage, name, localized scheduled date/time, a dynamic countdown or live/ongoing status, and streamer and lobby actions.
  *
- * Displays:
- * - Stage badge ("Fase de Grupos" or "Playoffs") and a live pill when the match status is `drafting`.
- * - Localized weekday and time label using the pt-BR locale.
- * - A dynamic countdown in the form "Começa em: Xd Yh Zm" while the match is in the future, switches to "AO VIVO" when `status === 'drafting'` or to "Em andamento" when the scheduled time has passed.
- * - Streamer link (prepends `https://` when the URL does not start with `http`) and a lobby link to `/lobby/{match.id}`.
- *
- * @param match - The upcoming match object containing id, name, stage, status, optional scheduledDate (string|Date|Firebase Timestamp), optional scheduledTime ("HH:MM"), and optional streamerUrl.
- * @param isAdmin - When true, shows an edit button that invokes `onEdit`.
- * @param onEdit - Callback invoked with the match when the admin edit button is clicked.
+ * @param match - The match summary used to display name, stage, status, scheduled date/time, and optional streamer URL.
+ * @param isAdmin - When true, shows an edit button for administrative editing.
+ * @param onEdit - Callback invoked with `match` when the admin edit button is clicked.
  * @returns The rendered match card element.
  */
 function MatchCountdownCard({ match, isAdmin, onEdit }: { match: ForjaLiveMatchSummary; isAdmin?: boolean; onEdit?: (m: ForjaLiveMatchSummary) => void }) {
@@ -491,6 +565,268 @@ function MatchCountdownCard({ match, isAdmin, onEdit }: { match: ForjaLiveMatchS
 }
 
 /**
+ * Renders a playoff bracket slot row showing seed, team label, optional logo (with fallback) and score.
+ *
+ * @param slot - The bracket slot object (may represent a team slot or a pending/placeholder slot).
+ * @param score - The numeric score for this slot, or `null` when no score is available.
+ * @param isWinner - `true` if this slot is the match winner; otherwise `false`.
+ * @returns The JSX element for the bracket slot row.
+ */
+function PlayoffSlotRow({
+  slot,
+  score,
+  isWinner,
+}: {
+  slot: ForjaBracketSlot;
+  score: number | null;
+  isWinner: boolean;
+}) {
+  const seed = getSlotSeed(slot);
+  const [imageFailed, setImageFailed] = useState(false);
+  const team = slot.kind === 'team' ? slot.team : null;
+  const imageUrl = team?.image_url && !imageFailed ? team.image_url : null;
+  const fallbackInitial = team?.team_name.trim().charAt(0).toUpperCase() || seed?.charAt(0) || '?';
+
+  return (
+    <div className={cn("forja-bracket-slot", isWinner && "forja-bracket-slot--winner", slot.kind === 'pending' && "forja-bracket-slot--pending")}>
+      {team && (
+        <div className="forja-bracket-team-logo" aria-hidden="true">
+          {imageUrl ? (
+            <img
+              src={imageUrl}
+              alt=""
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onError={() => setImageFailed(true)}
+            />
+          ) : (
+            <span>{fallbackInitial}</span>
+          )}
+        </div>
+      )}
+      <div className="forja-bracket-slot__team">
+        {seed && <span className="forja-bracket-seed">{seed}</span>}
+        <span>{getSlotLabel(slot)}</span>
+      </div>
+      {score !== null && <span className="forja-bracket-score">{score}</span>}
+    </div>
+  );
+}
+
+/**
+ * Render a playoff bracket match card showing team slots, match status, scores and available actions for admins.
+ *
+ * @param onCreateMatch - Callback invoked to create an official lobby for this bracket match when no lobby exists.
+ * @param onReportMatch - Callback invoked to report an existing lobby's result; receives the lobby summary.
+ * @returns A React element representing the playoff match card.
+ */
+function PlayoffMatchCard({
+  match,
+  isAdmin,
+  busy,
+  onCreateMatch,
+  onReportMatch,
+}: {
+  match: ForjaBracketMatch;
+  isAdmin: boolean;
+  busy: boolean;
+  onCreateMatch: (match: ForjaBracketMatch) => void;
+  onReportMatch: (match: ForjaLiveMatchSummary) => void;
+}) {
+  const lobby = match.lobby;
+  const completed = isMatchCompleted(lobby);
+  const scoreA = lobby ? lobby.scoreA ?? 0 : null;
+  const scoreB = lobby ? lobby.scoreB ?? 0 : null;
+  const teamAWon = completed && scoreA !== null && scoreB !== null && scoreA > scoreB;
+  const teamBWon = completed && scoreA !== null && scoreB !== null && scoreB > scoreA;
+  const safeExternalLink = toSafeExternalUrl(lobby?.externalLink);
+  const statusLabel = !lobby
+    ? match.canCreate ? 'Pronto' : 'Aguardando'
+    : lobby.status === 'drafting' ? 'Ao vivo'
+      : completed ? 'Concluido'
+        : 'Agendado';
+  const lobbyActionLabel = completed ? 'Ver draft' : lobby?.status === 'drafting' ? 'Ver draft' : 'Iniciar draft';
+
+  return (
+    <article className={cn("forja-bracket-match", `forja-bracket-match--${match.round.toLowerCase()}`)}>
+      <div className="forja-bracket-match__top">
+        <div>
+          <div className="forja-bracket-match__meta">
+            <span className="forja-bracket-match__label">{match.label}</span>
+            <span className="forja-bracket-series">{getForjaSeriesDisplayLabel(match.seriesType)}</span>
+          </div>
+          <h4>{match.title}</h4>
+        </div>
+        <span className={cn("forja-bracket-status", completed && "forja-bracket-status--done", lobby?.status === 'drafting' && "forja-bracket-status--live")}>
+          {statusLabel}
+        </span>
+      </div>
+
+      <div className="forja-bracket-match__slots">
+        <PlayoffSlotRow slot={match.teamA} score={scoreA} isWinner={teamAWon} />
+        <PlayoffSlotRow slot={match.teamB} score={scoreB} isWinner={teamBWon} />
+      </div>
+
+      <div className="forja-bracket-match__actions">
+        {lobby ? (
+          <>
+            <a href={`/lobby/${lobby.id}`} target="_blank" rel="noreferrer" className="forja-bracket-action forja-bracket-action--primary">
+              {lobbyActionLabel}
+            </a>
+            {safeExternalLink && (
+              <a href={safeExternalLink} target="_blank" rel="noreferrer" className="forja-bracket-action">
+                Detalhes
+              </a>
+            )}
+            {isAdmin && !completed && (
+              <button type="button" className="forja-bracket-action" onClick={() => onReportMatch(lobby)}>
+                Reportar
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            {isAdmin && match.canCreate && (
+              <button type="button" className="forja-bracket-action forja-bracket-action--primary" disabled={busy} onClick={() => onCreateMatch(match)}>
+                {busy ? 'Criando...' : 'Criar partida'}
+              </button>
+            )}
+            {!match.canCreate && <span className="forja-bracket-pending">{match.teamA.kind === 'pending' || match.teamB.kind === 'pending' ? 'Esperando resultado' : 'Sem lobby'}</span>}
+          </>
+        )}
+      </div>
+    </article>
+  );
+}
+
+/**
+ * Renders the official FORJA playoffs panel including group completion status, admin controls and the bracket rounds.
+ *
+ * Displays overall progress (completed vs expected group matches), per-group completion chips, a "playoffs blocked"
+ * notice when not all groups are complete, and a column for each playoff round containing match cards.
+ *
+ * @param bracket - The computed playoff bracket structure (matches, standings and per-group completion).
+ * @param isAdmin - When true, shows admin actions (generate quarterfinals and per-match create/report controls).
+ * @param busyMatchId - Id of a match currently being processed or `'QUARTERFINALS'` when quarterfinal generation is in progress; used to disable buttons.
+ * @param onGenerateQuarterfinals - Callback invoked when the admin requests automatic quarterfinal generation.
+ * @param onCreateMatch - Callback invoked to create an official lobby for a specific bracket match.
+ * @param onReportMatch - Callback invoked to report/close an existing live match associated with a bracket match.
+ * @returns The playoffs panel JSX element.
+ */
+function PlayoffBracketPanel({
+  bracket,
+  isAdmin,
+  busyMatchId,
+  onGenerateQuarterfinals,
+  onCreateMatch,
+  onReportMatch,
+}: {
+  bracket: ReturnType<typeof buildForjaPlayoffBracket>;
+  isAdmin: boolean;
+  busyMatchId: ForjaPlayoffMatchId | 'QUARTERFINALS' | null;
+  onGenerateQuarterfinals: () => void;
+  onCreateMatch: (match: ForjaBracketMatch) => void;
+  onReportMatch: (match: ForjaLiveMatchSummary) => void;
+}) {
+  const totalRequired = FORJA_GROUP_IDS.reduce((sum, groupId) => sum + bracket.groupCompletion[groupId].requiredMatches, 0);
+  const totalCompleted = FORJA_GROUP_IDS.reduce((sum, groupId) => sum + bracket.groupCompletion[groupId].completedMatches, 0);
+  const totalExpected = totalRequired || 24;
+  const totalRemaining = Math.max(totalExpected - totalCompleted, 0);
+  const remainingLabel = totalRemaining === 1
+    ? 'Falta 1 confronto da Fase de Grupos.'
+    : `Faltam ${totalRemaining} confrontos da Fase de Grupos.`;
+
+  return (
+    <section className="forja-playoffs-panel">
+      <div className="forja-playoffs-panel__header">
+        <div>
+          <span className="forja-playoffs-kicker">Mata-mata oficial</span>
+          <h3>Playoffs FORJA</h3>
+          <p>Top 2 de cada grupo. {FORJA_PLAYOFF_RULES_COPY}</p>
+        </div>
+        <div className="forja-playoffs-gate">
+          <span>{totalCompleted}/{totalExpected} partidas encerradas</span>
+          {isAdmin && (
+            <div className="forja-playoffs-actions">
+              <button
+                type="button"
+                className="forja-btn forja-btn--primary"
+                disabled={!bracket.canGenerateQuarterfinals || busyMatchId !== null}
+                onClick={onGenerateQuarterfinals}
+              >
+                {busyMatchId === 'QUARTERFINALS' ? 'Gerando...' : bracket.hasQuarterfinals ? 'Bracket existente' : 'Gerar Quartas'}
+              </button>
+              {!bracket.allGroupsComplete && (
+                <span className="forja-playoffs-actions__helper">
+                  Disponível após todos os grupos chegarem a 6/6 confrontos.
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {!bracket.allGroupsComplete && (
+        <div className="forja-playoffs-blocked">
+          <div className="forja-playoffs-blocked__header">
+            <strong>Playoffs bloqueados</strong>
+            <span>{remainingLabel}</span>
+          </div>
+          <p>Complete todos os confrontos da Fase de Grupos para liberar a geração automática da bracket.</p>
+          <div className="forja-playoffs-blocked__groups">
+            {FORJA_GROUP_IDS.map((groupId) => {
+              const completion = bracket.groupCompletion[groupId];
+              return (
+                <span key={groupId}>
+                  Grupo {groupId}: {completion.completedMatches}/{completion.requiredMatches || 6}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="forja-playoffs-groups">
+        {FORJA_GROUP_IDS.map((groupId) => {
+          const completion = bracket.groupCompletion[groupId];
+          return (
+            <div key={groupId} className={cn("forja-playoffs-group-chip", completion.isComplete && "forja-playoffs-group-chip--complete")}>
+              <span>Grupo {groupId}</span>
+              <strong>{completion.completedMatches}/{completion.requiredMatches || 6}</strong>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="forja-bracket-board">
+        {FORJA_BRACKET_ROUNDS.map((round) => {
+          const roundMatches = bracket.matches
+            .filter((match) => match.round === round)
+            .sort((left, right) => left.order - right.order);
+          return (
+            <div key={round} className="forja-bracket-round">
+              <div className="forja-bracket-round__title">{getForjaPlayoffRoundLabel(round)}</div>
+              <div className="forja-bracket-round__matches">
+                {roundMatches.map((match) => (
+                  <PlayoffMatchCard
+                    key={match.id}
+                    match={match}
+                    isAdmin={isAdmin}
+                    busy={busyMatchId === match.id}
+                    onCreateMatch={onCreateMatch}
+                    onReportMatch={onReportMatch}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+/**
  * Render a prize summary card showing the total prize pool and the per-place distribution.
  *
  * @param total - Total prize pool amount (number)
@@ -545,6 +881,22 @@ interface ForjaHomeProps extends ForjaViewProps {
   onTabChange?: (tab: string) => void;
 }
 
+type CreateOfficialForjaMatchInput = {
+  matchName: string;
+  teamA: ForjaTeam;
+  teamB: ForjaTeam;
+  tournamentStage: ForjaMatchStage;
+  seriesType: Extract<SeriesType, '3G' | 'BO3' | 'BO5'>;
+  groupId?: ForjaGroupId;
+  playoffMatchId?: ForjaPlayoffMatchId;
+  playoffRound?: ForjaPlayoffRound;
+  playoffSourceA?: ForjaPlayoffMatchId;
+  playoffSourceB?: ForjaPlayoffMatchId;
+  scheduledDate?: Date | null;
+  scheduledTime?: string | null;
+  streamerUrl?: string | null;
+};
+
 /**
  * Renders the Forja tournament home dashboard with registration status, current phase, participants, prize display, upcoming matches, and compact group standings.
  *
@@ -559,17 +911,18 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
   const { teams } = useForjaTeams(isAdmin);
   const { rankedPlayers } = useForjaPlayers(isAdmin);
 
-  const [prizeData, setPrizeData] = useState<any>(null);
+  const [prizeData, setPrizeData] = useState<Partial<ForjaPrizeConfig> | null>(null);
   const [lobbies, setLobbies] = useState<ForjaLiveMatchSummary[]>([]);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [editingMatch, setEditingMatch] = useState<ForjaLiveMatchSummary | null>(null);
+  const [busyPlayoffMatchId, setBusyPlayoffMatchId] = useState<ForjaPlayoffMatchId | 'QUARTERFINALS' | null>(null);
 
   // Match Creator Form States
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedTeamA, setSelectedTeamA] = useState('');
   const [selectedTeamB, setSelectedTeamB] = useState('');
-  const [matchStage, setMatchStage] = useState<'GROUP' | 'PLAYOFFS_BO3' | 'PLAYOFFS_BO5'>('GROUP');
-  const [matchGroup, setMatchGroup] = useState<string>('A');
+  const [matchStage, setMatchStage] = useState<ForjaMatchStage>('GROUP');
+  const [matchGroup, setMatchGroup] = useState<ForjaGroupId>('A');
   const [groupRound, setGroupRound] = useState<string>('1');
   const [playoffRound, setPlayoffRound] = useState<string>('Quartas');
   const [scheduledDate, setScheduledDate] = useState<string>('');
@@ -577,10 +930,10 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
   const [streamerUrl, setStreamerUrl] = useState<string>('');
 
   // Match Center Tab State
-  const [selectedPhase, setSelectedPhase] = useState<'A' | 'B' | 'C' | 'D' | 'PLAYOFFS'>('A');
+  const [selectedPhase, setSelectedPhase] = useState<ForjaMatchCenterPhase>('A');
 
   // Manual editing lobby state (Match Center)
-  const [editingLobby, setEditingLobby] = useState<any | null>(null);
+  const [editingLobby, setEditingLobby] = useState<ForjaLiveMatchSummary | null>(null);
 
   // Reset selected teams on changes
   useEffect(() => {
@@ -638,40 +991,41 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
 
       setEditingMatch(null);
       alert('Agendamento atualizado!');
-    } catch (err: any) {
-      alert(`Erro ao atualizar: ${err.message}`);
+    } catch (err) {
+      alert(`Erro ao atualizar: ${getErrorMessage(err)}`);
     }
   };
 
-  const handleCreateMatch = async () => {
-    if (!selectedTeamA || !selectedTeamB || selectedTeamA === selectedTeamB) {
-      alert('Selecione dois times diferentes.');
-      return;
+  const buildTeamPlayers = (team: ForjaTeam): TeamPlayer[] => (
+    team.members.slice(0, 3).map((discordId, idx) => {
+      const player = rankedPlayers.find(p => p.discord_id === discordId);
+      return { name: player?.nick || `Player ${idx + 1}`, position: idx };
+    })
+  );
+
+  const createOfficialForjaLobby = async (input: CreateOfficialForjaMatchInput): Promise<Lobby> => {
+    if (!discordUser) {
+      throw new Error('Login Discord necessario para criar partidas oficiais.');
     }
 
-    const teamA = teams.find(t => t.id === selectedTeamA);
-    const teamB = teams.find(t => t.id === selectedTeamB);
-
-    let matchName = '';
-    if (matchStage === 'GROUP') {
-      matchName = `Gr${matchGroup} - R${groupRound} - ${teamA?.team_name} x ${teamB?.team_name}`;
-    } else {
-      matchName = `${playoffRound} - ${teamA?.team_name} x ${teamB?.team_name}`;
-    }
-
-    const isPlayoffs = matchStage !== 'GROUP';
-
+    const customGameCount = input.seriesType === 'BO5' ? 5 : 3;
+    const teamAPlayers = buildTeamPlayers(input.teamA);
+    const teamBPlayers = buildTeamPlayers(input.teamB);
     const config: LobbyConfig = {
-      name: matchName,
+      name: input.matchName,
       preset: 'FORJA',
       isOfficialForjaMatch: true,
-      tournamentStage: matchStage,
-      forjaTeamA: teamA?.id,
-      forjaTeamB: teamB?.id,
-      forjaGroupId: matchStage === 'GROUP' ? matchGroup : undefined,
-      seriesType: matchStage === 'GROUP' ? '3G' : (matchStage === 'PLAYOFFS_BO5' ? 'BO5' : 'BO3'),
+      tournamentStage: input.tournamentStage,
+      forjaTeamA: input.teamA.id,
+      forjaTeamB: input.teamB.id,
+      forjaGroupId: input.groupId,
+      forjaPlayoffMatchId: input.playoffMatchId,
+      forjaPlayoffRound: input.playoffRound,
+      forjaPlayoffSourceA: input.playoffSourceA,
+      forjaPlayoffSourceB: input.playoffSourceB,
+      seriesType: input.seriesType,
       teamSize: 3,
-      customGameCount: matchStage === 'GROUP' ? 3 : (matchStage === 'PLAYOFFS_BO5' ? 5 : 3),
+      customGameCount,
       pickType: 'alternated',
       isExclusive: false,
       hasBans: false,
@@ -688,22 +1042,11 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
       isPrivate: false,
       timerDuration: 60,
       hasMap3RandomRoll: true,
-      captainA_discordId: teamA?.captain_id,
-      captainB_discordId: teamB?.captain_id,
-      scheduledDate: (() => {
-        if (!scheduledDate) return null;
-        return resolveForjaMatchDateTime(scheduledDate, scheduledTime);
-      })(),
-      scheduledTime: scheduledTime || null,
-      streamerUrl: streamerUrl || null,
-    };
-
-    const populateTeam = (team: any) => {
-      if (!team || !team.members) return [];
-      return team.members.slice(0, 3).map((discordId: string, idx: number) => {
-        const player = rankedPlayers.find(p => p.discord_id === discordId);
-        return { name: player?.nick || `Player ${idx + 1}` };
-      });
+      captainA_discordId: input.teamA.captain_id,
+      captainB_discordId: input.teamB.captain_id,
+      scheduledDate: input.scheduledDate ?? null,
+      scheduledTime: input.scheduledTime || null,
+      streamerUrl: input.streamerUrl || null,
     };
 
     const id = generateId();
@@ -713,10 +1056,12 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
       phase: 'waiting',
       captain1: null,
       captain2: null,
-      captain1Name: '',
-      captain2Name: null,
-      teamAPlayers: populateTeam(teamA),
-      teamBPlayers: populateTeam(teamB),
+      captain1Name: input.teamA.team_name,
+      captain2Name: input.teamB.team_name,
+      teamAName: input.teamA.team_name,
+      teamBName: input.teamB.team_name,
+      teamAPlayers,
+      teamBPlayers,
       readyA: false,
       readyB: false,
       readyA_report: false,
@@ -730,12 +1075,12 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
       spectators: [],
       config,
       selectedMap: null,
-      seriesMaps: Array(config.customGameCount ?? 3).fill(''),
+      seriesMaps: Array(customGameCount).fill(''),
       mapBans: [],
       turn: 0,
       turnOrder: [],
       bans: [],
-      picks: getMCLPicks(1),
+      picks: hydrateMclPicksWithRosterNames(1, teamAPlayers, teamBPlayers),
       scoreA: 0,
       scoreB: 0,
       reportVoteA: null,
@@ -751,14 +1096,46 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
       replayLog: [],
       lastWinner: null,
       mapPool: [],
-      timerStart: serverTimestamp() as any,
-      createdAt: serverTimestamp() as any,
-      lastActivityAt: serverTimestamp() as any,
+      timerStart: serverTimestamp(),
+      createdAt: serverTimestamp(),
+      lastActivityAt: serverTimestamp(),
       hiddenActions: [],
+      adminId: discordUser.discord_id,
     };
 
+    await lobbyService.createLobby(id, lobby);
+    return lobby;
+  };
+
+  const handleCreateMatch = async () => {
+    if (!selectedTeamA || !selectedTeamB || selectedTeamA === selectedTeamB) {
+      alert('Selecione dois times diferentes.');
+      return;
+    }
+
+    const teamA = teams.find(t => t.id === selectedTeamA);
+    const teamB = teams.find(t => t.id === selectedTeamB);
+    if (!teamA || !teamB) {
+      alert('Times selecionados nao encontrados.');
+      return;
+    }
+
+    const matchName = matchStage === 'GROUP'
+      ? `Gr${matchGroup} - R${groupRound} - ${teamA.team_name} x ${teamB.team_name}`
+      : `${playoffRound} - ${teamA.team_name} x ${teamB.team_name}`;
+
     try {
-      await lobbyService.createLobby(id, lobby);
+      const lobby = await createOfficialForjaLobby({
+        matchName,
+        teamA,
+        teamB,
+        tournamentStage: matchStage,
+        groupId: matchStage === 'GROUP' ? matchGroup : undefined,
+        seriesType: matchStage === 'GROUP' ? '3G' : (matchStage === 'PLAYOFFS_BO5' ? 'BO5' : 'BO3'),
+        scheduledDate: scheduledDate ? resolveForjaMatchDateTime(scheduledDate, scheduledTime) : null,
+        scheduledTime,
+        streamerUrl,
+      });
 
       if (streamerUrl) {
         try {
@@ -790,8 +1167,8 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
       setScheduledDate('');
       setScheduledTime('');
       setStreamerUrl('');
-    } catch (err: any) {
-      alert(`Erro: ${err.message}`);
+    } catch (err) {
+      alert(`Erro: ${getErrorMessage(err)}`);
     }
   };
 
@@ -816,8 +1193,8 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
         externalLink: externalLink || '',
       } : l));
       setEditingLobby(null);
-    } catch (err: any) {
-      alert(`Erro ao encerrar: ${err.message}`);
+    } catch (err) {
+      alert(`Erro ao encerrar: ${getErrorMessage(err)}`);
     }
   };
 
@@ -826,8 +1203,8 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
     try {
       await lobbyService.deleteLobby(lobbyId);
       setLobbies(prev => removeForjaLiveMatchSummary(prev, lobbyId));
-    } catch (err: any) {
-      alert(`Erro ao remover: ${err.message}`);
+    } catch (err) {
+      alert(`Erro ao remover: ${getErrorMessage(err)}`);
     }
   };
 
@@ -839,6 +1216,82 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
       return l.stage === 'GROUP' && l.config?.forjaGroupId === selectedPhase;
     });
   }, [lobbies, selectedPhase]);
+
+  const playoffBracket = useMemo(() => buildForjaPlayoffBracket(teams, lobbies), [teams, lobbies]);
+
+  const refreshOfficialMatches = async (): Promise<ForjaLiveMatchSummary[]> => {
+    const officialMatches = await getForjaOfficialMatchesOnce({ forceRefresh: true });
+    const merged = mergeForjaLiveMatches(lobbies, officialMatches);
+    setLobbies(merged);
+    return merged;
+  };
+
+  const createPlayoffLobbyForMatch = async (match: ForjaBracketMatch): Promise<Lobby> => {
+    if (!isForjaBracketSlotReady(match.teamA) || !isForjaBracketSlotReady(match.teamB)) {
+      throw new Error('Partida ainda depende de resultados anteriores.');
+    }
+
+    const tournamentStage: ForjaMatchStage = match.seriesType === 'BO5' ? 'PLAYOFFS_BO5' : 'PLAYOFFS_BO3';
+    return createOfficialForjaLobby({
+      matchName: `${match.label} - ${match.teamA.team.team_name} x ${match.teamB.team.team_name}`,
+      teamA: match.teamA.team,
+      teamB: match.teamB.team,
+      tournamentStage,
+      seriesType: match.seriesType,
+      playoffMatchId: match.id,
+      playoffRound: match.round,
+      playoffSourceA: match.sourceA?.matchId,
+      playoffSourceB: match.sourceB?.matchId,
+    });
+  };
+
+  const handleCreatePlayoffMatch = async (match: ForjaBracketMatch) => {
+    if (busyPlayoffMatchId) return;
+    setBusyPlayoffMatchId(match.id);
+
+    try {
+      const refreshedMatches = await refreshOfficialMatches();
+      const refreshedBracket = buildForjaPlayoffBracket(teams, refreshedMatches);
+      const freshMatch = refreshedBracket.matches.find((item) => item.id === match.id);
+      if (!freshMatch) throw new Error('Partida do bracket nao encontrada.');
+      if (freshMatch.lobby) throw new Error('Esta partida ja possui lobby.');
+
+      const lobby = await createPlayoffLobbyForMatch(freshMatch);
+      setLobbies(prev => upsertForjaLiveMatchSummary(prev, lobbyToForjaLiveMatchSummary(lobby)));
+    } catch (err) {
+      alert(`Erro ao criar partida: ${getErrorMessage(err)}`);
+    } finally {
+      setBusyPlayoffMatchId(null);
+    }
+  };
+
+  const handleGenerateQuarterfinals = async () => {
+    if (busyPlayoffMatchId) return;
+    setBusyPlayoffMatchId('QUARTERFINALS');
+
+    try {
+      const refreshedMatches = await refreshOfficialMatches();
+      const refreshedBracket = buildForjaPlayoffBracket(teams, refreshedMatches);
+      if (!refreshedBracket.allGroupsComplete) {
+        throw new Error('Fase de grupos ainda incompleta.');
+      }
+      if (refreshedBracket.hasQuarterfinals) {
+        throw new Error('Bracket de quartas ja existe.');
+      }
+
+      let nextMatches = refreshedMatches;
+      const quarterfinals = refreshedBracket.matches.filter((match) => match.round === 'QUARTERFINALS' && match.canCreate);
+      for (const quarterfinal of quarterfinals) {
+        const lobby = await createPlayoffLobbyForMatch(quarterfinal);
+        nextMatches = upsertForjaLiveMatchSummary(nextMatches, lobbyToForjaLiveMatchSummary(lobby));
+      }
+      setLobbies(nextMatches);
+    } catch (err) {
+      alert(`Erro ao gerar bracket: ${getErrorMessage(err)}`);
+    } finally {
+      setBusyPlayoffMatchId(null);
+    }
+  };
 
   // Cold summary fetch
   useEffect(() => {
@@ -868,7 +1321,7 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
 
   // Fetch prizes
   useEffect(() => {
-    getForjaContentOnce('prizes')
+    getForjaContentOnce<ForjaPrizeConfig>('prizes')
       .then(prizes => {
         setPrizeData(prizes);
       })
@@ -877,29 +1330,7 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
       });
   }, []);
 
-  // Standings por grupo
-  const calculateStandings = (groupId: string): StandingRow[] => {
-    const groupTeams = teams.filter(t => t.groupId === groupId);
-    const groupLobbies = lobbies.filter(l => l.stage === 'GROUP' && l.config?.forjaGroupId === groupId && (l.status === 'completed' || l.status === 'finished'));
-
-    return groupTeams.map(team => {
-      let gamesWon = 0, gamesLost = 0, matchesPlayed = 0;
-      groupLobbies.forEach(l => {
-        if (l.config?.forjaTeamA === team.id) {
-          gamesWon += (l.scoreA ?? 0);
-          gamesLost += (l.scoreB ?? 0);
-          if (l.status === 'completed' || l.status === 'finished') matchesPlayed++;
-        } else if (l.config?.forjaTeamB === team.id) {
-          gamesWon += (l.scoreB ?? 0);
-          gamesLost += (l.scoreA ?? 0);
-          if (l.status === 'completed' || l.status === 'finished') matchesPlayed++;
-        }
-      });
-      return { ...team, gamesWon, gamesLost, matchesPlayed, points: gamesWon };
-    }).sort((a, b) => b.points - a.points || (b.gamesWon - b.gamesLost) - (a.gamesWon - a.gamesLost));
-  };
-
-  const groups = ['A', 'B', 'C', 'D'].filter(g => teams.some(t => t.groupId === g));
+  const groups = FORJA_GROUP_IDS.filter(g => teams.some(t => t.groupId === g));
   const activeGroups = groups.length > 0 ? groups : [];
 
   const phase = settings?.current_phase ?? 'pre_tournament';
@@ -1019,7 +1450,9 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
                   <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.4rem' }}>Fase da Partida</label>
                   <select 
                     value={matchStage} 
-                    onChange={e => setMatchStage(e.target.value as any)}
+                    onChange={e => {
+                      if (isForjaMatchStage(e.target.value)) setMatchStage(e.target.value);
+                    }}
                     style={{ width: '100%', padding: '0.75rem 1rem', background: '#090d16', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '0.75rem', color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 700, outline: 'none' }}
                     className="focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
                   >
@@ -1036,7 +1469,9 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
                       <label style={{ display: 'block', fontSize: '0.62rem', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '0.4rem' }}>Grupo</label>
                       <select 
                         value={matchGroup} 
-                        onChange={e => setMatchGroup(e.target.value)}
+                        onChange={e => {
+                          if (isForjaGroupId(e.target.value)) setMatchGroup(e.target.value);
+                        }}
                         style={{ width: '100%', padding: '0.75rem 1rem', background: '#090d16', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '0.75rem', color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 700, outline: 'none' }}
                         className="focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
                       >
@@ -1272,12 +1707,23 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
               <CompactStandings
                 key={g}
                 group={g}
-                standings={calculateStandings(g)}
+                standings={playoffBracket.standingsByGroup[g]}
                 players={rankedPlayers}
               />
             ))}
           </div>
         </div>
+      )}
+
+      {activeGroups.length > 0 && (
+        <PlayoffBracketPanel
+          bracket={playoffBracket}
+          isAdmin={isAdmin}
+          busyMatchId={busyPlayoffMatchId}
+          onGenerateQuarterfinals={handleGenerateQuarterfinals}
+          onCreateMatch={handleCreatePlayoffMatch}
+          onReportMatch={setEditingLobby}
+        />
       )}
 
       {/* ── Match Center (O Histórico de Partidas) ────────────────────────── */}
@@ -1288,13 +1734,13 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
 
         {/* Sub-navegação interna (Pills estilo Tailwind) */}
         <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.75rem', marginBottom: '1.5rem', scrollbarWidth: 'none' }}>
-          {['A', 'B', 'C', 'D', 'PLAYOFFS'].map((phaseCode) => {
+          {MATCH_CENTER_PHASES.map((phaseCode) => {
             const label = phaseCode === 'PLAYOFFS' ? 'Playoffs' : `Grupo ${phaseCode}`;
             const isActive = selectedPhase === phaseCode;
             return (
               <button
                 key={phaseCode}
-                onClick={() => setSelectedPhase(phaseCode as any)}
+                onClick={() => setSelectedPhase(phaseCode)}
                 style={{
                   padding: '0.5rem 1.25rem',
                   borderRadius: '9999px',
@@ -1319,7 +1765,16 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
         </div>
 
         {/* Lista de Partidas Filtradas */}
-        {filteredLobbies.length === 0 ? (
+        {selectedPhase === 'PLAYOFFS' ? (
+          <PlayoffBracketPanel
+            bracket={playoffBracket}
+            isAdmin={isAdmin}
+            busyMatchId={busyPlayoffMatchId}
+            onGenerateQuarterfinals={handleGenerateQuarterfinals}
+            onCreateMatch={handleCreatePlayoffMatch}
+            onReportMatch={setEditingLobby}
+          />
+        ) : filteredLobbies.length === 0 ? (
           <div className="forja-empty" style={{ padding: '3rem 2rem' }}>
             <span style={{ fontSize: '2.5rem' }}>⚔️</span>
             <p style={{ marginTop: '0.75rem', color: '#64748b' }}>Nenhuma partida registrada nesta fase.</p>
@@ -1384,9 +1839,18 @@ export default function ForjaHome({ discordUser, isAdmin, onRegisterClick, onTab
               <button onClick={() => setEditingLobby(null)} className="flex-1 py-3 rounded-xl bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest hover:bg-slate-700 transition-all">Cancelar</button>
               <button 
                 onClick={() => {
-                  const sA = parseInt((document.getElementById('scoreA') as HTMLInputElement).value) || 0;
-                  const sB = parseInt((document.getElementById('scoreB') as HTMLInputElement).value) || 0;
-                  const ext = (document.getElementById('externalLink') as HTMLInputElement).value;
+                  const scoreAInput = document.getElementById('scoreA');
+                  const scoreBInput = document.getElementById('scoreB');
+                  const externalLinkInput = document.getElementById('externalLink');
+                  if (!(scoreAInput instanceof HTMLInputElement)
+                    || !(scoreBInput instanceof HTMLInputElement)
+                    || !(externalLinkInput instanceof HTMLInputElement)) {
+                    alert('Formulario de placar invalido.');
+                    return;
+                  }
+                  const sA = parseInt(scoreAInput.value) || 0;
+                  const sB = parseInt(scoreBInput.value) || 0;
+                  const ext = externalLinkInput.value;
                   handleManualClose(editingLobby.id, sA, sB, ext);
                 }}
                 className="flex-1 py-3 rounded-xl bg-amber-500 text-slate-950 text-[10px] font-black uppercase tracking-widest hover:bg-amber-400 transition-all shadow-[0_0_20px_rgba(245,158,11,0.2)]"

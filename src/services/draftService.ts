@@ -244,7 +244,6 @@ export const draftService = {
     }
 
     try {
-      let summaryLobby: Lobby | null = null;
       const transactionResult = await runTransaction(db, async (transaction) => {
         const lobbyRef = doc(db, 'lobbies', lobby.id);
         const lobbyDoc = await transaction.get(lobbyRef);
@@ -255,12 +254,11 @@ export const draftService = {
 
         if (!result.success) return { success: false, error: result.error };
 
-        summaryLobby = normalizeLobbyData({ ...freshLobby, ...result.updates, id: freshLobby.id });
         transaction.update(lobbyRef, cleanData(result.updates));
         return { success: true };
       });
-      if (transactionResult.success && summaryLobby) {
-        await lobbyService.syncPublicMetadataForLobby(lobby.id, summaryLobby);
+      if (transactionResult.success) {
+        await lobbyService.syncPublicMetadataForLobby(lobby.id);
       }
       return transactionResult;
     } catch (error: any) {

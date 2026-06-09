@@ -4,6 +4,7 @@ import { Sword, Loader2, AlertTriangle, Github, MessageSquare, Scroll, User, X, 
 import { useLobby } from './hooks/useLobby';
 import { useDraft } from './hooks/useDraft';
 import { useDraftConfig } from './hooks/useDraftConfig';
+import { useAppVersion } from './hooks/useAppVersion';
 import { useTheme } from './hooks/useTheme';
 import { LanguageToggle } from './components/UI/LanguageToggle';
 import { LobbyCreation } from './components/Lobby/LobbyCreation';
@@ -14,7 +15,7 @@ import { ConfirmModal } from './components/UI/ConfirmModal';
 import { BugReportModal } from './components/UI/BugReportModal';
 import { PatchNotesModal } from './components/UI/PatchNotesModal';
 import { SettingsModal } from './components/UI/SettingsModal';
-import { TRANSLATIONS, PLAYER_COLORS, MCL_ROUND_MAPS, MCL_PLAYOFFS_PHASES, getMCLPicks } from './constants';
+import { TRANSLATIONS, PLAYER_COLORS, MCL_ROUND_MAPS, MCL_PLAYOFFS_PHASES, hydrateMclPicksWithRosterNames } from './constants';
 import { DraftTurn, Lobby, PickEntry, LobbySummary } from './types';
 import { lobbyService, PUBLIC_LOBBIES_PAGE_SIZE } from './services/lobbyService';
 import { cn } from './lib/utils';
@@ -23,6 +24,7 @@ import { ErrorBoundary } from './components/UI/ErrorBoundary';
 import { Footer } from './components/UI/Footer';
 import { CookieConsent } from './components/UI/CookieConsent';
 import { InstallPrompt } from './components/UI/InstallPrompt';
+import { VersionUpdateBanner } from './components/UI/VersionUpdateBanner';
 import { AboutPage } from './pages/AboutPage';
 import { TermsPage } from './pages/TermsPage';
 import { PrivacyPage } from './pages/PrivacyPage';
@@ -226,6 +228,7 @@ function AppContent() {
     isMyTurn,
     myTeam
   } = useDraft(lobby, isCaptain1, isCaptain2, guestId || '', lang);
+  const { updateAvailable, reloadApp } = useAppVersion();
 
   useEffect(() => {
     if (import.meta.env.VITE_E2E !== 'true') return;
@@ -469,7 +472,7 @@ function AppContent() {
     const initialSeriesMaps: string[] = [];
 
     if (config.preset === 'MCL' || config.preset === 'MCL_PLAYOFFS' || config.preset === 'MCL_TIEBREAKER') {
-      const mclPicks = getMCLPicks(1);
+      const mclPicks = hydrateMclPicksWithRosterNames(1);
       picks.push(...mclPicks);
     } else {
       let picksPerTeam = teamSize;
@@ -648,6 +651,7 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-amber-500/30 relative flex flex-col">
+      <VersionUpdateBanner open={updateAvailable} onReload={reloadApp} />
       {/* ── Forja de Hefesto Route ── */}
       {isForjaRoute ? (
         <Suspense fallback={<ForjaLoader />}>

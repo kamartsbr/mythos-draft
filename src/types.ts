@@ -56,6 +56,8 @@ export type SeriesType = 'BO1' | 'BO3' | 'BO5' | 'BO7' | 'BO9' | 'CUSTOM' | '3G'
 export type PickType = 'alternated' | 'blind';
 export type GodBanScope = 'PER_MAP' | 'SERIES';
 export type MCLPlayoffsPhase = 'QUARTERFINALS' | 'SEMIFINALS' | 'FINALS' | 'GRAND_FINALS';
+export type ForjaPlayoffMatchId = 'QF1' | 'QF2' | 'QF3' | 'QF4' | 'SF1' | 'SF2' | 'FINAL' | 'THIRD';
+export type ForjaPlayoffRound = 'QUARTERFINALS' | 'SEMIFINALS' | 'FINAL' | 'THIRD_PLACE';
 
 export type LobbyConfig = {
   teamSize: TeamSize;
@@ -87,6 +89,10 @@ export type LobbyConfig = {
   forjaTeamA?: string;
   forjaTeamB?: string;
   forjaGroupId?: string;
+  forjaPlayoffMatchId?: ForjaPlayoffMatchId;
+  forjaPlayoffRound?: ForjaPlayoffRound;
+  forjaPlayoffSourceA?: ForjaPlayoffMatchId;
+  forjaPlayoffSourceB?: ForjaPlayoffMatchId;
 
   // Forja Custom Draft Flags
   /** Se true, o Game 3 terá o mapa sorteado via pool cacheada da Forja (ADMIN turn automático) */
@@ -187,8 +193,8 @@ export type LobbySummary = {
   preset?: string | null;
   mclRound?: number;
   tournamentStage?: 'GROUP' | 'PLAYOFFS' | 'TIEBREAKER';
-  lastActivityAt: DraftTimestampRead | null;
-  createdAt: DraftTimestampRead | null;
+  lastActivityAt: DraftTimestampWrite | null;
+  createdAt: DraftTimestampWrite | null;
 };
 
 export type LobbyIndex = {
@@ -251,7 +257,7 @@ export type Lobby = {
   lastWinner: 'A' | 'B' | null;
   mapPool?: string[];
   timerStart: DraftTimestampWrite;
-  createdAt: DraftTimestampRead;
+  createdAt: DraftTimestampWrite;
   turnOrder: DraftTurn[];
   hiddenActions: { turnIndex: number; actionId: string; targetPlayerId?: number; playerName?: string }[];
   spectators: { id: string; name: string }[];

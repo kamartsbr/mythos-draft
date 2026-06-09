@@ -1,5 +1,5 @@
 import { LobbyConfig, DraftTurn, Lobby, DraftActionOptions } from '../types';
-import { getMCLPicks, getMCLTeamOrder, shouldUseGame2MclOrder } from '../data/draft';
+import { getMCLTeamOrder, hydrateMclPicksWithRosterNames, isMclStylePreset, isRealRosterName, shouldUseGame2MclOrder } from '../data/draft';
 import { MAPS, MAPS_BY_ID } from '../data/maps';
 import { MAJOR_GODS, MAJOR_GODS_BY_ID } from '../data/gods';
 import { phaseAfterDraftQueue } from '../domain/draft/rules/phaseTransitions';
@@ -443,8 +443,16 @@ export function processTurnAction(
 
         nextLobby.selectedMap = id;
 
-        if (nextLobby.config.preset === 'MCL' || nextLobby.config.preset === 'FORJA' || nextLobby.config.preset === 'MCL_PLAYOFFS' || nextLobby.config.preset === 'MCL_TIEBREAKER') {
-          nextLobby.picks = getMCLPicks(nextLobby.currentGame);
+        if (isMclStylePreset(nextLobby.config.preset)) {
+          nextLobby.picks = hydrateMclPicksWithRosterNames(
+            nextLobby.currentGame,
+            nextLobby.teamAPlayers,
+            nextLobby.teamBPlayers,
+            {
+              turnOrder: nextLobby.turnOrder,
+              existingPicks: nextLobby.picks,
+            }
+          );
         }
       } else {
         // God PICK
@@ -620,22 +628,33 @@ export function processTurnAction(
             if (targetPlayerId === undefined) {
               targetPlayerId = nextLobby.picks[pickIndex].playerId;
             }
-            
-            const isPlaceholder = (name?: string) => !name || /^P\d+$/i.test(name) || /^Player \d+$/i.test(name);
-            
-            if (!playerName || isPlaceholder(playerName)) {
+
+            if (isMclStylePreset(nextLobby.config.preset)) {
+              const currentPick = nextLobby.picks[pickIndex];
+              const teamPlayers = executionTeam === 'A' ? nextLobby.teamAPlayers : nextLobby.teamBPlayers;
+              const useGame2Order = shouldUseGame2MclOrder(nextLobby.turnOrder);
+              const teamOrder = executionTeam === 'A'
+                ? getMCLTeamOrder('A', null, useGame2Order)
+                : getMCLTeamOrder('B', null, useGame2Order);
+              const rosterIndex = teamOrder.indexOf(currentPick.playerId);
+              const rosterName = rosterIndex !== -1 ? teamPlayers?.[rosterIndex]?.name?.trim() : '';
+              const existingPickName = currentPick.playerName?.trim() || '';
+              if (!playerName || !playerName.trim()) {
+                playerName = isRealRosterName(rosterName) ? rosterName : (isRealRosterName(existingPickName) ? existingPickName : '');
+              }
+            } else if (!playerName || !playerName.trim()) {
               const teamPlayers = executionTeam === 'A' ? nextLobby.teamAPlayers : nextLobby.teamBPlayers;
               const assignedPlayerNames = nextLobby.picks
                 .filter(p => p.team === executionTeam && p.godId !== null)
                 .map(p => p.playerName)
                 .filter(Boolean);
-              
+
               const availablePlayers = teamPlayers?.filter(tp => tp.name && !assignedPlayerNames.includes(tp.name)) || [];
-              
+
               if (availablePlayers.length > 0) {
                 playerName = availablePlayers[Math.floor(Math.random() * availablePlayers.length)].name;
               } else {
-                playerName = nextLobby.picks[pickIndex].playerName || `Player ${targetPlayerId}`;
+                playerName = nextLobby.picks[pickIndex].playerName || '';
               }
             }
           }
@@ -745,16 +764,16 @@ export function processTurnAction(
 }
 
 /**
- * Update lobby reporting state and either advance the series to the next game or mark the match finished based on a reported winner.
+ * Record a match report vote, finalize the game when both teams agree, and either advance the series to the next game or mark the match finished.
  *
- * This records the reporting team's vote (or mirrors votes when `isAdminOverride`), starts the report timer when voting begins, and when both sides agree appends a game entry to history, increments the winning team's score, and decides whether the series is complete. If the series continues, the function advances to the next game, resets draft/report fields, recomputes the next turn order, and applies preset-specific reinitialization (e.g., MCL/FORJA pick assignment); if the series finishes, it sets the lobby to the finished state.
- *
- * @param lobby - Current immutable Lobby state
- * @param winner - Reported game winner (`'A'` or `'B'`); must be non-null when submitting a vote
- * @param reportingTeam - Team submitting this report vote (`'A'` or `'B'`)
+ * @param lobby - The current Lobby state (treated immutably)
+ * @param winner - The reported game winner; required when submitting a vote
+ * @param reportingTeam - The team submitting this report vote
  * @param currentTimeMs - Current timestamp in milliseconds used for time fields and history entries
- * @param options.isAdminOverride - When true, apply the reported winner to both teams' votes immediately
- * @returns The updated Lobby reflecting the report action
+ * @param options - Optional flags for the report action
+ * @param options.isAdminOverride - When true, apply `winner` to both teams' votes immediately
+ * @returns The updated Lobby reflecting the recorded vote and any resulting history, score, phase, and game advancement
+ * @throws Error when `winner` is null
  */
 export function processReportAction(
   lobby: Lobby,
@@ -879,24 +898,18 @@ export function processReportAction(
         nextLobby.readyA_report = false;
         nextLobby.readyB_report = false;
 
-        if (nextLobby.config.preset === 'MCL' || nextLobby.config.preset === 'FORJA' || nextLobby.config.preset === 'MCL_PLAYOFFS' || nextLobby.config.preset === 'MCL_TIEBREAKER') {
+        if (isMclStylePreset(nextLobby.config.preset)) {
           const nextGameMap = (nextLobby.seriesMaps || [])[nextLobby.currentGame - 1];
           if (nextGameMap && nextGameMap !== '') {
-            const newMCLPicks = getMCLPicks(nextLobby.currentGame);
-            const teamAPlayers = nextLobby.teamAPlayers || [];
-            const teamBPlayers = nextLobby.teamBPlayers || [];
-            const useGame2Order = shouldUseGame2MclOrder(nextLobby.turnOrder);
-            const teamAOrder = getMCLTeamOrder('A', nextGameMap, useGame2Order);
-            const teamBOrder = getMCLTeamOrder('B', nextGameMap, useGame2Order);
-
-            nextLobby.picks = newMCLPicks.map(p => {
-              const existingPick = (lobby.picks || []).find(ep => ep.playerId === p.playerId);
-              const teamPlayers = p.team === 'A' ? teamAPlayers : teamBPlayers;
-              const teamOrder = p.team === 'A' ? teamAOrder : teamBOrder;
-              const rosterIdx = teamOrder.indexOf(p.playerId);
-              const player = teamPlayers?.[rosterIdx];
-              return { ...p, playerName: player?.name || existingPick?.playerName || '' };
-            });
+            nextLobby.picks = hydrateMclPicksWithRosterNames(
+              nextLobby.currentGame,
+              nextLobby.teamAPlayers,
+              nextLobby.teamBPlayers,
+              {
+                turnOrder: nextLobby.turnOrder,
+                existingPicks: lobby.picks,
+              }
+            );
             nextLobby.selectedMap = nextGameMap;
           } else {
             nextLobby.picks = nextLobby.picks.map(p => ({ ...p, godId: null, isRandom: false, turnIndex: undefined }));

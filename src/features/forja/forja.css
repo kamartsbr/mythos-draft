@@ -764,6 +764,62 @@
 /* Draft Room */
 .forja-view--draft-room .forja-draft-room-your-turn{display:inline-block;margin-left:.75rem;padding:.25rem .625rem;background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.3);border-radius:.375rem;font-size:.65rem;font-weight:900;color:#4ade80;letter-spacing:.08em;animation:forja-pulse .8s ease-in-out infinite alternate}.forja-draft-room-status{display:flex;align-items:center;gap:.75rem;padding:.875rem 1.25rem;border-radius:.875rem;border:1px solid rgba(51,65,85,.3);background:rgba(15,23,42,.5);font-size:.82rem;color:#94a3b8;margin-bottom:1.25rem}.forja-draft-room-status--myturn{border-color:rgba(74,222,128,.3);background:rgba(74,222,128,.05);}.forja-draft-room-presences{display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1.5rem}.forja-draft-room-presence-item{display:flex;align-items:center;gap:.375rem;font-size:.75rem;color:#64748b;background:rgba(15,23,42,.4);border:1px solid rgba(51,65,85,.2);border-radius:.5rem;padding:.375rem .75rem}.forja-draft-room-pool{margin-bottom:2rem}.forja-draft-room-cards{display:flex;flex-direction:column;gap:.625rem}.forja-draft-room-card{display:flex;align-items:center;gap:.875rem;padding:.875rem 1rem;background:rgba(15,23,42,.6);border:1px solid rgba(51,65,85,.3);border-radius:.875rem;transition:all .2s}.forja-draft-room-card:hover{border-color:rgba(245,158,11,.25)}.forja-draft-room-card--disabled{opacity:.5}.forja-draft-room-card__avatar{width:2.5rem;height:2.5rem;border-radius:.625rem;object-fit:cover;flex-shrink:0}.forja-draft-room-card__info{flex:1;display:flex;flex-direction:column;gap:.15rem}.forja-draft-room-card__nick{font-size:.9rem;font-weight:700;color:#f1f5f9}.forja-draft-room-teams{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid rgba(51,65,85,.3)}.forja-draft-room-team{background:rgba(15,23,42,.5);border:1px solid rgba(51,65,85,.3);border-radius:.875rem;padding:1rem;display:flex;flex-direction:column;gap:.5rem;font-size:.82rem}.forja-draft-room-team--active{border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.04)}.forja-draft-room-team-member{display:flex;align-items:center;gap:.375rem;color:#94a3b8}.forja-draft-room-team-member img{width:1.25rem;height:1.25rem;border-radius:.25rem;object-fit:cover}.forja-draft-room-team-empty{color:#334155;font-size:.72rem;font-style:italic}
 
+/* Forja Playoffs */
+.forja-playoffs-panel{margin-top:2.5rem;padding:1.25rem;border:1px solid rgba(245,158,11,.22);border-radius:1rem;background:linear-gradient(135deg,rgba(15,23,42,.9),rgba(2,6,23,.74));box-shadow:0 24px 80px rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.04)}
+.forja-playoffs-panel__header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem}
+.forja-playoffs-kicker{display:block;color:#f59e0b;font-size:.65rem;font-weight:900;letter-spacing:.16em;text-transform:uppercase;margin-bottom:.35rem}
+.forja-playoffs-panel h3{margin:0;color:#f8fafc;font-size:1.15rem;font-weight:950;text-transform:uppercase;letter-spacing:.04em}
+.forja-playoffs-panel p{margin:.3rem 0 0;color:#94a3b8;font-size:.78rem;max-width:42rem}
+.forja-playoffs-gate{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;justify-content:flex-end;color:#facc15;font-size:.72rem;font-weight:900;text-transform:uppercase;letter-spacing:.08em}
+.forja-playoffs-actions{display:flex;flex-direction:column;align-items:flex-end;gap:.35rem}
+.forja-playoffs-actions__helper{max-width:14rem;color:#94a3b8;font-size:.62rem;font-weight:800;line-height:1.35;text-align:right;text-transform:none;letter-spacing:0}
+.forja-playoffs-blocked{margin-bottom:1rem;padding:1rem;border:1px solid rgba(245,158,11,.34);border-radius:.9rem;background:linear-gradient(135deg,rgba(245,158,11,.12),rgba(15,23,42,.72));box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+.forja-playoffs-blocked__header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:.45rem}
+.forja-playoffs-blocked__header strong{color:#f8fafc;font-size:.82rem;font-weight:950;text-transform:uppercase;letter-spacing:.08em}
+.forja-playoffs-blocked__header span{color:#facc15;font-size:.72rem;font-weight:950;text-align:right;text-transform:uppercase;letter-spacing:.06em}
+.forja-playoffs-blocked p{margin:0;color:#fbbf24;font-size:.8rem;font-weight:800;max-width:56rem}
+.forja-playoffs-blocked__groups{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.5rem;margin-top:.85rem}
+.forja-playoffs-blocked__groups span{padding:.55rem .65rem;border:1px solid rgba(245,158,11,.2);border-radius:.65rem;background:rgba(2,6,23,.48);color:#cbd5e1;font-size:.72rem;font-weight:900;text-transform:uppercase}
+.forja-playoffs-groups{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.65rem;margin-bottom:1rem}
+.forja-playoffs-group-chip{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.65rem .75rem;border:1px solid rgba(51,65,85,.65);border-radius:.75rem;background:rgba(15,23,42,.7);color:#64748b;font-size:.72rem;font-weight:800;text-transform:uppercase}
+.forja-playoffs-group-chip strong{color:#94a3b8;font-variant-numeric:tabular-nums}
+.forja-playoffs-group-chip--complete{border-color:rgba(74,222,128,.35);background:rgba(22,101,52,.1);color:#bbf7d0}
+.forja-playoffs-group-chip--complete strong{color:#4ade80}
+.forja-playoffs-warning{margin-bottom:1rem;padding:.8rem 1rem;border:1px dashed rgba(245,158,11,.35);border-radius:.75rem;background:rgba(245,158,11,.07);color:#fbbf24;font-size:.78rem;font-weight:800}
+.forja-bracket-board{display:grid;grid-template-columns:1.35fr 1fr 1fr 1fr;gap:1rem;align-items:stretch;overflow-x:auto;padding-bottom:.25rem}
+.forja-bracket-round{min-width:230px;display:flex;flex-direction:column;gap:.75rem}
+.forja-bracket-round__title{color:#f8fafc;font-size:.72rem;font-weight:950;text-transform:uppercase;letter-spacing:.14em;padding:.35rem .1rem;border-bottom:1px solid rgba(51,65,85,.55)}
+.forja-bracket-round__matches{display:flex;flex-direction:column;gap:.85rem;height:100%;justify-content:center}
+.forja-bracket-match{position:relative;display:flex;flex-direction:column;gap:.8rem;padding:.9rem;border:1px solid rgba(51,65,85,.68);border-radius:.85rem;background:radial-gradient(circle at top left,rgba(245,158,11,.11),transparent 42%),rgba(15,23,42,.82);box-shadow:0 14px 40px rgba(0,0,0,.25)}
+.forja-bracket-match--final,.forja-bracket-match--third_place{border-color:rgba(245,158,11,.32);background:radial-gradient(circle at top,rgba(245,158,11,.16),transparent 50%),rgba(15,23,42,.88)}
+.forja-bracket-match__top{display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem}
+.forja-bracket-match__meta{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap}
+.forja-bracket-match__label{display:block;color:#f59e0b;font-size:.6rem;font-weight:950;letter-spacing:.12em;text-transform:uppercase}
+.forja-bracket-series{display:inline-flex;align-items:center;justify-content:center;border:1px solid rgba(245,158,11,.28);border-radius:999px;padding:.12rem .38rem;background:rgba(245,158,11,.08);color:#facc15;font-size:.55rem;font-weight:950;letter-spacing:.08em}
+.forja-bracket-match h4{margin:.15rem 0 0;color:#cbd5e1;font-size:.72rem;line-height:1.25;font-weight:850}
+.forja-bracket-status{flex-shrink:0;border:1px solid rgba(148,163,184,.22);border-radius:999px;padding:.22rem .48rem;color:#94a3b8;background:rgba(148,163,184,.08);font-size:.58rem;font-weight:950;letter-spacing:.08em;text-transform:uppercase}
+.forja-bracket-status--done{border-color:rgba(74,222,128,.3);background:rgba(74,222,128,.1);color:#4ade80}
+.forja-bracket-status--live{border-color:rgba(34,211,238,.38);background:rgba(34,211,238,.1);color:#22d3ee}
+.forja-bracket-match__slots{display:flex;flex-direction:column;gap:.45rem}
+.forja-bracket-slot{display:flex;align-items:center;justify-content:space-between;gap:.65rem;min-height:2.65rem;padding:.58rem .65rem;border:1px solid rgba(51,65,85,.58);border-radius:.65rem;background:rgba(2,6,23,.62);color:#cbd5e1}
+.forja-bracket-slot--winner{border-color:rgba(74,222,128,.35);background:linear-gradient(90deg,rgba(22,101,52,.28),rgba(2,6,23,.68));color:#ecfdf5}
+.forja-bracket-slot--pending{color:#64748b;border-style:dashed}
+.forja-bracket-team-logo{flex-shrink:0;width:2rem;height:2rem;border-radius:.55rem;overflow:hidden;border:1px solid rgba(245,158,11,.24);background:linear-gradient(135deg,rgba(30,41,59,.92),rgba(2,6,23,.9));display:flex;align-items:center;justify-content:center;color:#facc15;font-size:.72rem;font-weight:950;text-transform:uppercase;box-shadow:0 8px 18px rgba(0,0,0,.22)}
+.forja-bracket-team-logo img{width:100%;height:100%;object-fit:cover;display:block}
+.forja-bracket-slot__team{display:flex;align-items:center;gap:.45rem;min-width:0;font-size:.78rem;font-weight:850;line-height:1.15}
+.forja-bracket-slot__team span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.forja-bracket-seed{flex-shrink:0;min-width:1.6rem;text-align:center;border:1px solid rgba(245,158,11,.3);border-radius:.35rem;padding:.12rem .24rem;color:#facc15;background:rgba(245,158,11,.08);font-size:.6rem;font-weight:950}
+.forja-bracket-score{flex-shrink:0;color:#f8fafc;font-size:1rem;font-weight:950;font-variant-numeric:tabular-nums}
+.forja-bracket-match__actions{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap;min-height:1.9rem}
+.forja-bracket-action{display:inline-flex;align-items:center;justify-content:center;min-height:1.8rem;padding:.42rem .62rem;border:1px solid rgba(51,65,85,.7);border-radius:.55rem;background:rgba(30,41,59,.7);color:#cbd5e1;font-size:.62rem;font-weight:950;text-transform:uppercase;letter-spacing:.06em;text-decoration:none;transition:all .18s}
+.forja-bracket-action:hover:not(:disabled){border-color:rgba(245,158,11,.45);color:#f8fafc;background:rgba(51,65,85,.86)}
+.forja-bracket-action--primary{border-color:rgba(245,158,11,.45);background:linear-gradient(135deg,#f59e0b,#facc15);color:#020617}
+.forja-bracket-action--primary:hover:not(:disabled){color:#020617;filter:brightness(1.08)}
+.forja-bracket-action:disabled{opacity:.55;cursor:not-allowed}
+.forja-bracket-pending{color:#64748b;font-size:.65rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em}
+@media(max-width:1100px){.forja-bracket-board{grid-template-columns:repeat(4,240px)}}
+@media(max-width:760px){.forja-playoffs-panel{padding:1rem;margin-left:-.25rem;margin-right:-.25rem}.forja-playoffs-panel__header{flex-direction:column}.forja-playoffs-gate{justify-content:flex-start}.forja-playoffs-actions{align-items:flex-start}.forja-playoffs-actions__helper{text-align:left}.forja-playoffs-blocked__header{flex-direction:column;gap:.35rem}.forja-playoffs-blocked__header span{text-align:left}.forja-playoffs-blocked__groups{grid-template-columns:repeat(2,minmax(0,1fr))}.forja-playoffs-groups{grid-template-columns:repeat(2,minmax(0,1fr))}.forja-bracket-board{display:flex;gap:.85rem;scroll-snap-type:x mandatory}.forja-bracket-round{min-width:82vw;scroll-snap-align:start}.forja-bracket-round__matches{justify-content:flex-start}}
+
 /* === REGISTRATION FORM v2 === */
 /* Wide modal */
 .forja-modal--wide{max-width:620px}

@@ -1,8 +1,52 @@
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite'; 
 import path from 'path';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv, type ViteDevServer } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { createBuildVersion, createVersionJson } from './scripts/version.mjs';
+
+/**
+ * Create a Vite plugin that exposes build version metadata to the build and dev server.
+ *
+ * The plugin defines `import.meta.env.VITE_APP_BUILD_VERSION`, emits a `version.json` asset during build,
+ * and serves `/version.json` from the dev server with a JSON body and no-cache headers. For non-`GET`/`HEAD`
+ * requests the dev middleware delegates to the next handler.
+ *
+ * @returns The configured Vite plugin object
+ */
+function versionAssetPlugin() {
+  const buildVersion = createBuildVersion();
+
+  return {
+    name: 'version-asset',
+    config() {
+      return {
+        define: {
+          'import.meta.env.VITE_APP_BUILD_VERSION': JSON.stringify(buildVersion.version),
+        },
+      };
+    },
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: createVersionJson(buildVersion),
+      });
+    },
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use('/version.json', (req, res, next) => {
+        if (req.method && req.method !== 'GET' && req.method !== 'HEAD') {
+          return next();
+        }
+
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.end(createVersionJson(buildVersion));
+      });
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
@@ -11,6 +55,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       tailwindcss(),
+      versionAssetPlugin(),
       VitePWA({
         registerType: 'autoUpdate',
         workbox: {

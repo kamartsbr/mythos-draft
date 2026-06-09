@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { initializeFirestore, persistentLocalCache, doc, getDocFromServer } from 'firebase/firestore';
+import { initializeFirestore, memoryLocalCache, doc, getDocFromServer } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import firebaseConfig from '../firebase-applet-config.json';
 
@@ -9,7 +9,7 @@ export const app = initializeApp(firebaseConfig);
 export const FIRESTORE_DB_ID = firebaseConfig.firestoreDatabaseId;
 
 export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache()
+  localCache: memoryLocalCache()
 }, firebaseConfig.firestoreDatabaseId);
 
 export const auth = getAuth(app);

@@ -417,13 +417,20 @@ interface LobbyConfig {
 }
 ```
 
-### 16.7 Draft Rápido (ForjaCustomDraft)
-- Cria lobbies pré-configurados com regras MCL injetadas automaticamente.
-- Visível para **qualquer usuário Discord logado** (não apenas admins).
-- Inicializa os picks com esqueleto 3v3 via `getMCLPicks()` para o DraftUI renderizar.
-
-### 16.8 useDraft — startsWithB para FORJA
-O hook `useDraft.ts` tem uma condição `startsWithB` que determina que, no Game 3, o perdedor do Game 2 escolhe o mapa primeiro. Essa condição foi expandida para incluir o preset `FORJA` além do `MCL`.
+### 16.7 FORJA Draft Rápido e Playoffs
+- `ForjaCustomDraft.tsx` cria lobbies manuais `FORJA` para qualquer usuário Discord logado.
+- Grupo: `preset=FORJA`, `tournamentStage=GROUP`, `seriesType=BO3`, `customGameCount=3`, pool `FORJA_MAP_POOL`.
+- Playoffs MD3: `preset=FORJA`, `tournamentStage=PLAYOFFS_BO3`, `seriesType=BO3`, `customGameCount=3`, pool `FORJA_PLAYOFFS_MAP_POOL`.
+- Playoffs MD5: `preset=FORJA`, `tournamentStage=PLAYOFFS_BO5`, `seriesType=BO5`, `customGameCount=5`, pool `FORJA_PLAYOFFS_MAP_POOL`.
+- `FORJA_PLAYOFFS_MAP_POOL = FORJA_MAP_POOL + FORJA_PLAYOFFS_EXTRA_MAPS`, com deduplicação.
+- Grupo BO3: G1 Host/Time A escolhe, G2 Guest/Time B escolhe, G3 `ADMIN` / system random.
+- Playoffs BO3: G1 Host/Time A escolhe, G2 Guest/Time B escolhe sempre, G3 `ADMIN` / system random.
+- Playoffs BO5: G1 Host/Time A escolhe, G2 Guest/Time B escolhe sempre, G3 perdedor do G2 escolhe, G4 perdedor do G3 escolhe, G5 `ADMIN` / system random.
+- Grupo não ativa bans por mapa automaticamente, salvo configuração explícita em outro lugar.
+- Playoffs usam 1 ban de deus por time em cada jogo, depois do map pick e antes dos god picks.
+- Distinções críticas: não copiar MCL Playoffs cegamente; FORJA Playoffs sempre mantém G2 como pick do Guest/Team B; o mapa final é random/admin/system; FORJA Playoffs não usa `playoffsLastMap`.
+- Mapas extras de FORJA Playoffs: `arena`, `mirage`, `silk_road`, `team_migration`, `obsidian_ridge`, `blood_river_crossing`, `nile_shallows`, `nomad`, `erebus`, `jotunheim`.
+- Veja `docs/FORJA_RULES.md` para a referência focada.
 
 ---
 

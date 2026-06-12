@@ -28,6 +28,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
   const [loading, setLoading] = useState(true);
   const [lang, setLang] = useState<'pt' | 'en' | 'es' | 'fr' | 'de' | 'ru' | 'da' | 'it' | 'mx'>('pt');
   const t = TRANSLATIONS[lang as keyof typeof TRANSLATIONS] || TRANSLATIONS.en;
+  const hudT = t.streamerHud ?? {};
 
   // Manual Control State
   const [manualMode, setManualMode] = useState(false);
@@ -143,7 +144,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
   if (!lobby) {
     return (
       <div className="min-h-screen bg-transparent flex items-center justify-center text-white font-bold">
-        Lobby not found
+        {hudT.lobbyNotFound || 'Lobby not found'}
       </div>
     );
   }
@@ -186,13 +187,13 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
   const displayPicksA = isViewingHistory && historyGame
     ? (historyGame.rosterA || historyGame.picksA.map((godId, i) => ({ godId, team: 'A', playerName: `Player ${i+1}`, playerId: i+1 })))
     : (is1v1 && isGodPickerPhase 
-        ? [{ godId: lobby.pickerVoteA, team: 'A', playerName: (lobby.teamAName || lobby.captain1Name) || 'Host', playerId: 1 }]
+        ? [{ godId: lobby.pickerVoteA, team: 'A', playerName: (lobby.teamAName || lobby.captain1Name) || hudT.host || 'Host', playerId: 1 }]
         : teamAPicks);
   
   const displayPicksB = isViewingHistory && historyGame
     ? (historyGame.rosterB || historyGame.picksB.map((godId, i) => ({ godId, team: 'B', playerName: `Player ${i+1}`, playerId: i+1 })))
     : (is1v1 && isGodPickerPhase
-        ? [{ godId: lobby.pickerVoteB, team: 'B', playerName: (lobby.teamBName || lobby.captain2Name) || 'Guest', playerId: 1 }]
+        ? [{ godId: lobby.pickerVoteB, team: 'B', playerName: (lobby.teamBName || lobby.captain2Name) || hudT.guest || 'Guest', playerId: 1 }]
         : teamBPicks);
 
   const getGod = (godId: string | null) => getMajorGodById(godId);
@@ -212,6 +213,83 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
     return originalTeamPicks[godPicksBeforeThisTurn]?.playerId;
   };
 
+  const isCurrentPickSlot = (team: 'A' | 'B', pick: PickEntry) => (
+    !isViewingHistory
+    && lobby.phase === 'god_pick'
+    && turnOrder[lobby.turn]?.target === 'GOD'
+    && turnOrder[lobby.turn]?.action === 'PICK'
+    && isMyTeamTurn(team)
+    && pick.playerId === currentlyPickingPlayerId(team)
+  );
+
+  const getNextPickBadgeLabel = () => hudT.nextPick || t.nextPick || 'NEXT PICK';
+
+  const getHudModuleLabel = (key: keyof typeof visibleElements) => {
+    const labelMap = {
+      score: hudT.score || t.seriesScore || 'SCORE',
+      picks: hudT.picks || t.picks || 'PICKS',
+      maps: hudT.maps || t.mapSequence || 'MAPS',
+      bans: hudT.bans || t.bans || 'BANS',
+    };
+
+    return labelMap[key];
+  };
+
+  const getLaneLabel = (lane?: string | null) => {
+    if (!lane) return '';
+    return lane === 'center'
+      ? (hudT.middle || t.middle || 'MIDDLE')
+      : (hudT.corner || hudT.flank || t.corner || 'CORNER');
+  };
+
+  const getCleanPlayerLabel = (playerName?: string | null) => {
+    const normalized = typeof playerName === 'string' ? playerName.trim() : '';
+    if (!normalized) return '';
+    if (/^selecting\.{0,3}$/i.test(normalized)) return '';
+    if (/^player\s*\d+$/i.test(normalized)) return '';
+    if (/^p\d+$/i.test(normalized)) return '';
+    return normalized;
+  };
+
+  const getSlotHeaderLabel = (
+    team: 'A' | 'B',
+    pick: PickEntry,
+    currentPickSlot: boolean
+  ) => {
+    if (is1v1) {
+      return team === 'A'
+        ? ((lobby.teamAName || lobby.captain1Name) || hudT.host || 'HOST')
+        : ((lobby.teamBName || lobby.captain2Name) || hudT.guest || 'GUEST');
+    }
+
+    if (currentPickSlot) {
+      return getCleanPlayerLabel(pick.playerName);
+    }
+
+    if (pick.godId) {
+      return getCleanPlayerLabel(pick.playerName);
+    }
+
+    return getCleanPlayerLabel(pick.playerName);
+  };
+
+  const getSlotMainLabel = ({
+    god,
+    showGod,
+    isCurrentPlayerTurn,
+    pick,
+  }: {
+    god?: ReturnType<typeof getMajorGodById>;
+    showGod: boolean;
+    isCurrentPlayerTurn: boolean;
+    pick: PickEntry;
+  }) => {
+    if (god && showGod) return god.name;
+    if (is1v1 && isGodPickerPhase && pick.godId) return hudT.godReady || 'GOD READY';
+    if (isCurrentPlayerTurn) return getNextPickBadgeLabel();
+    return '';
+  };
+
   const getStatusMessages = () => {
     const messages: string[] = [];
 
@@ -219,7 +297,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
       if (displayedGameWinner) {
         messages.push(`${t.victory} - ${displayedGameWinner === 'A' ? ((lobby.teamAName || lobby.captain1Name) || t.teamA) : ((lobby.teamBName || lobby.captain2Name) || t.teamB)}`);
       } else {
-        messages.push(`${t.game} ${displayGameIdx + 1}`);
+        messages.push(`${hudT.game || t.game || 'GAME'} ${displayGameIdx + 1}`);
       }
     }
 
@@ -280,7 +358,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse shadow-[0_0_10px_rgba(6,182,212,1)]" />
-                <span className="text-[10px] font-black uppercase tracking-widest text-cyan-400">Neon HUD Controller</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-cyan-400">{hudT.neonHudController || 'NEON HUD CONTROLLER'}</span>
               </div>
               <button onClick={() => setShowControls(false)} className="text-slate-500 hover:text-white transition-colors">
                 <EyeOff className="w-4 h-4" />
@@ -289,13 +367,13 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
 
             <div className="space-y-4">
               <div className="flex items-center justify-between border-b border-slate-800 pb-3 -mt-2">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">System Language</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{hudT.systemLanguage || 'SYSTEM LANGUAGE'}</span>
                 <LanguageToggle lang={lang} setLang={setLang as any} />
               </div>
 
               <div className="bg-slate-950/50 p-3 rounded-xl border border-slate-800">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Manual Override</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{hudT.manualOverride || 'MANUAL OVERRIDE'}</span>
                   <button 
                     onClick={() => setManualMode(!manualMode)}
                     className={cn(
@@ -310,13 +388,13 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                   </button>
                 </div>
                 <p className="text-[8px] text-slate-500 leading-tight">
-                  Enable to manually control which game is displayed on the HUD.
+                  {hudT.manualOverrideDesc || 'Enable to manually control which game is displayed on the HUD.'}
                 </p>
               </div>
 
               {manualMode && (
                 <div className="space-y-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Game Display</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{hudT.activeGameDisplay || 'ACTIVE GAME DISPLAY'}</span>
                   <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-xl p-2">
                     <button 
                       onClick={() => setDisplayGameIdx(Math.max(0, displayGameIdx - 1))}
@@ -325,8 +403,8 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                       <ChevronLeft className="w-5 h-5" />
                     </button>
                     <div className="flex flex-col items-center">
-                      <span className="text-xs font-black text-white">GAME {displayGameIdx + 1}</span>
-                      <span className="text-[8px] text-slate-500 uppercase font-bold">Manual</span>
+                      <span className="text-xs font-black text-white">{hudT.game || t.game || 'GAME'} {displayGameIdx + 1}</span>
+                      <span className="text-[8px] text-slate-500 uppercase font-bold">{hudT.manual || 'MANUAL'}</span>
                     </div>
                     <button 
                       onClick={() => setDisplayGameIdx(Math.min(seriesMaps.length - 1, displayGameIdx + 1))}
@@ -339,7 +417,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
               )}
 
               <div className="space-y-3 pt-2 border-t border-slate-800">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Module Visibility</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{hudT.moduleVisibility || 'MODULE VISIBILITY'}</span>
                 <div className="grid grid-cols-2 gap-2">
                   {Object.entries(visibleElements).map(([key, val]) => (
                     <button
@@ -352,7 +430,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                           : "bg-slate-800/50 border-slate-700 text-slate-500 hover:border-slate-600"
                       )}
                     >
-                      {key}
+                      {getHudModuleLabel(key as keyof typeof visibleElements)}
                     </button>
                   ))}
                 </div>
@@ -361,13 +439,13 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
               {/* HUD Scaling Control */}
               <div className="space-y-2 pt-2 border-t border-slate-800">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">HUD Scaling</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{hudT.hudScaling || 'HUD SCALING'}</span>
                   <div className="flex items-center gap-2">
                     <button 
                       onClick={() => setHudScale(0.75)}
                       className="text-[8px] font-black text-cyan-500 hover:text-cyan-400 uppercase tracking-tighter"
                     >
-                      Reset (75%)
+                      {hudT.resetScale || 'RESET (75%)'}
                     </button>
                     <span className="text-[10px] font-bold text-cyan-400">{Math.round(hudScale * 100)}%</span>
                   </div>
@@ -394,7 +472,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                       : "bg-cyan-500/20 border border-cyan-500 text-cyan-400 hover:bg-cyan-500 hover:text-slate-950 shadow-[0_0_15px_rgba(6,182,212,0.2)]"
                   )}
                 >
-                   {copiedObs ? "LINK COPIED!" : "COPY CLEAN OBS LINK"}
+                   {copiedObs ? (hudT.linkCopied || t.linkCopied || 'LINK COPIED!') : (hudT.copyCleanObsLink || 'COPY CLEAN OBS LINK')}
                 </button>
               </div>
             </div>
@@ -402,7 +480,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
             <div className="pt-4 border-t border-slate-800 flex flex-col gap-2">
               <div className="flex items-center gap-2 text-[8px] text-slate-500">
                 <Settings2 className="w-3 h-3" />
-                <span>OBS Browser Source: 1920x1080</span>
+                <span>{hudT.obsBrowserSource || 'OBS Browser Source: 1920x1080'}</span>
               </div>
             </div>
           </motion.div>
@@ -570,7 +648,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
               {/* Team A Picks */}
               <div className="flex flex-col gap-6 flex-1">
                 {displayPicksA.map((pick, idx) => {
-                  const isCurrentPlayerTurn = isMyTeamTurn('A') && pick.playerId === currentlyPickingPlayerId('A');
+                  const isCurrentPlayerTurn = isCurrentPickSlot('A', pick);
                   const hoveredGodId = lobby.hoveredGodIdA;
                   const committedGod = pick.godId ? getGod(pick.godId) : undefined;
                   const previewGod = !pick.godId && isCurrentPlayerTurn && hoveredGodId ? getGod(hoveredGodId) : undefined;
@@ -587,7 +665,10 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                   });
                   const playerColor = resolved.colorHex;
                   const playerLane = resolved.lane;
+                  const laneLabel = getLaneLabel(playerLane);
                   const isLoser = displayedGameWinner === 'B';
+                  const headerLabel = getSlotHeaderLabel('A', pick, isCurrentPlayerTurn);
+                  const mainLabel = getSlotMainLabel({ god, showGod, isCurrentPlayerTurn, pick });
 
                   return (
                     <motion.div 
@@ -598,9 +679,24 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                       className={cn("flex items-center gap-6 group", isLoser && "grayscale opacity-50")}
                     >
                       <div 
-                        className={cn("w-24 h-24 rounded-2xl overflow-hidden border-2 bg-slate-900 shadow-2xl transition-all relative", isHovered && "opacity-60 border-dashed")}
-                        style={{ borderColor: `${playerColor}50`, boxShadow: `0 0 30px ${playerColor}20` }}
+                        className={cn(
+                          "w-24 h-24 rounded-2xl overflow-hidden border-2 bg-slate-900 shadow-2xl transition-all relative",
+                          isHovered && "opacity-60 border-dashed",
+                          isCurrentPlayerTurn && "border-amber-300 shadow-[0_0_35px_rgba(251,191,36,0.55)]"
+                        )}
+                        style={{
+                          borderColor: isCurrentPlayerTurn ? '#fcd34d' : `${playerColor}50`,
+                          boxShadow: isCurrentPlayerTurn ? '0 0 35px rgba(251,191,36,0.55)' : `0 0 30px ${playerColor}20`
+                        }}
                       >
+                        {isCurrentPlayerTurn && (
+                          <motion.div
+                            aria-hidden="true"
+                            className="absolute -inset-2 rounded-[1.35rem] border border-amber-300/60 pointer-events-none"
+                            animate={{ opacity: [0.45, 1, 0.45], scale: [1, 1.04, 1] }}
+                            transition={{ duration: 1.35, repeat: Infinity, ease: 'easeInOut' }}
+                          />
+                        )}
                         {god && showGod ? (
                           <img src={god.image} alt={god.name} className={cn("w-full h-full object-cover", isHovered && "grayscale")} referrerPolicy="no-referrer" />
                         ) : (
@@ -608,10 +704,20 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                             <div className="w-10 h-10 border-4 border-slate-800 border-t-cyan-500 rounded-full animate-spin" />
                           </div>
                         )}
+                        {isCurrentPlayerTurn && (
+                          <div className="absolute bottom-1 left-1 right-1 bg-amber-300/95 text-slate-950 px-2 py-1 rounded-md text-[8px] font-black uppercase tracking-[0.2em] text-center shadow-[0_0_18px_rgba(251,191,36,0.45)]">
+                            {getNextPickBadgeLabel()}
+                          </div>
+                        )}
                         {/* Position Indicator */}
-                        {playerLane && (
-                          <div className="absolute top-1 right-1 bg-slate-950/80 px-1.5 py-0.5 rounded text-[8px] font-black uppercase text-slate-400 border border-slate-800">
-                            {playerLane === 'center' ? t.middle || 'CENTER' : t.corner || 'FLANK'}
+                        {laneLabel && (
+                          <div className={cn(
+                            "absolute top-1 right-1 px-1.5 py-0.5 rounded text-[8px] font-black uppercase border",
+                            isCurrentPlayerTurn
+                              ? "bg-amber-300/95 text-slate-950 border-amber-100"
+                              : "bg-slate-950/80 text-slate-400 border-slate-800"
+                          )}>
+                            {laneLabel}
                           </div>
                         )}
                       </div>
@@ -619,11 +725,15 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: playerColor, boxShadow: `0 0 10px ${playerColor}` }} />
                           <span className="text-[12px] font-black uppercase tracking-[0.2em]" style={{ color: playerColor }}>
-                            {is1v1 ? ((lobby.teamAName || lobby.captain1Name) || 'HOST') : (pick.godId || isCurrentPlayerTurn ? (pick.playerName || 'SELECTING...') : '')}
+                            {headerLabel}
                           </span>
                         </div>
-                        <span className={cn("text-3xl font-black uppercase text-white tracking-tight drop-shadow-xl", isHovered && "text-slate-400")}>
-                          {god && showGod ? god.name : (is1v1 && isGodPickerPhase && pick.godId ? 'GOD READY' : 'SELECTING...')}
+                        <span className={cn(
+                          "text-3xl font-black uppercase tracking-tight drop-shadow-xl min-h-[2.25rem]",
+                          isHovered && "text-slate-400",
+                          isCurrentPlayerTurn ? "text-amber-300" : "text-white"
+                        )}>
+                          {mainLabel}
                         </span>
                       </div>
                     </motion.div>
@@ -691,7 +801,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
               {/* Team B Picks */}
               <div className="flex flex-col gap-6 items-end flex-1">
                 {displayPicksB.map((pick, idx) => {
-                  const isCurrentPlayerTurn = isMyTeamTurn('B') && pick.playerId === currentlyPickingPlayerId('B');
+                  const isCurrentPlayerTurn = isCurrentPickSlot('B', pick);
                   const hoveredGodId = lobby.hoveredGodIdB;
                   const committedGod = pick.godId ? getGod(pick.godId) : undefined;
                   const previewGod = !pick.godId && isCurrentPlayerTurn && hoveredGodId ? getGod(hoveredGodId) : undefined;
@@ -708,7 +818,10 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                   });
                   const playerColor = resolved.colorHex;
                   const playerLane = resolved.lane;
+                  const laneLabel = getLaneLabel(playerLane);
                   const isLoser = displayedGameWinner === 'A';
+                  const headerLabel = getSlotHeaderLabel('B', pick, isCurrentPlayerTurn);
+                  const mainLabel = getSlotMainLabel({ god, showGod, isCurrentPlayerTurn, pick });
 
                   return (
                     <motion.div 
@@ -719,9 +832,24 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                       className={cn("flex items-center gap-6 group flex-row-reverse", isLoser && "grayscale opacity-50")}
                     >
                       <div 
-                        className={cn("w-24 h-24 rounded-2xl overflow-hidden border-2 bg-slate-900 shadow-2xl transition-all relative", isHovered && "opacity-60 border-dashed")}
-                        style={{ borderColor: `${playerColor}50`, boxShadow: `0 0 30px ${playerColor}20` }}
+                        className={cn(
+                          "w-24 h-24 rounded-2xl overflow-hidden border-2 bg-slate-900 shadow-2xl transition-all relative",
+                          isHovered && "opacity-60 border-dashed",
+                          isCurrentPlayerTurn && "border-amber-300 shadow-[0_0_35px_rgba(251,191,36,0.55)]"
+                        )}
+                        style={{
+                          borderColor: isCurrentPlayerTurn ? '#fcd34d' : `${playerColor}50`,
+                          boxShadow: isCurrentPlayerTurn ? '0 0 35px rgba(251,191,36,0.55)' : `0 0 30px ${playerColor}20`
+                        }}
                       >
+                        {isCurrentPlayerTurn && (
+                          <motion.div
+                            aria-hidden="true"
+                            className="absolute -inset-2 rounded-[1.35rem] border border-amber-300/60 pointer-events-none"
+                            animate={{ opacity: [0.45, 1, 0.45], scale: [1, 1.04, 1] }}
+                            transition={{ duration: 1.35, repeat: Infinity, ease: 'easeInOut' }}
+                          />
+                        )}
                         {god && showGod ? (
                           <img src={god.image} alt={god.name} className={cn("w-full h-full object-cover", isHovered && "grayscale")} referrerPolicy="no-referrer" />
                         ) : (
@@ -729,10 +857,20 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                             <div className="w-10 h-10 border-4 border-slate-800 border-t-red-500 rounded-full animate-spin" />
                           </div>
                         )}
+                        {isCurrentPlayerTurn && (
+                          <div className="absolute bottom-1 left-1 right-1 bg-amber-300/95 text-slate-950 px-2 py-1 rounded-md text-[8px] font-black uppercase tracking-[0.2em] text-center shadow-[0_0_18px_rgba(251,191,36,0.45)]">
+                            {getNextPickBadgeLabel()}
+                          </div>
+                        )}
                         {/* Position Indicator */}
-                        {playerLane && (
-                          <div className="absolute top-1 left-1 bg-slate-950/80 px-1.5 py-0.5 rounded text-[8px] font-black uppercase text-slate-400 border border-slate-800">
-                            {playerLane === 'center' ? t.middle || 'CENTER' : t.corner || 'FLANK'}
+                        {laneLabel && (
+                          <div className={cn(
+                            "absolute top-1 left-1 px-1.5 py-0.5 rounded text-[8px] font-black uppercase border",
+                            isCurrentPlayerTurn
+                              ? "bg-amber-300/95 text-slate-950 border-amber-100"
+                              : "bg-slate-950/80 text-slate-400 border-slate-800"
+                          )}>
+                            {laneLabel}
                           </div>
                         )}
                       </div>
@@ -740,11 +878,15 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                         <div className="flex items-center gap-2 flex-row-reverse">
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: playerColor, boxShadow: `0 0 10px ${playerColor}` }} />
                           <span className="text-[12px] font-black uppercase tracking-[0.2em]" style={{ color: playerColor }}>
-                            {is1v1 ? ((lobby.teamBName || lobby.captain2Name) || 'GUEST') : (pick.godId || isCurrentPlayerTurn ? (pick.playerName || 'SELECTING...') : '')}
+                            {headerLabel}
                           </span>
                         </div>
-                        <span className={cn("text-3xl font-black uppercase text-white tracking-tight drop-shadow-xl", isHovered && "text-slate-400")}>
-                          {god && showGod ? god.name : (is1v1 && isGodPickerPhase && pick.godId ? 'GOD READY' : 'SELECTING...')}
+                        <span className={cn(
+                          "text-3xl font-black uppercase tracking-tight drop-shadow-xl min-h-[2.25rem]",
+                          isHovered && "text-slate-400",
+                          isCurrentPlayerTurn ? "text-amber-300" : "text-white"
+                        )}>
+                          {mainLabel}
                         </span>
                       </div>
                     </motion.div>
@@ -765,7 +907,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
             >
               <div className="w-full bg-slate-950/80 border border-slate-800 rounded-2xl px-4 py-3 backdrop-blur-md">
                 <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">
-                  {t.godBans || 'GOD BANS'} · {t.game || 'GAME'} {currentGameNumber}
+                  {(hudT.godBans || t.godBans || 'GOD BANS')} · {(hudT.game || t.game || 'GAME')} {currentGameNumber}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {(['A', 'B'] as const).map((team) => {
@@ -789,7 +931,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                                 </div>
                                 <div className="leading-tight">
                                   <div className="text-[9px] font-black uppercase text-red-400">{bannedGod?.name || ban.id}</div>
-                                  <div className="text-[8px] font-bold uppercase text-slate-500">{t.banned || 'BANNED'}</div>
+                                  <div className="text-[8px] font-bold uppercase text-slate-500">{hudT.banned || t.banned || 'BANNED'}</div>
                                 </div>
                               </div>
                             );
@@ -836,7 +978,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                       <img src={map.image} alt={map.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                     ) : (
                       <div className="w-full h-full bg-slate-950 flex items-center justify-center">
-                        <span className="text-[10px] font-black text-slate-800 uppercase tracking-[0.3em]">{t.game} {idx + 1}</span>
+                        <span className="text-[10px] font-black text-slate-800 uppercase tracking-[0.3em]">{hudT.game || t.game || 'GAME'} {idx + 1}</span>
                       </div>
                     )}
                     {winner && (
@@ -847,7 +989,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                         )}>
                           <Trophy className="w-8 h-8" />
                           <span className="text-[10px] font-black uppercase tracking-widest">
-                            {winner === 'A' ? ((lobby.teamAName || lobby.captain1Name) || t.teamA) : ((lobby.teamBName || lobby.captain2Name) || t.teamB)} {t.won || 'WON'}
+                            {winner === 'A' ? ((lobby.teamAName || lobby.captain1Name) || t.teamA) : ((lobby.teamBName || lobby.captain2Name) || t.teamB)} {hudT.won || t.won || 'WON'}
                           </span>
                         </div>
                       </div>
@@ -858,7 +1000,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
                         "text-[11px] font-black uppercase tracking-[0.2em]",
                         isCurrent ? "text-cyan-400 drop-shadow-[0_0_5px_rgba(6,182,212,0.5)]" : "text-slate-500"
                       )}>
-                        {map ? (t.mapNames?.[map.id] || map.name) : `${t.game} ${idx + 1}`}
+                        {map ? (t.mapNames?.[map.id] || map.name) : `${hudT.game || t.game || 'GAME'} ${idx + 1}`}
                       </span>
                     </div>
                   </div>

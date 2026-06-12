@@ -8,8 +8,12 @@ interface Props {
 export function CookieConsent({ t }: Props) {
   const [isVisible, setIsVisible] = useState(false);
   const l = t?.legal;
+  const isObsMode = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('view') === 'obs';
 
   useEffect(() => {
+    if (isObsMode) return;
+
     // Only show if the user hasn't consented yet
     const consent = localStorage.getItem('mythos_cookie_consent');
     if (!consent) {
@@ -17,14 +21,14 @@ export function CookieConsent({ t }: Props) {
       const timer = setTimeout(() => setIsVisible(true), 1500);
       return () => clearTimeout(timer);
     }
-  }, []);
+  }, [isObsMode]);
 
   const handleAccept = () => {
     localStorage.setItem('mythos_cookie_consent', 'true');
     setIsVisible(false);
   };
 
-  if (!isVisible || !l) return null;
+  if (isObsMode || !isVisible || !l) return null;
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 p-4 pointer-events-none">

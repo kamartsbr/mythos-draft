@@ -23,11 +23,14 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ lobby, isVisible, 
   const mapId = game ? game.mapId : lobby.selectedMap;
   const selectedMap = getMapById(mapId);
   const mapRef = React.useRef<HTMLDivElement>(null);
+  const hudT = t?.streamerHud ?? {};
 
   if (!selectedMap || !selectedMap.positions) {
     return (
       <div className="w-full aspect-square bg-slate-900/50 rounded-3xl border border-slate-800 flex items-center justify-center text-slate-500 italic text-sm p-8 text-center">
-        {mapId ? "Map visualization not available for this map" : "Select a map to see the battlefield"}
+        {mapId
+          ? (hudT.mapVisualizationUnavailable || 'Map visualization not available for this map')
+          : (hudT.selectMapBattlefield || 'Select a map to see the battlefield')}
       </div>
     );
   }
@@ -191,7 +194,7 @@ export const MapVisualizer: React.FC<MapVisualizerProps> = ({ lobby, isVisible, 
                           >
                             <ArrowRight className="w-2 h-2" />
                           </motion.div>
-                          {t?.nextPick || 'NEXT'}
+                          {hudT.nextPick || t?.nextPick || 'NEXT'}
                         </div>
                       </motion.div>
                     )}

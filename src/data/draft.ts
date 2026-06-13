@@ -1,4 +1,4 @@
-import { DraftTurn, PickEntry, TeamPlayer } from '../types';
+import { DraftTurn, PickEntry, TeamPlayer, TeamSize } from '../types';
 import {
   getDraftTimeline as domainGetDraftTimeline,
   getMCLTeamOrder as domainGetMCLTeamOrder,
@@ -22,6 +22,16 @@ export const PLAYER_TEAM_MAP = {
 export const PLAYER_POSITION_MAP = {
   1: 'corner', 4: 'corner', 5: 'middle',
   2: 'corner', 3: 'corner', 6: 'middle'
+};
+
+export const TWO_V_TWO_PLAYER_TEAM_MAP = {
+  1: 'A', 4: 'A',
+  2: 'B', 3: 'B'
+};
+
+export const TWO_V_TWO_PLAYER_POSITION_MAP = {
+  1: 'corner', 4: 'middle',
+  2: 'corner', 3: 'middle'
 };
 
 export const getDraftTimeline = domainGetDraftTimeline;
@@ -99,10 +109,23 @@ export function hydrateMclPicksWithRosterNames(
     existingPicks?: PickEntry[] | null;
   }
 ): PickEntry[] {
-  const freshPicks = getMCLPicks(gameNumber);
+  return hydrateMclStylePicksWithRosterNames(gameNumber, 3, teamAPlayers, teamBPlayers, options);
+}
+
+export function hydrateMclStylePicksWithRosterNames(
+  gameNumber: number,
+  teamSize: TeamSize,
+  teamAPlayers?: TeamPlayer[] | null,
+  teamBPlayers?: TeamPlayer[] | null,
+  options?: {
+    turnOrder?: DraftTurn[] | null;
+    existingPicks?: PickEntry[] | null;
+  }
+): PickEntry[] {
+  const freshPicks = getMclStylePicks(gameNumber, teamSize);
   const useGame2Order = options?.turnOrder ? shouldUseGame2MclOrder(options.turnOrder) : gameNumber % 2 === 0;
-  const teamAOrder = getMCLTeamOrder('A', null, useGame2Order);
-  const teamBOrder = getMCLTeamOrder('B', null, useGame2Order);
+  const teamAOrder = getMclStyleTeamOrder('A', teamSize, useGame2Order);
+  const teamBOrder = getMclStyleTeamOrder('B', teamSize, useGame2Order);
   const existingPicks = options?.existingPicks ?? [];
 
   return freshPicks.map((pick) => {
@@ -120,6 +143,26 @@ export function hydrateMclPicksWithRosterNames(
 }
 
 export const getMCLPicks = (gameNumber: number): PickEntry[] => {
+  return getMclStylePicks(gameNumber, 3);
+};
+
+export const getMclStylePicks = (gameNumber: number, teamSize: TeamSize = 3): PickEntry[] => {
+  if (teamSize === 2) {
+    const timeline = gameNumber % 2 !== 0 ? [1, 2, 3, 4] : [3, 4, 1, 2];
+
+    return timeline.map(id => {
+      const team = TWO_V_TWO_PLAYER_TEAM_MAP[id as keyof typeof TWO_V_TWO_PLAYER_TEAM_MAP] as 'A' | 'B';
+      return {
+        playerId: id,
+        godId: null,
+        team,
+        color: PLAYER_COLORS[id as keyof typeof PLAYER_COLORS],
+        position: TWO_V_TWO_PLAYER_POSITION_MAP[id as keyof typeof TWO_V_TWO_PLAYER_POSITION_MAP] as 'corner' | 'middle',
+        playerName: ''
+      };
+    });
+  }
+
   const timeline = getDraftTimeline(gameNumber);
 
   return timeline.map(id => {
@@ -135,3 +178,12 @@ export const getMCLPicks = (gameNumber: number): PickEntry[] => {
   });
 };
 
+export function getMclStyleTeamOrder(team: 'A' | 'B', teamSize: TeamSize, useGame2Order?: boolean): number[] {
+  if (teamSize === 2) {
+    const timeline = useGame2Order ? [3, 4, 1, 2] : [1, 2, 3, 4];
+    const isTeamA = (id: number) => id === 1 || id === 4;
+    return timeline.filter(id => (team === 'A' ? isTeamA(id) : !isTeamA(id)));
+  }
+
+  return getMCLTeamOrder(team, null, useGame2Order);
+}

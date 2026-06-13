@@ -14,7 +14,7 @@
 import React, { useState, useCallback } from 'react';
 import { serverTimestamp } from 'firebase/firestore';
 import { Lobby, LobbyConfig } from '../../../types';
-import { hydrateMclPicksWithRosterNames } from '../../../constants';
+import { hydrateMclStylePicksWithRosterNames } from '../../../constants';
 import { MAJOR_GODS } from '../../../data/gods';
 import { auth } from '../../../firebase';
 import { signInAnonymously } from 'firebase/auth';
@@ -23,7 +23,7 @@ import { ForjaViewProps } from '../types';
 import { FORJA_MAP_POOL, FORJA_PLAYOFFS_MAP_POOL } from '../../../data/maps';
 import { lobbyService, generateId } from '../../../services/lobbyService';
 
-type DraftPhase = 'grupos' | 'playoffs_bo3' | 'playoffs_bo5';
+type DraftPhase = 'grupos_3v3' | 'grupos_2v2' | 'playoffs_bo3' | 'playoffs_bo5';
 
 interface CreateResult {
   lobbyId: string;
@@ -37,12 +37,26 @@ const PHASE_META: Record<DraftPhase, {
   color: string;
   rules: Array<{ icon: string; text: string; highlight?: boolean }>;
 }> = {
-  grupos: {
-    label: 'Fase de Grupos (MD3 / BO3)',
-    desc: 'Pool oficial de grupos · sem ban de deus',
+  grupos_3v3: {
+    label: 'Fase de Grupos 3v3 / MD3 / BO3',
+    desc: 'Pool oficial de grupos - 3v3 sem ban de deus',
     icon: '⚔️',
     color: '#3b82f6',
     rules: [
+      { icon: '⚔️', text: 'Formato 3v3' },
+      { icon: '🗺️', text: 'Mapa 1 - escolha do Host / Time A' },
+      { icon: '🗺️', text: 'Mapa 2 - escolha do Guest / Time B' },
+      { icon: '🎲', text: 'Mapa 3 - sorteio automatico da pool oficial', highlight: true },
+      { icon: '🥇', text: 'Sem ban de deus' },
+    ],
+  },
+  grupos_2v2: {
+    label: 'Fase de Grupos 2v2 / MD3 / BO3',
+    desc: 'Pool oficial de grupos - 2v2 sem ban de deus',
+    icon: '⚔️',
+    color: '#22c55e',
+    rules: [
+      { icon: '⚔️', text: 'Formato 2v2' },
       { icon: '🗺️', text: 'Mapa 1 - escolha do Host / Time A' },
       { icon: '🗺️', text: 'Mapa 2 - escolha do Guest / Time B' },
       { icon: '🎲', text: 'Mapa 3 - sorteio automatico da pool oficial', highlight: true },
@@ -77,21 +91,22 @@ const PHASE_META: Record<DraftPhase, {
   },
 };
 
-function buildForjaConfig(lobbyName: string, phase: DraftPhase): LobbyConfig {
-  const isGroups = phase === 'grupos';
+export function buildForjaConfig(lobbyName: string, phase: DraftPhase): LobbyConfig {
+  const isGroups = phase === 'grupos_3v3' || phase === 'grupos_2v2';
   const isPlayoffsBo5 = phase === 'playoffs_bo5';
   const isPlayoffs = !isGroups;
   const customGameCount = isPlayoffsBo5 ? 5 : 3;
   const seriesType = isPlayoffsBo5 ? 'BO5' : 'BO3';
   const tournamentStage = isGroups ? 'GROUP' : (isPlayoffsBo5 ? 'PLAYOFFS_BO5' : 'PLAYOFFS_BO3');
   const allowedMaps = isGroups ? FORJA_MAP_POOL : FORJA_PLAYOFFS_MAP_POOL;
+  const teamSize = phase === 'grupos_2v2' ? 2 : 3;
 
   return {
     name: lobbyName.trim() || 'Forja - Partida Oficial',
     preset: 'FORJA',
     isCustomDraft: true,
     tournamentStage,
-    teamSize: 3,
+    teamSize,
     seriesType,
     customGameCount,
     pickType: 'alternated',
@@ -114,7 +129,7 @@ function buildForjaConfig(lobbyName: string, phase: DraftPhase): LobbyConfig {
   };
 }
 
-function buildInitialLobby(id: string, config: LobbyConfig): Lobby {
+export function buildInitialLobby(id: string, config: LobbyConfig): Lobby {
   const gameCount = config.customGameCount || (config.seriesType === 'BO5' ? 5 : 3);
 
   return {
@@ -144,9 +159,9 @@ function buildInitialLobby(id: string, config: LobbyConfig): Lobby {
     turn: 0,
     turnOrder: [],
     bans: [],
-    // Skeleton de picks 3v3 (mesmo formato MCL): 6 slots corner/middle × 2 times.
+    // Skeleton MCL-style: 6 slots for 3v3, 4 slots for the manual FORJA 2v2 group mode.
     // Necessário para a DraftUI renderizar os slots de jogadores antes do primeiro mapa.
-    picks: hydrateMclPicksWithRosterNames(1, [], []),
+    picks: hydrateMclStylePicksWithRosterNames(1, config.teamSize, [], []),
     scoreA: 0,
     scoreB: 0,
     reportVoteA: null,
@@ -258,7 +273,7 @@ function RulesSummary({ phase }: { phase: DraftPhase }) {
 
 export default function ForjaCustomDraft({ discordUser, isAdmin }: ForjaViewProps) {
   const [lobbyName, setLobbyName] = useState('');
-  const [phase, setPhase] = useState<DraftPhase>('grupos');
+  const [phase, setPhase] = useState<DraftPhase>('grupos_3v3');
   const [creating, setCreating] = useState(false);
   const [result, setResult] = useState<CreateResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -301,7 +316,7 @@ export default function ForjaCustomDraft({ discordUser, isAdmin }: ForjaViewProp
   const handleNewDraft = useCallback(() => {
     setResult(null);
     setLobbyName('');
-    setPhase('grupos');
+    setPhase('grupos_3v3');
     setError(null);
   }, []);
 
@@ -447,8 +462,13 @@ export default function ForjaCustomDraft({ discordUser, isAdmin }: ForjaViewProp
           }}>
             Fase do Torneio
           </p>
-          <div style={{ display: 'flex', gap: '0.75rem' }}>
-            <PhaseBadge phase="grupos" selected={phase === 'grupos'} onClick={() => setPhase('grupos')} />
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: '0.75rem',
+          }}>
+            <PhaseBadge phase="grupos_3v3" selected={phase === 'grupos_3v3'} onClick={() => setPhase('grupos_3v3')} />
+            <PhaseBadge phase="grupos_2v2" selected={phase === 'grupos_2v2'} onClick={() => setPhase('grupos_2v2')} />
             <PhaseBadge phase="playoffs_bo3" selected={phase === 'playoffs_bo3'} onClick={() => setPhase('playoffs_bo3')} />
             <PhaseBadge phase="playoffs_bo5" selected={phase === 'playoffs_bo5'} onClick={() => setPhase('playoffs_bo5')} />
           </div>

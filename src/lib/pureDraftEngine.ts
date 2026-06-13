@@ -1,5 +1,5 @@
 import { LobbyConfig, DraftTurn, Lobby, DraftActionOptions } from '../types';
-import { getMCLTeamOrder, hydrateMclPicksWithRosterNames, isMclStylePreset, isRealRosterName, shouldUseGame2MclOrder } from '../data/draft';
+import { getMCLTeamOrder, hydrateMclStylePicksWithRosterNames, isMclStylePreset, isRealRosterName, shouldUseGame2MclOrder } from '../data/draft';
 import { MAPS, MAPS_BY_ID } from '../data/maps';
 import { MAJOR_GODS, MAJOR_GODS_BY_ID } from '../data/gods';
 import { phaseAfterDraftQueue } from '../domain/draft/rules/phaseTransitions';
@@ -468,8 +468,9 @@ export function processTurnAction(
         nextLobby.selectedMap = id;
 
         if (isMclStylePreset(nextLobby.config.preset)) {
-          nextLobby.picks = hydrateMclPicksWithRosterNames(
+          nextLobby.picks = hydrateMclStylePicksWithRosterNames(
             nextLobby.currentGame,
+            nextLobby.config.teamSize,
             nextLobby.teamAPlayers,
             nextLobby.teamBPlayers,
             {
@@ -925,8 +926,9 @@ export function processReportAction(
         if (isMclStylePreset(nextLobby.config.preset)) {
           const nextGameMap = (nextLobby.seriesMaps || [])[nextLobby.currentGame - 1];
           if (nextGameMap && nextGameMap !== '') {
-            nextLobby.picks = hydrateMclPicksWithRosterNames(
+            nextLobby.picks = hydrateMclStylePicksWithRosterNames(
               nextLobby.currentGame,
+              nextLobby.config.teamSize,
               nextLobby.teamAPlayers,
               nextLobby.teamBPlayers,
               {

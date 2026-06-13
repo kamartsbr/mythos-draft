@@ -28,7 +28,7 @@ export function StreamerHUD({ lobbyId }: StreamerHUDProps) {
   const [loading, setLoading] = useState(true);
   const [lang, setLang] = useState<'pt' | 'en' | 'es' | 'fr' | 'de' | 'ru' | 'da' | 'it' | 'mx'>('pt');
   const t = TRANSLATIONS[lang as keyof typeof TRANSLATIONS] || TRANSLATIONS.en;
-  const hudT = t.streamerHud ?? {};
+  const hudT = (t.streamerHud ?? {}) as Record<string, string>;
 
   // Manual Control State
   const [manualMode, setManualMode] = useState(false);

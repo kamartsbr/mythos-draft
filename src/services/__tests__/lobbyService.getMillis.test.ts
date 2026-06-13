@@ -68,6 +68,7 @@ vi.mock('../../data/draft', () => ({
   getMCLTeamOrder: vi.fn(() => []),
   shouldUseGame2MclOrder: vi.fn(() => false),
   hydrateMclPicksWithRosterNames: vi.fn(() => []),
+  hydrateMclStylePicksWithRosterNames: vi.fn(() => []),
   isMclStylePreset: vi.fn(() => false),
 }));
 

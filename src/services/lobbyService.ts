@@ -27,7 +27,7 @@ import { ForjaLiveMatchSummary, ForjaLiveMatchesSummaryDoc } from '../features/f
 import { invalidateForjaOfficialMatchesCache, updateCachedLiveMatchesSummary } from '../features/forja/services/forjaService';
 import { forjaLobbyToLiveMatchSummary, isOfficialForjaLobbyData, sortForjaLiveMatches } from '../features/forja/forjaMatchSummary';
 import { PLAYER_COLORS, MCL_ROUND_MAPS } from '../constants';
-import { hydrateMclPicksWithRosterNames, isMclStylePreset } from '../data/draft';
+import { hydrateMclStylePicksWithRosterNames, isMclStylePreset } from '../data/draft';
 
 
 // --- SHIELDING: MOCK LAYER CONFIG ---
@@ -1819,8 +1819,9 @@ export const lobbyService = {
 
               // INITIALIZE PICKS
               if (isMclStylePreset(data.config.preset)) {
-                updates.picks = hydrateMclPicksWithRosterNames(
+                updates.picks = hydrateMclStylePicksWithRosterNames(
                   data.currentGame || 1,
+                  data.config.teamSize,
                   data.teamAPlayers,
                   data.teamBPlayers,
                   {
@@ -1919,8 +1920,9 @@ export const lobbyService = {
           ] : [{ name: 'Bot B', position: 0 }])
         );
 
-        const updatedPicks = hydrateMclPicksWithRosterNames(
+        const updatedPicks = hydrateMclStylePicksWithRosterNames(
           lobby.currentGame || 1,
+          lobby.config.teamSize,
           mockPlayersA,
           mockPlayersB,
           {
@@ -1976,8 +1978,9 @@ export const lobbyService = {
 
         // 🔥 INITIALIZE PICKS WITH PLAYER NAMES (Anti-Generic Name Bug)
         if (isMclStylePreset(data.config.preset)) {
-          updates.picks = hydrateMclPicksWithRosterNames(
+          updates.picks = hydrateMclStylePicksWithRosterNames(
             data.currentGame || 1,
+            data.config.teamSize,
             updates.teamAPlayers || data.teamAPlayers,
             updates.teamBPlayers || data.teamBPlayers,
             {
@@ -2062,8 +2065,9 @@ export const lobbyService = {
           ] : [{ name: `${nickname} (B)`, position: 0 }])
         );
 
-        const updatedPicks = hydrateMclPicksWithRosterNames(
+        const updatedPicks = hydrateMclStylePicksWithRosterNames(
           lobby.currentGame || 1,
+          lobby.config.teamSize,
           mockPlayersA,
           mockPlayersB,
           {

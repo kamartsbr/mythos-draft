@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { calculateNextTurnOrder, processTurnAction, processReportAction } from '../pureDraftEngine';
-import { getMCLPicks, hydrateMclPicksWithRosterNames, isMclStylePreset } from '../../data/draft';
+import { getMCLPicks, hydrateMclPicksWithRosterNames, hydrateMclStylePicksWithRosterNames, isMclStylePreset } from '../../data/draft';
+import { buildForjaConfig, buildInitialLobby } from '../../features/forja/views/ForjaCustomDraft';
 import { FORJA_MAP_POOL, FORJA_PLAYOFFS_EXTRA_MAPS, FORJA_PLAYOFFS_MAP_POOL } from '../../data/maps';
 import { LobbyConfig, Lobby } from '../../types';
 
@@ -302,6 +303,48 @@ describe('pureDraftEngine > calculateNextTurnOrder', () => {
     expect(calculateNextTurnOrder(config, 2, 'A').mapOrder[0]).toMatchObject({ player: 'B', action: 'PICK', target: 'MAP' });
     expect(calculateNextTurnOrder(config, 3, 'A').mapOrder[0]).toMatchObject({ player: 'ADMIN', action: 'PICK', target: 'MAP' });
     expect(calculateNextTurnOrder(config, 1, null).godOrder.filter(turn => turn.action === 'BAN')).toHaveLength(0);
+  });
+
+  it('Forja Group 3v3: keeps six god picks and group-stage map order', () => {
+    const config = createConfig({
+      preset: 'FORJA',
+      tournamentStage: 'GROUP',
+      teamSize: 3,
+      seriesType: 'BO3',
+      customGameCount: 3,
+      hasPerMapBans: false,
+    });
+
+    const game1 = calculateNextTurnOrder(config, 1, null);
+    const game2 = calculateNextTurnOrder(config, 2, 'A');
+    const game3 = calculateNextTurnOrder(config, 3, 'A');
+
+    expect(game1.mapOrder[0]).toMatchObject({ player: 'A', action: 'PICK', target: 'MAP' });
+    expect(game2.mapOrder[0]).toMatchObject({ player: 'B', action: 'PICK', target: 'MAP' });
+    expect(game3.mapOrder[0]).toMatchObject({ player: 'ADMIN', action: 'PICK', target: 'MAP' });
+    expect(game1.godOrder.filter(turn => turn.action === 'BAN')).toHaveLength(0);
+    expect(game1.godOrder.filter(turn => turn.action === 'PICK' && turn.target === 'GOD')).toHaveLength(6);
+  });
+
+  it('Forja Group 2v2: keeps group-stage map order, no per-map bans, and four god picks', () => {
+    const config = createConfig({
+      preset: 'FORJA',
+      tournamentStage: 'GROUP',
+      teamSize: 2,
+      seriesType: 'BO3',
+      customGameCount: 3,
+      hasPerMapBans: false,
+    });
+
+    const game1 = calculateNextTurnOrder(config, 1, null);
+    const game2 = calculateNextTurnOrder(config, 2, 'A');
+    const game3 = calculateNextTurnOrder(config, 3, 'A');
+
+    expect(game1.mapOrder[0]).toMatchObject({ player: 'A', action: 'PICK', target: 'MAP' });
+    expect(game2.mapOrder[0]).toMatchObject({ player: 'B', action: 'PICK', target: 'MAP' });
+    expect(game3.mapOrder[0]).toMatchObject({ player: 'ADMIN', action: 'PICK', target: 'MAP' });
+    expect(game1.godOrder.filter(turn => turn.action === 'BAN')).toHaveLength(0);
+    expect(game1.godOrder.filter(turn => turn.action === 'PICK' && turn.target === 'GOD')).toHaveLength(4);
   });
 
   it('Forja Playoffs BO3: Game 2 stays with Team B map pick and Game 3 is ADMIN random', () => {
@@ -736,9 +779,98 @@ describe('pureDraftEngine > processTurnAction', () => {
       isRandom: true,
     });
   });
+
+  it('keeps FORJA 2v2 group slots at four picks after map pick hydration', () => {
+    const config: LobbyConfig = createConfig({
+      preset: 'FORJA',
+      tournamentStage: 'GROUP',
+      teamSize: 2,
+      hasBans: false,
+      hasPerMapBans: false,
+      seriesType: 'BO3',
+      customGameCount: 3,
+      pickType: 'alternated',
+      allowedMaps: ['ghost_lake', 'oasis', 'marsh'],
+      allowedPantheons: ['greek', 'egyptian', 'norse'],
+    });
+    const turnOrder = calculateNextTurnOrder(config, 1, null);
+    const lobby: Lobby = {
+      ...createBaseLobby('drafting'),
+      config,
+      phase: 'map_pick',
+      turn: 0,
+      turnOrder: [...turnOrder.mapOrder, ...turnOrder.godOrder],
+      selectedMap: null,
+      seriesMaps: ['', '', ''],
+      picks: hydrateMclStylePicksWithRosterNames(1, 2, [], []),
+      teamAPlayers: [
+        { name: 'Alpha 1', position: 0 },
+        { name: 'Alpha 2', position: 1 },
+      ],
+      teamBPlayers: [
+        { name: 'Beta 1', position: 0 },
+        { name: 'Beta 2', position: 1 },
+      ],
+    };
+
+    const afterMapPick = processTurnAction(lobby, 'ghost_lake', 'A', undefined, undefined, undefined, 1000);
+
+    expect(afterMapPick.selectedMap).toBe('ghost_lake');
+    expect(afterMapPick.phase).toBe('god_pick');
+    expect(afterMapPick.picks).toHaveLength(4);
+    expect(afterMapPick.picks.map((pick) => pick.playerId)).toEqual([1, 2, 3, 4]);
+    expect(afterMapPick.picks.find((pick) => pick.playerId === 1)?.playerName).toBe('Alpha 1');
+    expect(afterMapPick.picks.find((pick) => pick.playerId === 4)?.playerName).toBe('Alpha 2');
+    expect(afterMapPick.picks.find((pick) => pick.playerId === 2)?.playerName).toBe('Beta 1');
+    expect(afterMapPick.picks.find((pick) => pick.playerId === 3)?.playerName).toBe('Beta 2');
+  });
 });
 
 describe('MCL style pick hydration helpers', () => {
+  it('hydrates team-size-aware 2v2 slots with four stable picks and roster names', () => {
+    const hydrated = hydrateMclStylePicksWithRosterNames(
+      1,
+      2,
+      [
+        { name: 'Alpha Corner', position: 0 },
+        { name: 'Alpha Middle', position: 1 },
+      ],
+      [
+        { name: 'Beta Corner', position: 0 },
+        { name: 'Beta Middle', position: 1 },
+      ]
+    );
+
+    expect(hydrated.map((pick) => pick.playerId)).toEqual([1, 2, 3, 4]);
+    expect(hydrated.filter((pick) => pick.team === 'A').map((pick) => pick.playerId)).toEqual([1, 4]);
+    expect(hydrated.filter((pick) => pick.team === 'B').map((pick) => pick.playerId)).toEqual([2, 3]);
+    expect(hydrated.find((pick) => pick.playerId === 1)?.playerName).toBe('Alpha Corner');
+    expect(hydrated.find((pick) => pick.playerId === 4)?.playerName).toBe('Alpha Middle');
+    expect(hydrated.find((pick) => pick.playerId === 2)?.playerName).toBe('Beta Corner');
+    expect(hydrated.find((pick) => pick.playerId === 3)?.playerName).toBe('Beta Middle');
+  });
+
+  it('hydrates team-size-aware 2v2 slots in Game 2-style order', () => {
+    const hydrated = hydrateMclStylePicksWithRosterNames(
+      2,
+      2,
+      [
+        { name: 'Alpha First', position: 0 },
+        { name: 'Alpha Second', position: 1 },
+      ],
+      [
+        { name: 'Beta First', position: 0 },
+        { name: 'Beta Second', position: 1 },
+      ]
+    );
+
+    expect(hydrated.map((pick) => pick.playerId)).toEqual([3, 4, 1, 2]);
+    expect(hydrated.find((pick) => pick.playerId === 4)?.playerName).toBe('Alpha First');
+    expect(hydrated.find((pick) => pick.playerId === 1)?.playerName).toBe('Alpha Second');
+    expect(hydrated.find((pick) => pick.playerId === 3)?.playerName).toBe('Beta First');
+    expect(hydrated.find((pick) => pick.playerId === 2)?.playerName).toBe('Beta Second');
+  });
+
   it.each(['MCL', 'FORJA', 'MCL_PLAYOFFS', 'MCL_TIEBREAKER'] as const)(
     '%s hydrates roster names without changing the intended Game 2 slot order',
     (preset) => {
@@ -782,6 +914,37 @@ describe('MCL style pick hydration helpers', () => {
     );
 
     expect(placeholderHydrated.every((pick) => pick.playerName === '')).toBe(true);
+  });
+});
+
+describe('ForjaCustomDraft quick lobby helpers', () => {
+  it('builds FORJA group-stage 2v2 quick draft lobbies with four initial pick slots', () => {
+    const config = buildForjaConfig('Forja 2v2 Test', 'grupos_2v2');
+    const lobby = buildInitialLobby('forja-2v2', config);
+
+    expect(config.preset).toBe('FORJA');
+    expect(config.tournamentStage).toBe('GROUP');
+    expect(config.teamSize).toBe(2);
+    expect(config.seriesType).toBe('BO3');
+    expect(config.customGameCount).toBe(3);
+    expect(config.allowedMaps).toEqual(FORJA_MAP_POOL);
+    expect(config.hasPerMapBans).toBeUndefined();
+    expect(lobby.seriesMaps).toHaveLength(3);
+    expect(lobby.picks).toHaveLength(4);
+    expect(lobby.picks.map((pick) => pick.playerId)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('keeps FORJA group-stage 3v3 quick draft lobbies on six initial pick slots', () => {
+    const config = buildForjaConfig('Forja 3v3 Test', 'grupos_3v3');
+    const lobby = buildInitialLobby('forja-3v3', config);
+
+    expect(config.preset).toBe('FORJA');
+    expect(config.tournamentStage).toBe('GROUP');
+    expect(config.teamSize).toBe(3);
+    expect(config.allowedMaps).toEqual(FORJA_MAP_POOL);
+    expect(lobby.seriesMaps).toHaveLength(3);
+    expect(lobby.picks).toHaveLength(6);
+    expect(lobby.picks.map((pick) => pick.playerId)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 });
 
@@ -1025,6 +1188,46 @@ describe('pureDraftEngine > processReportAction', () => {
     expect(step2.selectedMap).toBe('ghost_lake');
     expect(step2.turnOrder[0]).toMatchObject({ player: 'ADMIN', action: 'PICK', target: 'MAP' });
     expect(step2.picks.map(p => p.playerId)).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it('FORJA 2v2 group keeps four slots when advancing to the next game', () => {
+    const lobby = createDraftedLobby('reporting');
+    lobby.config = createConfig({
+      preset: 'FORJA',
+      tournamentStage: 'GROUP',
+      teamSize: 2,
+      seriesType: 'BO3',
+      customGameCount: 3,
+      hasMap3RandomRoll: true,
+      hasPerMapBans: false,
+    });
+    lobby.currentGame = 1;
+    lobby.seriesMaps = ['oasis', '', 'ghost_lake'];
+    lobby.selectedMap = 'oasis';
+    lobby.teamAPlayers = [
+      { name: 'Alpha 1', position: 0 },
+      { name: 'Alpha 2', position: 1 },
+    ];
+    lobby.teamBPlayers = [
+      { name: 'Beta 1', position: 0 },
+      { name: 'Beta 2', position: 1 },
+    ];
+    lobby.picks = [
+      { playerId: 1, godId: 'zeus', team: 'A', color: '#ef4444', position: 'corner', playerName: 'Alpha 1' },
+      { playerId: 2, godId: 'isis', team: 'B', color: '#ec4899', position: 'corner', playerName: 'Beta 1' },
+      { playerId: 3, godId: 'ra', team: 'B', color: '#3b82f6', position: 'middle', playerName: 'Beta 2' },
+      { playerId: 4, godId: 'thor', team: 'A', color: '#f97316', position: 'middle', playerName: 'Alpha 2' },
+    ];
+
+    const step1 = processReportAction(lobby, 'A', 'A', 1000);
+    const step2 = processReportAction(step1, 'A', 'B', 2000);
+
+    expect(step2.currentGame).toBe(2);
+    expect(step2.selectedMap).toBeNull();
+    expect(step2.turnOrder[0]).toMatchObject({ player: 'B', action: 'PICK', target: 'MAP' });
+    expect(step2.picks).toHaveLength(4);
+    expect(step2.picks.map(p => p.playerId)).toEqual([1, 2, 3, 4]);
+    expect(step2.picks.every(p => p.godId === null)).toBe(true);
   });
 
   it('Scenario E4: FORJA official Game 3 admin override finishes with the final score for standings', () => {
